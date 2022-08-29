@@ -30,9 +30,9 @@ struct FormatterState {
 }
 
 struct Line {
-    contents: Vec<String>,      // lifetimeの管理が面倒なのでStringに
+    contents: Vec<String>, // lifetimeの管理が面倒なのでStringに
     len: usize,
-    len_to_op: Option<usize>,   // = までの距離
+    len_to_op: Option<usize>, // = までの距離
 }
 
 impl Line {
@@ -72,7 +72,7 @@ impl SeparatedLines {
         SeparatedLines {
             separetor: sep.to_string(),
             lines: vec![],
-            max_len_to_op: None
+            max_len_to_op: None,
         }
     }
 
@@ -80,7 +80,7 @@ impl SeparatedLines {
         if let Some(len) = line.len_to_op() {
             self.max_len_to_op = match self.max_len_to_op {
                 Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                None => Some(len)
+                None => Some(len),
             };
         };
 
@@ -95,9 +95,7 @@ pub struct Formatter {
 impl Formatter {
     pub fn new() -> Formatter {
         Formatter {
-            state: FormatterState{
-                depth: 0
-            }
+            state: FormatterState { depth: 0 },
         }
     }
 
@@ -119,7 +117,7 @@ impl Formatter {
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
             let stmt_node = cursor.node();
-            
+
             // 現状はselect_statementのみ
             self.format_select_stmt(buf, stmt_node, src);
         }
@@ -127,7 +125,7 @@ impl Formatter {
 
     // SELECT文
     fn format_select_stmt(&mut self, buf: &mut String, node: Node, src: &str) {
-        /* 
+        /*
             _select_statement ->
                 select_clause
                 from_clause?
@@ -147,7 +145,7 @@ impl Formatter {
         loop {
             // 次の兄弟へ移動
             if !cursor.goto_next_sibling() {
-                break;  // 子供がいなくなったら脱出
+                break; // 子供がいなくなったら脱出
             }
 
             let clause_node = cursor.node();
@@ -159,12 +157,12 @@ impl Formatter {
                         // 最初は必ずFROM
                         self.push_indent(buf);
                         buf.push_str("FROM\n");
-                        
+
                         // commaSep
                         // selectのときと同じであるため、統合したい
                         if cursor.goto_next_sibling() {
                             let expr_node = cursor.node();
-                            
+
                             self.state.depth += 1;
                             self.push_indent(buf);
                             self.format_aliasable_expr(buf, expr_node, src);
@@ -172,7 +170,7 @@ impl Formatter {
 
                             self.state.depth -= 1;
                         }
-                        
+
                         while cursor.goto_next_sibling() {
                             let child_node = cursor.node();
                             match child_node.kind() {
@@ -181,7 +179,6 @@ impl Formatter {
                                     buf.push_str(",");
                                 }
                                 _ => {
-                                    
                                     buf.push_str("\t");
                                     self.format_aliasable_expr(buf, child_node, src);
                                     buf.push_str("\n");
@@ -191,26 +188,25 @@ impl Formatter {
 
                         cursor.goto_parent();
                     }
-                },
+                }
                 // where_clause: $ => seq(kw("WHERE"), $._expression),
-                "where_clause" => {                    
+                "where_clause" => {
                     if cursor.goto_first_child() {
-
                         self.push_indent(buf);
                         buf.push_str("WHERE\n");
-                        
+
                         cursor.goto_next_sibling();
                         self.state.depth += 1;
                         self.push_indent(buf);
                         self.format_expr(buf, cursor.node(), src);
-                        
+
                         buf.push_str("\n");
-                        
+
                         self.state.depth -= 1;
-                        
+
                         cursor.goto_parent();
                     }
-                },
+                }
                 _ => {
                     break;
                 }
@@ -220,7 +216,7 @@ impl Formatter {
 
     // SELECT句
     fn format_select_clause(&mut self, buf: &mut String, node: Node, src: &str) {
-        /* 
+        /*
             select_clause ->
                 "SELECT"
                 (   _aliasable_expression
@@ -234,23 +230,23 @@ impl Formatter {
         */
 
         let mut cursor = node.walk();
-            
+
         if cursor.goto_first_child() {
             // select_clauseの最初の子供は必ず"SELECT"であるはず
             self.push_indent(buf);
             buf.push_str("SELECT\n");
-        
+
             if cursor.goto_next_sibling() {
                 // ここで、cursorはselect_clause_bodyを指している
-                
+
                 // 子供に移動
                 cursor.goto_first_child();
-                
+
                 // select_clause_body -> _aliasable_expression ("," _aliasable_expression)*
 
                 // 最初のノードは_aliasable_expressionのはず
                 let expr_node = cursor.node();
-                
+
                 self.state.depth += 1;
 
                 self.push_indent(buf);
@@ -259,7 +255,7 @@ impl Formatter {
 
                 self.state.depth -= 1;
             }
-            
+
             // (',' _aliasable_expression)*
             while cursor.goto_next_sibling() {
                 let child_node = cursor.node();
@@ -275,7 +271,7 @@ impl Formatter {
                     }
                 }
             }
-       }
+        }
     }
 
     // エイリアス可能な式
@@ -283,7 +279,7 @@ impl Formatter {
         /*
             _aliasable_expression ->
                 alias | _expression
-                
+
             alias ->
                 _expression
                 "AS"?
@@ -291,10 +287,10 @@ impl Formatter {
                 << 未対応!! "(" identifier ("," identifier)* ")" >>
         */
         let mut cursor = node.walk();
-        
+
         // _expression
         self.format_expr(buf, node, src);
-        
+
         // ("AS"? identifier)?
         if cursor.goto_next_sibling() {
             // "AS"?
@@ -302,7 +298,7 @@ impl Formatter {
                 buf.push_str("\tAS\t");
                 cursor.goto_next_sibling();
             }
-            
+
             // identifier
             if cursor.node().kind() == "identifier" {
                 buf.push_str(node.utf8_text(src.as_bytes()).unwrap());
@@ -317,44 +313,43 @@ impl Formatter {
                 // dotted_name -> identifier ("." identifier)*
                 let mut cursor = node.walk();
                 cursor.goto_first_child();
-                
+
                 let id_node = cursor.node();
                 buf.push_str(id_node.utf8_text(src.as_bytes()).unwrap());
-                
+
                 while cursor.goto_next_sibling() {
                     match cursor.node().kind() {
                         "." => buf.push_str("."),
                         _ => buf.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
                     };
                 }
-            },
+            }
             "binary_expression" => {
                 let mut cursor = node.walk();
                 cursor.goto_first_child();
-                
+
                 // 左辺
                 let lhs_node = cursor.node();
                 self.format_expr(buf, lhs_node, src);
-                
+
                 // 演算子
                 cursor.goto_next_sibling();
                 let op_node = cursor.node();
                 buf.push_str("\t");
                 buf.push_str(op_node.utf8_text(src.as_bytes()).unwrap());
                 buf.push_str("\t");
-                
+
                 // 右辺
                 cursor.goto_next_sibling();
                 let rhs_node = cursor.node();
                 self.format_expr(buf, rhs_node, src);
-            },
+            }
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
                 buf.push_str(node.utf8_text(src.as_bytes()).unwrap());
             }
             _ => self.format_straightforward(buf, node, src),
         }
-        
     }
 
     // 未対応の構文をそのまま表示する
@@ -394,19 +389,25 @@ pub fn print_cst(src: &str) {
 
 fn dfs(node: Node, depth: usize) {
     for _ in 0..depth {
-        eprint!("  ");
+        eprint!("\t");
     }
-    eprint!("({} [{}-{}]", node.kind(), node.start_position(), node.end_position());
+    eprint!(
+        "{} [{}-{}]",
+        node.kind(),
+        node.start_position(),
+        node.end_position()
+    );
 
     let mut cursor = node.walk();
     if cursor.goto_first_child() {
-        eprintln!("");
-        dfs(cursor.node(), depth + 1);
-        while cursor.goto_next_sibling() {
-            eprintln!("");
+        loop {
+            eprintln!();
             dfs(cursor.node(), depth + 1);
+            //次の兄弟ノードへカーソルを移動
+            if !cursor.goto_next_sibling() {
+                break;
+            }
         }
-        eprint!(")");
     }
 }
 
@@ -427,7 +428,7 @@ mod test {
         let src = "SELECT HOGE, FUGA FROM TABLE1";
         let expect = "SELECT\n\tHOGE\n,\tFUGA\nFROM\n\tTABLE1\n";
         let actual = format_sql(src);
-        assert_eq!(actual, expect); 
+        assert_eq!(actual, expect);
     }
 
     #[test]
