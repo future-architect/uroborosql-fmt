@@ -1,4 +1,1 @@
 /target
-
-# tree-sitter-sqlを絶対パスで指定しているため
-/Cargo.toml
