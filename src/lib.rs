@@ -1,6 +1,6 @@
 use tree_sitter::Node;
 
-const TAB_SIZE: usize = 8;
+const TAB_SIZE: usize = 4;
 
 /// 引数のSQLをフォーマットして返す
 pub fn format_sql(src: &str) -> String {
