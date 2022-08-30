@@ -140,20 +140,25 @@ impl SeparatedLines {
                 result.push_str("\t");
             }
 
-            if let Some(max_len_to_as) = self.max_len_to_as {
+            if let (Some(max_len_to_as), Some(len_to_as))
+                = (self.max_len_to_as, line.len_to_as())
+            {   // AS
+                let mut current_len = 0;    // 読み込んだcontentの長さの合計
                 for content in line.contents().into_iter() {
-                    if content.as_str() == "AS" {
-                        // ASは省略しないと仮定
-                        let num_tab = (max_len_to_as - line.len_to_as().unwrap()) / TAB_SIZE; // タブ文字の長さで割る
-
+                    if current_len == len_to_as {   // "AS"に到達したとき
+                        let num_len = (max_len_to_as - len_to_as) / TAB_SIZE;
                         // num_tabだけ\tを挿入
-                        for _ in 0..num_tab {
+                        for _ in 0..num_len {
                             result.push_str("\t");
                         }
-                        result.push_str("\tAS\t");
+                        // ASを挿入
+                        result.push_str("\t");
+                        result.push_str(content.as_str());
+                        result.push_str("\t");
                     } else {
-                        result.push_str(content.as_ref());
+                        result.push_str(content);
                     }
+                    current_len += content.len();
                 }
             } else {
                 result.push_str(line.to_string().as_ref());
