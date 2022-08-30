@@ -102,7 +102,7 @@ impl SeparatedLines {
         SeparatedLines {
             depth,
             separetor: sep.to_string(),
-            lines: vec![],
+            lines: vec![] as Vec<Line>,
             max_len_to_as: None,
         }
     }
@@ -146,6 +146,7 @@ impl SeparatedLines {
                         // ASは省略しないと仮定
                         let num_tab = (max_len_to_as - line.len_to_as().unwrap()) / TAB_SIZE; // タブ文字の長さで割る
 
+                        // num_tabだけ\tを挿入
                         for _ in 0..num_tab {
                             result.push_str("\t");
                         }
@@ -185,6 +186,15 @@ impl Formatter {
         for _ in 0..self.state.depth {
             buf.push_str("\t");
         }
+    }
+
+    // ネストを1つ深くする
+    fn nest(&mut self) {
+        self.state.depth += 1;
+    }
+
+    fn unnest(&mut self) {
+        self.state.depth -= 1;
     }
 
     fn format_source(&mut self, buf: &mut String, node: Node, src: &str) {
@@ -240,9 +250,9 @@ impl Formatter {
                         if cursor.goto_next_sibling() {
                             let expr_node = cursor.node();
 
-                            self.state.depth += 1;
+                            self.nest();
                             separated_lines.add_line(self.format_aliasable_expr(expr_node, src));
-                            self.state.depth -= 1;
+                            self.unnest();
                         }
 
                         while cursor.goto_next_sibling() {
@@ -271,7 +281,7 @@ impl Formatter {
                         buf.push_str("WHERE\n");
 
                         cursor.goto_next_sibling();
-                        self.state.depth += 1;
+                        self.nest();
 
                         self.push_indent(buf);
                         let line = self.format_expr(cursor.node(), src);
@@ -279,7 +289,7 @@ impl Formatter {
 
                         buf.push_str("\n");
 
-                        self.state.depth -= 1;
+                        self.unnest();
 
                         cursor.goto_parent();
                     }
@@ -326,12 +336,12 @@ impl Formatter {
 
                 let mut sepapated_lines = SeparatedLines::new(self.state.depth, ",");
 
-                self.state.depth += 1;
+                self.nest();
 
                 let line = self.format_aliasable_expr(expr_node, src);
                 sepapated_lines.add_line(line);
 
-                self.state.depth -= 1;
+                self.unnest();
 
                 // (',' _aliasable_expression)*
                 while cursor.goto_next_sibling() {
