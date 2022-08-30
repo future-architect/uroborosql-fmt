@@ -184,48 +184,32 @@ impl SeparatedLines {
                 result.push_str(self.separetor.as_ref());
             }
 
-            if let (Some(max_len_to_as), Some(len_to_as))
-                = (self.max_len_to_as, line.len_to_as())
-            {   // AS
-                let mut current_len = 0;    // 読み込んだcontentの長さの合計
-                for content in line.contents().into_iter() {
-                    if current_len == len_to_as {   // "AS"に到達したとき
-                        let num_len
-                            = (max_len_to_as / TAB_SIZE) - (len_to_as / TAB_SIZE);
-                        // num_tabだけ\tを挿入
-                        for _ in 0..num_len {
-                            result.push_str("\t");
-                        }
-                    }
-                    result.push_str("\t");
-                    result.push_str(content);
-                    
-                    current_len += content.len();
-                }
-            // 演算子がある行
-            // ASとほとんど同じ処理なので、統合予定
-            } else if let (Some(max_len_to_op), Some(len_to_op))
-                = (self.max_len_to_op, line.len_to_op())
-            {
-                let mut current_len = 0;    // 読み込んだcontentの長さの合計
-                for content in line.contents().into_iter() {
-                    if current_len == len_to_op {   // 演算子に到達したとき
-                        let num_len
-                            = (max_len_to_op / TAB_SIZE) - (len_to_op / TAB_SIZE);
-                        // num_tabだけ\tを挿入
-                        for _ in 0..num_len {
-                            result.push_str("\t");
-                        }
-                    }
-                    result.push_str("\t");
-                    result.push_str(content);
-                    
-                    current_len += content.len();
-                }
-            } else {
+            let mut current_len = 0;
+            for content in line.contents().into_iter() {
+                // as, opなどまでの最大長とその行での長さを引数にとる
+                // 現在見ているcontentがas, opであれば、必要な数\tを挿入する
+                let mut insert_tab
+                    = |max_len_to: Option<usize>, len_to: Option<usize>| -> ()
+                {
+                    if let (Some(max_len_to), Some(len_to)) = (max_len_to, len_to) {
+                        if current_len == len_to {
+                            let num_tab = (max_len_to / TAB_SIZE) - (len_to / TAB_SIZE);
+                            for _ in 0..num_tab {
+                                result.push_str("\t");
+                            }
+                        };
+                    };   
+                };
+
+                insert_tab(self.max_len_to_as, line.len_to_as());
+                insert_tab(self.max_len_to_op, line.len_to_op());
+
                 result.push_str("\t");
-                result.push_str(line.to_string().as_ref());
+                result.push_str(content);
+
+                current_len += content.len();
             }
+
             result.push_str("\n");
         }
 
