@@ -337,6 +337,7 @@ impl Formatter {
 
                         cursor.goto_next_sibling();
                         
+                        // WHERE句に現れる式をbool式とする
                         let bool_expr_node = cursor.node();
                         let bool_expr_str = self.format_bool_expr(bool_expr_node, src, self.state.depth);
                         buf.push_str(bool_expr_str.as_str());
@@ -514,11 +515,12 @@ impl Formatter {
         line
     }
 
+    // bool式
     fn format_bool_expr(&mut self, node: Node, src: &str, depth: usize) -> String {
         // 今はANDしか認めない
         let mut sep_lines = SeparatedLines::new(depth, "AND");
         
-        // ブール式ではない
+        // ブール式ではない場合
         if node.kind() != "boolean_expression" {
             let line = self.format_expr(node, src);
             sep_lines.add_line(line);
@@ -527,6 +529,8 @@ impl Formatter {
         
         let mut cursor = node.walk();
 
+        // boolean_expressionは繰り返しではなく、ネストで表現されている
+        // そのため、探索のためにネストの深さを覚えておく
         let mut boolean_nest = 0;
 
         // boolean_expressionの最左に移動(NOT, BETWEEN対応のことは考えていない)
