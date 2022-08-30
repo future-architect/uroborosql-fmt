@@ -1,12 +1,10 @@
-use std::{
-    fs::File,
-    io::Read,
-};
+use std::fs::read_to_string;
 
 fn main() {
-    let mut f = File::open("./examples/simple.sql").unwrap();
-    let mut src = String::new();
-    f.read_to_string(&mut src).unwrap();
+    let msg = "arguments error";
+    let filename = std::env::args().nth(1).expect(msg);
+
+    let src = read_to_string(&filename).unwrap();
 
     uroborosql_fmt::print_cst(src.as_ref());
 
