@@ -32,13 +32,13 @@ struct FormatterState {
 struct Line {
     contents: Vec<String>, // lifetimeの管理が面倒なのでStringに
     len: usize,
-    len_to_as: Option<usize>,   // AS までの距離
+    len_to_as: Option<usize>, // AS までの距離
 }
 
 impl Line {
     pub fn new() -> Line {
         Line {
-            contents: vec![],
+            contents: vec![] as Vec<String>,
             len: 0,
             len_to_as: None,
         }
@@ -50,6 +50,10 @@ impl Line {
 
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn len_to_as(&self) -> Option<usize> {
+        self.len_to_as
     }
 
     /// 行の要素を足す(演算子はadd_operator()を使う)
@@ -64,10 +68,6 @@ impl Line {
         self.add_content(as_str);
     }
 
-    pub fn len_to_as(&self) -> Option<usize> {
-        self.len_to_as
-    }
-
     // lineの結合
     pub fn append(&mut self, line: Line) {
         if let Some(len_to_as) = line.len_to_as() {
@@ -76,33 +76,23 @@ impl Line {
         }
 
         self.len += line.len();
-        
+
         for content in (&line.contents()).into_iter() {
             self.contents.push(content.to_string());
         }
     }
 
+    /// contentsを"\t"でjoinして返す
     pub fn to_string(&self) -> String {
-        let mut result = String::new();
-
-        let mut first = true;
-        for content in self.contents() {
-            if first {
-                first = false;
-            } else {
-                result.push_str("\t");
-            }
-            result.push_str(content.as_ref());
-        }
-        result
+        self.contents.join("\t")
     }
 }
 
 struct SeparatedLines {
-    depth: usize,       // インデントの深さ
-    separetor: String,  // セパレータ(e.g., ',', AND)
-    lines: Vec<Line>,   // 各行の情報   
-    max_len_to_as: Option<usize>,   // ASまでの最長の長さ
+    depth: usize,                 // インデントの深さ
+    separetor: String,            // セパレータ(e.g., ',', AND)
+    lines: Vec<Line>,             // 各行の情報
+    max_len_to_as: Option<usize>, // ASまでの最長の長さ
 }
 
 impl SeparatedLines {
@@ -111,10 +101,11 @@ impl SeparatedLines {
             depth,
             separetor: sep.to_string(),
             lines: vec![],
-            max_len_to_as: None
+            max_len_to_as: None,
         }
     }
 
+    /// Line構造体を追加
     pub fn add_line(&mut self, line: Line) {
         if let Some(len) = line.len_to_as() {
             self.max_len_to_as = match self.max_len_to_as {
@@ -126,27 +117,31 @@ impl SeparatedLines {
         self.lines.push(line);
     }
 
+    /// AS句で揃えたものを返す
     pub fn to_string(&self) -> String {
         let mut result = String::new();
-        
+
         let mut first = true;
         for line in (&self.lines).into_iter() {
             for _ in 0..self.depth {
                 result.push_str("\t");
             }
 
-            if first {  // 最初の行は\tから始まる
+            if first {
+                // 最初の行は\tから始まる
                 first = false;
                 result.push_str("\t");
-            } else {    // 2行目以降は,\tから始まる
+            } else {
+                // 2行目以降は,\tから始まる
                 result.push_str(self.separetor.as_ref());
                 result.push_str("\t");
             }
 
             if let Some(max_len_to_as) = self.max_len_to_as {
                 for content in line.contents().into_iter() {
-                    if content.as_str() == "AS" {   // ASは省略しないと仮定
-                        let num_tab = (max_len_to_as - line.len_to_as().unwrap()) / 4;    // タブ文字の長さ(4)で割る
+                    if content.as_str() == "AS" {
+                        // ASは省略しないと仮定
+                        let num_tab = (max_len_to_as - line.len_to_as().unwrap()) / 4; // タブ文字の長さ(4)で割る
 
                         for _ in 0..num_tab {
                             result.push_str("\t");
@@ -155,13 +150,13 @@ impl SeparatedLines {
                     } else {
                         result.push_str(content.as_ref());
                     }
-                }                
+                }
             } else {
                 result.push_str(line.to_string().as_ref());
             }
             result.push_str("\n");
         }
-        
+
         result
     }
 }
@@ -234,14 +229,14 @@ impl Formatter {
                         // 最初は必ずFROM
                         self.push_indent(buf);
                         buf.push_str("FROM\n");
-                        
+
                         let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
-                   
+
                         // commaSep
                         // selectのときと同じであるため、統合したい
                         if cursor.goto_next_sibling() {
                             let expr_node = cursor.node();
-                        
+
                             self.state.depth += 1;
                             separated_lines.add_line(self.format_aliasable_expr(expr_node, src));
                             self.state.depth -= 1;
@@ -253,9 +248,10 @@ impl Formatter {
                             match child_node.kind() {
                                 "," => {
                                     continue;
-                                },                         
+                                }
                                 _ => {
-                                    separated_lines.add_line(self.format_aliasable_expr(child_node, src));
+                                    separated_lines
+                                        .add_line(self.format_aliasable_expr(child_node, src));
                                 }
                             };
                         }
@@ -333,8 +329,7 @@ impl Formatter {
                 sepapated_lines.add_line(line);
 
                 self.state.depth -= 1;
-            
-            
+
                 // (',' _aliasable_expression)*
                 while cursor.goto_next_sibling() {
                     let child_node = cursor.node();
@@ -370,7 +365,7 @@ impl Formatter {
 
         // aliasable_expressionは1行と仮定(要修正)
         let mut line = Line::new();
-    
+
         if node.kind() == "alias" {
             let mut cursor = node.walk();
             cursor.goto_first_child();
@@ -386,17 +381,16 @@ impl Formatter {
                     line.add_as("AS");
                     cursor.goto_next_sibling();
                 }
-                
+
                 // identifier
                 if cursor.node().kind() == "identifier" {
                     line.add_content(cursor.node().utf8_text(src.as_bytes()).unwrap());
                 }
             }
-        }
-        else {
+        } else {
             line = self.format_expr(node, src);
         }
-        
+
         line
     }
 
@@ -412,7 +406,7 @@ impl Formatter {
                 cursor.goto_first_child();
 
                 let mut result = String::new();
-                
+
                 let id_node = cursor.node();
                 result.push_str(id_node.utf8_text(src.as_bytes()).unwrap());
 
@@ -423,7 +417,7 @@ impl Formatter {
                     };
                 }
                 line.add_content(result.as_str());
-            },
+            }
             "binary_expression" => {
                 let mut cursor = node.walk();
                 cursor.goto_first_child();
@@ -438,13 +432,13 @@ impl Formatter {
                 let op_node = cursor.node();
                 // add_operatorに置き換わる予定
                 line.add_content(op_node.utf8_text(src.as_bytes()).unwrap());
-                
+
                 // 右辺
                 cursor.goto_next_sibling();
                 let rhs_node = cursor.node();
                 let expr_line = self.format_expr(rhs_node, src);
                 line.append(expr_line);
-            },
+            }
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
                 line.add_content(node.utf8_text(src.as_bytes()).unwrap());
@@ -452,10 +446,10 @@ impl Formatter {
             _ => {
                 eprintln!("format_expr(): unknown node ({}).", node.kind());
                 line.add_content(self.format_straightforward(node, src).as_ref())
-            },
+            }
         }
 
-        line        
+        line
     }
 
     // 未対応の構文をそのまま表示する
@@ -464,7 +458,10 @@ impl Formatter {
 
         if node.child_count() <= 0 {
             result.push_str(
-                node.utf8_text(src.as_bytes()).unwrap().to_ascii_uppercase().as_ref()
+                node.utf8_text(src.as_bytes())
+                    .unwrap()
+                    .to_ascii_uppercase()
+                    .as_ref(),
             );
             result.push_str("\n");
             return result;
