@@ -35,6 +35,7 @@ struct Line {
     contents: Vec<String>, // lifetimeの管理が面倒なのでStringに
     len: usize,
     len_to_as: Option<usize>, // AS までの距離
+    len_to_op: Option<usize>, // 演算子までの距離(1行に一つ)
 }
 
 impl Line {
@@ -43,6 +44,7 @@ impl Line {
             contents: vec![] as Vec<String>,
             len: 0,
             len_to_as: None,
+            len_to_op: None,
         }
     }
 
@@ -58,6 +60,10 @@ impl Line {
         self.len_to_as
     }
 
+    pub fn len_to_op(&self) -> Option<usize> {
+        self.len_to_op
+    }
+
     /// 行の要素を足す(演算子はadd_operator()を使う)
     pub fn add_content(&mut self, content: &str) {
         self.len += content.len();
@@ -70,11 +76,21 @@ impl Line {
         self.add_content(as_str);
     }
 
+    /// 演算子を追加する
+    pub fn add_op(&mut self, op_str: &str) {
+        self.len_to_op = Some(self.len);
+        self.add_content(op_str);
+    }
+
     // lineの結合
     pub fn append(&mut self, line: Line) {
         if let Some(len_to_as) = line.len_to_as() {
             // ASはlineに一つと仮定している
             self.len_to_as = Some(self.len + len_to_as);
+        }
+
+        if let Some(len_to_op) = line.len_to_op() {
+            self.len_to_op = Some(self.len + len_to_op);
         }
 
         self.len += line.len();
@@ -95,6 +111,7 @@ struct SeparatedLines {
     separetor: String,            // セパレータ(e.g., ',', AND)
     lines: Vec<Line>,             // 各行の情報
     max_len_to_as: Option<usize>, // ASまでの最長の長さ
+    max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
 }
 
 impl SeparatedLines {
@@ -104,6 +121,7 @@ impl SeparatedLines {
             separetor: sep.to_string(),
             lines: vec![] as Vec<Line>,
             max_len_to_as: None,
+            max_len_to_op: None,
         }
     }
 
@@ -111,6 +129,13 @@ impl SeparatedLines {
     pub fn add_line(&mut self, line: Line) {
         if let Some(len) = line.len_to_as() {
             self.max_len_to_as = match self.max_len_to_as {
+                Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                None => Some(len),
+            };
+        };
+
+        if let Some(len) = line.len_to_as() {
+            self.max_len_to_op = match self.max_len_to_op {
                 Some(maxlen) => Some(std::cmp::max(len, maxlen)),
                 None => Some(len),
             };
@@ -135,7 +160,7 @@ impl SeparatedLines {
                 is_first = false;
                 result.push_str("\t");
             } else {
-                // 2行目以降は,\tから始まる
+                // 2行目以降は sep \t から始まる
                 result.push_str(self.separetor.as_ref());
                 result.push_str("\t");
             }
@@ -147,6 +172,28 @@ impl SeparatedLines {
                 for content in line.contents().into_iter() {
                     if current_len == len_to_as {   // "AS"に到達したとき
                         let num_len = (max_len_to_as - len_to_as) / TAB_SIZE;
+                        // num_tabだけ\tを挿入
+                        for _ in 0..num_len {
+                            result.push_str("\t");
+                        }
+                        // ASを挿入
+                        result.push_str("\t");
+                        result.push_str(content.as_str());
+                        result.push_str("\t");
+                    } else {
+                        result.push_str(content);
+                    }
+                    current_len += content.len();
+                }
+            // 演算子がある行
+            // ASとほとんど同じ処理なので、統合予定
+            } else if let (Some(max_len_to_op), Some(len_to_op))
+                = (self.max_len_to_op, line.len_to_op())
+            {
+                let mut current_len = 0;    // 読み込んだcontentの長さの合計
+                for content in line.contents().into_iter() {
+                    if current_len == len_to_op {   // 演算子に到達したとき
+                        let num_len = (max_len_to_op - len_to_op) / TAB_SIZE;
                         // num_tabだけ\tを挿入
                         for _ in 0..num_len {
                             result.push_str("\t");
