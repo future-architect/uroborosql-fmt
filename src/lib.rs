@@ -1,4 +1,4 @@
-use tree_sitter::Node;
+use tree_sitter::{Node, Tree, TreeCursor};
 
 const TAB_SIZE: usize = 4;
 
@@ -224,6 +224,7 @@ impl Formatter {
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
             let select_clause_node = cursor.node();
+
             self.format_select_clause(buf, select_clause_node, src);
         } else {
             return ();
@@ -231,7 +232,7 @@ impl Formatter {
 
         loop {
             // 次の兄弟へ移動
-            if !cursor.goto_next_sibling() {
+            if !self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                 break; // 子供がいなくなったら脱出
             }
 
@@ -248,15 +249,16 @@ impl Formatter {
 
                         // commaSep
                         // selectのときと同じであるため、統合したい
-                        if cursor.goto_next_sibling() {
+                        if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                             let expr_node = cursor.node();
 
                             self.nest();
-                            separated_lines.add_line(self.format_aliasable_expr(expr_node, src));
+                            separated_lines
+                                .add_line(self.format_aliasable_expr(buf, expr_node, src));
                             self.unnest();
                         }
 
-                        while cursor.goto_next_sibling() {
+                        while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                             let child_node = cursor.node();
 
                             match child_node.kind() {
@@ -265,7 +267,7 @@ impl Formatter {
                                 }
                                 _ => {
                                     separated_lines
-                                        .add_line(self.format_aliasable_expr(child_node, src));
+                                        .add_line(self.format_aliasable_expr(buf, child_node, src));
                                 }
                             };
                         }
@@ -281,11 +283,12 @@ impl Formatter {
                         self.push_indent(buf);
                         buf.push_str("WHERE\n");
 
-                        cursor.goto_next_sibling();
+                        self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
+
                         self.nest();
 
                         self.push_indent(buf);
-                        let line = self.format_expr(cursor.node(), src);
+                        let line = self.format_expr(buf, cursor.node(), src);
                         buf.push_str(line.to_string().as_ref());
 
                         buf.push_str("\n");
@@ -300,6 +303,31 @@ impl Formatter {
                 }
             }
         }
+    }
+
+    fn goto_not_comment_next_sibiling(
+        &mut self,
+        buf: &mut String,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> bool {
+        //兄弟ノードがない場合
+        if !cursor.goto_next_sibling() {
+            return false;
+        }
+
+        //コメントノードであればbufに追記していく
+        while cursor.node().kind() == "comment" {
+            let comment_node = cursor.node();
+            buf.push_str(comment_node.utf8_text(src.as_bytes()).unwrap());
+            buf.push_str("\n");
+
+            if !cursor.goto_next_sibling() {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // SELECT句
@@ -321,10 +349,11 @@ impl Formatter {
 
         if cursor.goto_first_child() {
             // select_clauseの最初の子供は必ず"SELECT"であるはず
+
             self.push_indent(buf);
             buf.push_str("SELECT\n");
 
-            if cursor.goto_next_sibling() {
+            if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                 // ここで、cursorはselect_clause_bodyを指している
 
                 // 子供に移動
@@ -339,20 +368,20 @@ impl Formatter {
 
                 self.nest();
 
-                let line = self.format_aliasable_expr(expr_node, src);
+                let line = self.format_aliasable_expr(buf, expr_node, src);
                 sepapated_lines.add_line(line);
 
                 self.unnest();
 
                 // (',' _aliasable_expression)*
-                while cursor.goto_next_sibling() {
+                while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                     let child_node = cursor.node();
                     match child_node.kind() {
                         "," => {
                             continue;
                         }
                         _ => {
-                            let line = self.format_aliasable_expr(child_node, src);
+                            let line = self.format_aliasable_expr(buf, child_node, src);
                             sepapated_lines.add_line(line);
                         }
                     }
@@ -365,7 +394,7 @@ impl Formatter {
     }
 
     // エイリアス可能な式
-    fn format_aliasable_expr(&mut self, node: Node, src: &str) -> Line {
+    fn format_aliasable_expr(&mut self, buf: &mut String, node: Node, src: &str) -> Line {
         /*
             _aliasable_expression ->
                 alias | _expression
@@ -385,15 +414,16 @@ impl Formatter {
             cursor.goto_first_child();
 
             // _expression
-            let expr_line = self.format_expr(cursor.node(), src);
+            let expr_line = self.format_expr(buf, cursor.node(), src);
             line.append(expr_line);
 
             // ("AS"? identifier)?
-            if cursor.goto_next_sibling() {
+            if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                 // "AS"?
+
                 if cursor.node().kind() == "AS" {
                     line.add_as("AS");
-                    cursor.goto_next_sibling();
+                    self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
                 }
 
                 // identifier
@@ -402,14 +432,14 @@ impl Formatter {
                 }
             }
         } else {
-            line = self.format_expr(node, src);
+            line = self.format_expr(buf, node, src);
         }
 
         line
     }
 
     // 式
-    fn format_expr(&mut self, node: Node, src: &str) -> Line {
+    fn format_expr(&mut self, buf: &mut String, node: Node, src: &str) -> Line {
         // expressionは1行と仮定する(boolean_exprssionなどは2行以上になったりするので要修正)
         let mut line = Line::new();
 
@@ -424,7 +454,7 @@ impl Formatter {
                 let id_node = cursor.node();
                 result.push_str(id_node.utf8_text(src.as_bytes()).unwrap());
 
-                while cursor.goto_next_sibling() {
+                while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                     match cursor.node().kind() {
                         "." => result.push_str("."),
                         _ => result.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
@@ -438,19 +468,19 @@ impl Formatter {
 
                 // 左辺
                 let lhs_node = cursor.node();
-                let lhs_line = self.format_expr(lhs_node, src);
+                let lhs_line = self.format_expr(buf, lhs_node, src);
                 line.append(lhs_line);
 
                 // 演算子
-                cursor.goto_next_sibling();
+                self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
                 let op_node = cursor.node();
                 // add_operatorに置き換わる予定
                 line.add_content(op_node.utf8_text(src.as_bytes()).unwrap());
 
                 // 右辺
-                cursor.goto_next_sibling();
+                self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
                 let rhs_node = cursor.node();
-                let expr_line = self.format_expr(rhs_node, src);
+                let expr_line = self.format_expr(buf, rhs_node, src);
                 line.append(expr_line);
             }
             // identifier | number | string (そのまま表示)
@@ -459,7 +489,7 @@ impl Formatter {
             }
             _ => {
                 eprintln!("format_expr(): unknown node ({}).", node.kind());
-                line.add_content(self.format_straightforward(node, src).as_ref())
+                line.add_content(self.format_straightforward(buf, node, src).as_ref())
             }
         }
 
@@ -467,7 +497,7 @@ impl Formatter {
     }
 
     // 未対応の構文をそのまま表示する(dfs)
-    fn format_straightforward(&mut self, node: Node, src: &str) -> String {
+    fn format_straightforward(&mut self, buf: &mut String, node: Node, src: &str) -> String {
         let mut result = String::new();
 
         // 葉である場合resultに追加
@@ -486,8 +516,11 @@ impl Formatter {
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
             loop {
-                result.push_str(self.format_straightforward(cursor.node(), src).as_ref());
-                if cursor.goto_next_sibling() {
+                result.push_str(
+                    self.format_straightforward(buf, cursor.node(), src)
+                        .as_ref(),
+                );
+                if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                     break;
                 }
             }
