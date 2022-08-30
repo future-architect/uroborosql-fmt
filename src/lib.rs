@@ -193,6 +193,7 @@ impl Formatter {
         self.state.depth += 1;
     }
 
+    //ネストを1つ浅くする
     fn unnest(&mut self) {
         self.state.depth -= 1;
     }
