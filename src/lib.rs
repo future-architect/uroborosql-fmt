@@ -664,4 +664,12 @@ mod test {
         let actual = format_sql(src);
         assert_eq!(actual, expect);
     }
+
+    #[test]
+    fn test_align_op() {
+        let src = "SELECT A FROM TAB1 WHERE TAB1.NUM = 1 AND TAB1.NUUUUUUUUUUM = 2 AND TAB1.N = 3";
+        let expect = "SELECT\n\tA\nFROM\n\tTAB1\nWHERE\n\tTAB1.NUM\t\t\t=\t1\nAND\tTAB1.NUUUUUUUUUUM\t=\t2\nAND\tTAB1.N\t\t\t\t=\t3\n";
+        let actual = format_sql(src);
+        assert_eq!(actual, expect);
+    }
 }
