@@ -76,9 +76,31 @@ impl Line {
         self.add_content(as_str);
     }
 
+    // 引数の文字列が比較演算子かどうかを判定する
+    fn is_comp_op(op_str: &str) -> bool {
+        match op_str {
+            "<"
+            | "<="
+            | "<>" 
+            | "!=" 
+            | "=" 
+            | ">"
+            | ">=" 
+            | "~" 
+            | "!~" 
+            | "~*" 
+            | "!~*" => 
+                true,
+            _ => false,
+        }
+    }
+
     /// 演算子を追加する
     pub fn add_op(&mut self, op_str: &str) {
-        self.len_to_op = Some(self.len);
+        // 比較演算子のみをそろえる
+        if Self::is_comp_op(op_str) {
+            self.len_to_op = Some(self.len);
+        }
         self.add_content(op_str);
     }
 
@@ -156,13 +178,10 @@ impl SeparatedLines {
             }
 
             if is_first {
-                // 最初の行は\tから始まる
                 is_first = false;
-                result.push_str("\t");
             } else {
-                // 2行目以降は sep \t から始まる
+                // 2行目以降は sep から始まる
                 result.push_str(self.separetor.as_ref());
-                result.push_str("\t");
             }
 
             if let (Some(max_len_to_as), Some(len_to_as))
@@ -177,13 +196,10 @@ impl SeparatedLines {
                         for _ in 0..num_len {
                             result.push_str("\t");
                         }
-                        // ASを挿入
-                        result.push_str("\t");
-                        result.push_str(content.as_str());
-                        result.push_str("\t");
-                    } else {
-                        result.push_str(content);
                     }
+                    result.push_str("\t");
+                    result.push_str(content);
+                    
                     current_len += content.len();
                 }
             // 演算子がある行
@@ -200,16 +216,14 @@ impl SeparatedLines {
                         for _ in 0..num_len {
                             result.push_str("\t");
                         }
-                        // ASを挿入
-                        result.push_str("\t");
-                        result.push_str(content.as_str());
-                        result.push_str("\t");
-                    } else {
-                        result.push_str(content);
                     }
+                    result.push_str("\t");
+                    result.push_str(content);
+                    
                     current_len += content.len();
                 }
             } else {
+                result.push_str("\t");
                 result.push_str(line.to_string().as_ref());
             }
             result.push_str("\n");
