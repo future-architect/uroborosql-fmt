@@ -134,7 +134,7 @@ impl SeparatedLines {
             };
         };
 
-        if let Some(len) = line.len_to_as() {
+        if let Some(len) = line.len_to_op() {
             self.max_len_to_op = match self.max_len_to_op {
                 Some(maxlen) => Some(std::cmp::max(len, maxlen)),
                 None => Some(len),
@@ -334,15 +334,10 @@ impl Formatter {
                         buf.push_str("WHERE\n");
 
                         cursor.goto_next_sibling();
-                        self.nest();
-
-                        self.push_indent(buf);
-                        let line = self.format_expr(cursor.node(), src);
-                        buf.push_str(line.to_string().as_ref());
-
-                        buf.push_str("\n");
-
-                        self.unnest();
+                        
+                        let bool_expr_node = cursor.node();
+                        let bool_expr_str = self.format_bool_expr(bool_expr_node, src, self.state.depth);
+                        buf.push_str(bool_expr_str.as_str());
 
                         cursor.goto_parent();
                     }
@@ -496,8 +491,7 @@ impl Formatter {
                 // 演算子
                 cursor.goto_next_sibling();
                 let op_node = cursor.node();
-                // add_operatorに置き換わる予定
-                line.add_content(op_node.utf8_text(src.as_bytes()).unwrap());
+                line.add_op(op_node.utf8_text(src.as_bytes()).unwrap());
 
                 // 右辺
                 cursor.goto_next_sibling();
@@ -516,6 +510,48 @@ impl Formatter {
         }
 
         line
+    }
+
+    fn format_bool_expr(&mut self, node: Node, src: &str, depth: usize) -> String {
+        // 今はANDしか認めない
+        let mut sep_lines = SeparatedLines::new(depth, "AND");
+        
+        // ブール式ではない
+        if node.kind() != "boolean_expression" {
+            let line = self.format_expr(node, src);
+            sep_lines.add_line(line);
+            return sep_lines.to_string();
+        }
+        
+        let mut cursor = node.walk();
+
+        let mut boolean_nest = 0;
+
+        // boolean_expressionの最左に移動(NOT, BETWEEN対応のことは考えていない)
+        while cursor.node().kind() == "boolean_expression" {
+            boolean_nest += 1;
+            cursor.goto_first_child();
+        }
+
+        // 一番左下の子
+        let left_expr_node = cursor.node();
+        let line = self.format_expr(left_expr_node, src);
+        sep_lines.add_line(line);
+
+        for _ in 0..boolean_nest {
+            // 現状ではANDのみを認めているため演算子を読み飛ばす
+            cursor.goto_next_sibling();
+            
+            // 右の子
+            cursor.goto_next_sibling();
+            let right_expr_node = cursor.node();
+            let line = self.format_expr(right_expr_node, src);
+            sep_lines.add_line(line);
+
+            cursor.goto_parent();
+        }
+        
+        sep_lines.to_string()
     }
 
     // 未対応の構文をそのまま表示する(dfs)
