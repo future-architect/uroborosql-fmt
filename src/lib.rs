@@ -466,10 +466,11 @@ impl Formatter {
         line
     }
 
-    // 未対応の構文をそのまま表示する
+    // 未対応の構文をそのまま表示する(dfs)
     fn format_straightforward(&mut self, node: Node, src: &str) -> String {
         let mut result = String::new();
 
+        // 葉である場合resultに追加
         if node.child_count() <= 0 {
             result.push_str(
                 node.utf8_text(src.as_bytes())
@@ -481,11 +482,14 @@ impl Formatter {
             return result;
         }
 
+        // 葉でない場合
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
-            result.push_str(self.format_straightforward(cursor.node(), src).as_ref());
-            while cursor.goto_next_sibling() {
+            loop {
                 result.push_str(self.format_straightforward(cursor.node(), src).as_ref());
+                if cursor.goto_next_sibling() {
+                    break;
+                }
             }
         }
 
