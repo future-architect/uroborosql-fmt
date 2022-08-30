@@ -171,7 +171,8 @@ impl SeparatedLines {
                 let mut current_len = 0;    // 読み込んだcontentの長さの合計
                 for content in line.contents().into_iter() {
                     if current_len == len_to_as {   // "AS"に到達したとき
-                        let num_len = (max_len_to_as - len_to_as) / TAB_SIZE;
+                        let num_len
+                            = (max_len_to_as / TAB_SIZE) - (len_to_as / TAB_SIZE);
                         // num_tabだけ\tを挿入
                         for _ in 0..num_len {
                             result.push_str("\t");
@@ -193,7 +194,8 @@ impl SeparatedLines {
                 let mut current_len = 0;    // 読み込んだcontentの長さの合計
                 for content in line.contents().into_iter() {
                     if current_len == len_to_op {   // 演算子に到達したとき
-                        let num_len = (max_len_to_op - len_to_op) / TAB_SIZE;
+                        let num_len
+                            = (max_len_to_op / TAB_SIZE) - (len_to_op / TAB_SIZE);
                         // num_tabだけ\tを挿入
                         for _ in 0..num_len {
                             result.push_str("\t");
