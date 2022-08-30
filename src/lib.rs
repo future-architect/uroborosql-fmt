@@ -1,5 +1,7 @@
 use tree_sitter::Node;
 
+const TAB_SIZE: usize = 8;
+
 /// 引数のSQLをフォーマットして返す
 pub fn format_sql(src: &str) -> String {
     // tree-sitter-sqlの言語を取得
@@ -121,15 +123,16 @@ impl SeparatedLines {
     pub fn to_string(&self) -> String {
         let mut result = String::new();
 
-        let mut first = true;
+        let mut is_first = true;
         for line in (&self.lines).into_iter() {
+            //ネスト分だけ\tを挿入
             for _ in 0..self.depth {
                 result.push_str("\t");
             }
 
-            if first {
+            if is_first {
                 // 最初の行は\tから始まる
-                first = false;
+                is_first = false;
                 result.push_str("\t");
             } else {
                 // 2行目以降は,\tから始まる
@@ -141,7 +144,7 @@ impl SeparatedLines {
                 for content in line.contents().into_iter() {
                     if content.as_str() == "AS" {
                         // ASは省略しないと仮定
-                        let num_tab = (max_len_to_as - line.len_to_as().unwrap()) / 4; // タブ文字の長さ(4)で割る
+                        let num_tab = (max_len_to_as - line.len_to_as().unwrap()) / TAB_SIZE; // タブ文字の長さで割る
 
                         for _ in 0..num_tab {
                             result.push_str("\t");
