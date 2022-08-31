@@ -7,9 +7,8 @@ a,
 b 
 /* multi */
 --test
-from tab1 
+from tab1 /*ttesttestesttesetetssss */
  AS t1 --test
  , tab2 AS t2, tabtabtabtabtab AS long  --test
-where   --test /*multi*/
-        tab1.num  = 2
-/* multi */
+where  
+        1  = 2 + 1

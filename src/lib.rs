@@ -226,6 +226,31 @@ impl Formatter {
         return true;
     }
 
+    // goto_next_sibiling()をコメントの処理を行うように拡張したもの
+    fn goto_not_comment_next_sibiling_for_line(
+        &mut self,
+        line: &mut Line,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> bool {
+        //兄弟ノードがない場合
+        if !cursor.goto_next_sibling() {
+            return false;
+        }
+
+        //コメントノードであればbufに追記していく
+        while cursor.node().kind() == "comment" {
+            let comment_node = cursor.node();
+            line.add_content(comment_node.utf8_text(src.as_bytes()).unwrap());
+
+            if !cursor.goto_next_sibling() {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     fn format_source(&mut self, buf: &mut String, node: Node, src: &str) {
         // source_file -> _statement*
 
@@ -292,8 +317,7 @@ impl Formatter {
                             let expr_node = cursor.node();
 
                             self.nest();
-                            separated_lines
-                                .add_line(self.format_aliasable_expr(buf, expr_node, src));
+                            separated_lines.add_line(self.format_aliasable_expr(expr_node, src));
                             self.unnest();
                         }
 
@@ -306,7 +330,7 @@ impl Formatter {
                                 }
                                 _ => {
                                     separated_lines
-                                        .add_line(self.format_aliasable_expr(buf, child_node, src));
+                                        .add_line(self.format_aliasable_expr(child_node, src));
                                 }
                             };
                         }
@@ -327,7 +351,7 @@ impl Formatter {
                         self.nest();
 
                         self.push_indent(buf);
-                        let line = self.format_expr(buf, cursor.node(), src);
+                        let line = self.format_expr(cursor.node(), src);
                         buf.push_str(line.to_string().as_ref());
 
                         buf.push_str("\n");
@@ -382,7 +406,7 @@ impl Formatter {
 
                 self.nest();
 
-                let line = self.format_aliasable_expr(buf, expr_node, src);
+                let line = self.format_aliasable_expr(expr_node, src);
                 sepapated_lines.add_line(line);
 
                 self.unnest();
@@ -395,7 +419,7 @@ impl Formatter {
                             continue;
                         }
                         _ => {
-                            let line = self.format_aliasable_expr(buf, child_node, src);
+                            let line = self.format_aliasable_expr(child_node, src);
                             sepapated_lines.add_line(line);
                         }
                     }
@@ -408,7 +432,7 @@ impl Formatter {
     }
 
     // エイリアス可能な式
-    fn format_aliasable_expr(&mut self, buf: &mut String, node: Node, src: &str) -> Line {
+    fn format_aliasable_expr(&mut self, node: Node, src: &str) -> Line {
         /*
             _aliasable_expression ->
                 alias | _expression
@@ -428,16 +452,16 @@ impl Formatter {
             cursor.goto_first_child();
 
             // _expression
-            let expr_line = self.format_expr(buf, cursor.node(), src);
+            let expr_line = self.format_expr(cursor.node(), src);
             line.append(expr_line);
 
             // ("AS"? identifier)?
-            if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
+            if self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src) {
                 // "AS"?
 
                 if cursor.node().kind() == "AS" {
                     line.add_as("AS");
-                    self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
+                    self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
                 }
 
                 // identifier
@@ -446,14 +470,14 @@ impl Formatter {
                 }
             }
         } else {
-            line = self.format_expr(buf, node, src);
+            line = self.format_expr(node, src);
         }
 
         line
     }
 
     // 式
-    fn format_expr(&mut self, buf: &mut String, node: Node, src: &str) -> Line {
+    fn format_expr(&mut self, node: Node, src: &str) -> Line {
         // expressionは1行と仮定する(boolean_exprssionなどは2行以上になったりするので要修正)
         let mut line = Line::new();
 
@@ -468,7 +492,7 @@ impl Formatter {
                 let id_node = cursor.node();
                 result.push_str(id_node.utf8_text(src.as_bytes()).unwrap());
 
-                while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
+                while self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src) {
                     match cursor.node().kind() {
                         "." => result.push_str("."),
                         _ => result.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
@@ -482,19 +506,19 @@ impl Formatter {
 
                 // 左辺
                 let lhs_node = cursor.node();
-                let lhs_line = self.format_expr(buf, lhs_node, src);
+                let lhs_line = self.format_expr(lhs_node, src);
                 line.append(lhs_line);
 
                 // 演算子
-                self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
+                self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
                 let op_node = cursor.node();
                 // add_operatorに置き換わる予定
                 line.add_content(op_node.utf8_text(src.as_bytes()).unwrap());
 
                 // 右辺
-                self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
+                self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
                 let rhs_node = cursor.node();
-                let expr_line = self.format_expr(buf, rhs_node, src);
+                let expr_line = self.format_expr(rhs_node, src);
                 line.append(expr_line);
             }
             // identifier | number | string (そのまま表示)
