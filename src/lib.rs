@@ -1,4 +1,6 @@
-use tree_sitter::Node;
+use std::str::Utf8Error;
+
+use tree_sitter::{Node, Tree, TreeCursor};
 
 const TAB_SIZE: usize = 4;
 
@@ -237,15 +239,77 @@ impl Formatter {
         self.state.depth -= 1;
     }
 
+    // goto_next_sibiling()をコメントの処理を行うように拡張したもの
+    fn goto_not_comment_next_sibiling(
+        &mut self,
+        buf: &mut String,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> bool {
+        //兄弟ノードがない場合
+        if !cursor.goto_next_sibling() {
+            return false;
+        }
+
+        //コメントノードであればbufに追記していく
+        while cursor.node().kind() == "comment" {
+            let comment_node = cursor.node();
+            buf.push_str(comment_node.utf8_text(src.as_bytes()).unwrap());
+            buf.push_str("\n");
+
+            if !cursor.goto_next_sibling() {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // goto_next_sibiling()をコメントの処理を行うように拡張したもの
+    fn goto_not_comment_next_sibiling_for_line(
+        &mut self,
+        line: &mut Line,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> bool {
+        //兄弟ノードがない場合
+        if !cursor.goto_next_sibling() {
+            return false;
+        }
+
+        //コメントノードであればbufに追記していく
+        while cursor.node().kind() == "comment" {
+            let comment_node = cursor.node();
+            line.add_content(comment_node.utf8_text(src.as_bytes()).unwrap());
+
+            if !cursor.goto_next_sibling() {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     fn format_source(&mut self, buf: &mut String, node: Node, src: &str) {
         // source_file -> _statement*
 
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
+            //コメントノードであればbufに追記していく
+            while cursor.node().kind() == "comment" {
+                let comment_node = cursor.node();
+                buf.push_str(comment_node.utf8_text(src.as_bytes()).unwrap());
+                buf.push_str("\n");
+                cursor.goto_next_sibling();
+            }
+
             let stmt_node = cursor.node();
 
             // 現状はselect_statementのみ
             self.format_select_stmt(buf, stmt_node, src);
+
+            //select_statement以外も追加した場合この部分は削除
+            self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
         }
     }
 
@@ -263,6 +327,7 @@ impl Formatter {
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
             let select_clause_node = cursor.node();
+
             self.format_select_clause(buf, select_clause_node, src);
         } else {
             return ();
@@ -270,7 +335,7 @@ impl Formatter {
 
         loop {
             // 次の兄弟へ移動
-            if !cursor.goto_next_sibling() {
+            if !self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                 break; // 子供がいなくなったら脱出
             }
 
@@ -287,7 +352,7 @@ impl Formatter {
 
                         // commaSep
                         // selectのときと同じであるため、統合したい
-                        if cursor.goto_next_sibling() {
+                        if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                             let expr_node = cursor.node();
 
                             self.nest();
@@ -295,7 +360,7 @@ impl Formatter {
                             self.unnest();
                         }
 
-                        while cursor.goto_next_sibling() {
+                        while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                             let child_node = cursor.node();
 
                             match child_node.kind() {
@@ -320,7 +385,7 @@ impl Formatter {
                         self.push_indent(buf);
                         buf.push_str("WHERE\n");
 
-                        cursor.goto_next_sibling();
+                        self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
 
                         // WHERE句に現れる式をbool式とする
                         let bool_expr_node = cursor.node();
@@ -357,10 +422,11 @@ impl Formatter {
 
         if cursor.goto_first_child() {
             // select_clauseの最初の子供は必ず"SELECT"であるはず
+
             self.push_indent(buf);
             buf.push_str("SELECT\n");
 
-            if cursor.goto_next_sibling() {
+            if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                 // ここで、cursorはselect_clause_bodyを指している
 
                 // 子供に移動
@@ -381,7 +447,7 @@ impl Formatter {
                 self.unnest();
 
                 // (',' _aliasable_expression)*
-                while cursor.goto_next_sibling() {
+                while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                     let child_node = cursor.node();
                     match child_node.kind() {
                         "," => {
@@ -425,11 +491,12 @@ impl Formatter {
             line.append(expr_line);
 
             // ("AS"? identifier)?
-            if cursor.goto_next_sibling() {
+            if self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src) {
                 // "AS"?
+
                 if cursor.node().kind() == "AS" {
                     line.add_as("AS");
-                    cursor.goto_next_sibling();
+                    self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
                 }
 
                 // identifier
@@ -460,7 +527,7 @@ impl Formatter {
                 let id_node = cursor.node();
                 result.push_str(id_node.utf8_text(src.as_bytes()).unwrap());
 
-                while cursor.goto_next_sibling() {
+                while self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src) {
                     match cursor.node().kind() {
                         "." => result.push_str("."),
                         _ => result.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
@@ -478,12 +545,12 @@ impl Formatter {
                 line.append(lhs_line);
 
                 // 演算子
-                cursor.goto_next_sibling();
+                self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
                 let op_node = cursor.node();
                 line.add_op(op_node.utf8_text(src.as_bytes()).unwrap());
 
                 // 右辺
-                cursor.goto_next_sibling();
+                self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
                 let rhs_node = cursor.node();
                 let expr_line = self.format_expr(rhs_node, src);
                 line.append(expr_line);
