@@ -1,3 +1,5 @@
+use std::str::Utf8Error;
+
 use tree_sitter::{Node, Tree, TreeCursor};
 
 const TAB_SIZE: usize = 4;
@@ -320,8 +322,6 @@ impl Formatter {
         while cursor.node().kind() == "comment" {
             let comment_node = cursor.node();
             buf.push_str(comment_node.utf8_text(src.as_bytes()).unwrap());
-            buf.push_str("\n");
-
             if !cursor.goto_next_sibling() {
                 return false;
             }
