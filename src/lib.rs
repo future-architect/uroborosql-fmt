@@ -79,7 +79,7 @@ impl Line {
         // -- 例外 --
         // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
         //
-        self.len += TAB_SIZE + content.len() - (content.len() % TAB_SIZE);
+        self.len += TAB_SIZE * (content.len() / TAB_SIZE + 1);
         self.contents.push(content.to_ascii_uppercase());
     }
 
@@ -207,7 +207,7 @@ impl SeparatedLines {
                 result.push_str("\t");
                 result.push_str(content);
 
-                current_len += TAB_SIZE + content.len() - (content.len() % TAB_SIZE);
+                current_len += TAB_SIZE * (content.len() / TAB_SIZE + 1);
             }
 
             result.push_str("\n");
