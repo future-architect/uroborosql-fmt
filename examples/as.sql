@@ -1,6 +1,8 @@
 
-
+--test
+/* test */
 select 
+--test
 a, 
 b 
 /* multi */

@@ -200,11 +200,45 @@ impl Formatter {
         self.state.depth -= 1;
     }
 
+    // goto_next_sibiling()をコメントの処理を行うように拡張したもの
+    fn goto_not_comment_next_sibiling(
+        &mut self,
+        buf: &mut String,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> bool {
+        //兄弟ノードがない場合
+        if !cursor.goto_next_sibling() {
+            return false;
+        }
+
+        //コメントノードであればbufに追記していく
+        while cursor.node().kind() == "comment" {
+            let comment_node = cursor.node();
+            buf.push_str(comment_node.utf8_text(src.as_bytes()).unwrap());
+            buf.push_str("\n");
+
+            if !cursor.goto_next_sibling() {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     fn format_source(&mut self, buf: &mut String, node: Node, src: &str) {
         // source_file -> _statement*
 
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
+            //コメントノードであればbufに追記していく
+            while cursor.node().kind() == "comment" {
+                let comment_node = cursor.node();
+                buf.push_str(comment_node.utf8_text(src.as_bytes()).unwrap());
+                buf.push_str("\n");
+                cursor.goto_next_sibling();
+            }
+
             let stmt_node = cursor.node();
 
             // 現状はselect_statementのみ
@@ -308,29 +342,6 @@ impl Formatter {
                 }
             }
         }
-    }
-
-    fn goto_not_comment_next_sibiling(
-        &mut self,
-        buf: &mut String,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> bool {
-        //兄弟ノードがない場合
-        if !cursor.goto_next_sibling() {
-            return false;
-        }
-
-        //コメントノードであればbufに追記していく
-        while cursor.node().kind() == "comment" {
-            let comment_node = cursor.node();
-            buf.push_str(comment_node.utf8_text(src.as_bytes()).unwrap());
-            if !cursor.goto_next_sibling() {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     // SELECT句
