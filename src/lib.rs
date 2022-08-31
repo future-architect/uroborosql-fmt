@@ -68,7 +68,18 @@ impl Line {
 
     /// 行の要素を足す(演算子はadd_operator()を使う)
     pub fn add_content(&mut self, content: &str) {
-        self.len += content.len();
+        // TAB_SIZEを1単位として長さを記録する
+        //
+        // contentを文字列にするとき、必ずその前に一つ'\t'が入る
+        // -> 各contentの長さは content + "\t"となる
+        //
+        // e.g., TAB_SIZE = 4のとき
+        // TAB1.NUM: 8文字 = TAB_SIZE * 2 -> tabを足すと長さTAB_SIZE * 2 + TAB_SIZE
+        // TAB1.N  : 5文字 = TAB_SIZE * 1 + 1 -> tabを足すと長さTAB_SIZE + TAB_SIZE
+        // -- 例外 --
+        // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
+        //
+        self.len += TAB_SIZE * (content.len() / TAB_SIZE + 1);
         self.contents.push(content.to_ascii_uppercase());
     }
 
@@ -196,7 +207,7 @@ impl SeparatedLines {
                 result.push_str("\t");
                 result.push_str(content);
 
-                current_len += content.len();
+                current_len += TAB_SIZE * (content.len() / TAB_SIZE + 1);
             }
 
             result.push_str("\n");
@@ -598,7 +609,6 @@ impl Formatter {
         sep_lines.add_line(line);
 
         for _ in 0..boolean_nest {
-            // 現状ではANDのみを認めているため演算子を読み飛ばす
             let mut line = Line::new();
             self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
             /*
