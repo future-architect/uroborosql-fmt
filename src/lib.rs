@@ -79,18 +79,7 @@ impl Line {
     // 引数の文字列が比較演算子かどうかを判定する
     fn is_comp_op(op_str: &str) -> bool {
         match op_str {
-            "<"
-            | "<="
-            | "<>" 
-            | "!=" 
-            | "=" 
-            | ">"
-            | ">=" 
-            | "~" 
-            | "!~" 
-            | "~*" 
-            | "!~*" => 
-                true,
+            "<" | "<=" | "<>" | "!=" | "=" | ">" | ">=" | "~" | "!~" | "~*" | "!~*" => true,
             _ => false,
         }
     }
@@ -188,9 +177,7 @@ impl SeparatedLines {
             for content in line.contents().into_iter() {
                 // as, opなどまでの最大長とその行での長さを引数にとる
                 // 現在見ているcontentがas, opであれば、必要な数\tを挿入する
-                let mut insert_tab
-                    = |max_len_to: Option<usize>, len_to: Option<usize>| -> ()
-                {
+                let mut insert_tab = |max_len_to: Option<usize>, len_to: Option<usize>| -> () {
                     if let (Some(max_len_to), Some(len_to)) = (max_len_to, len_to) {
                         if current_len == len_to {
                             let num_tab = (max_len_to / TAB_SIZE) - (len_to / TAB_SIZE);
@@ -198,7 +185,7 @@ impl SeparatedLines {
                                 result.push_str("\t");
                             }
                         };
-                    };   
+                    };
                 };
 
                 insert_tab(self.max_len_to_as, line.len_to_as());
@@ -334,10 +321,11 @@ impl Formatter {
                         buf.push_str("WHERE\n");
 
                         cursor.goto_next_sibling();
-                        
+
                         // WHERE句に現れる式をbool式とする
                         let bool_expr_node = cursor.node();
-                        let bool_expr_str = self.format_bool_expr(bool_expr_node, src, self.state.depth);
+                        let bool_expr_str =
+                            self.format_bool_expr(bool_expr_node, src, self.state.depth);
                         buf.push_str(bool_expr_str.as_str());
 
                         cursor.goto_parent();
@@ -517,14 +505,14 @@ impl Formatter {
     fn format_bool_expr(&mut self, node: Node, src: &str, depth: usize) -> String {
         // 今はANDしか認めない
         let mut sep_lines = SeparatedLines::new(depth, "AND");
-        
+
         // ブール式ではない場合
         if node.kind() != "boolean_expression" {
             let line = self.format_expr(node, src);
             sep_lines.add_line(line);
             return sep_lines.to_string();
         }
-        
+
         let mut cursor = node.walk();
 
         // boolean_expressionは繰り返しではなく、ネストで表現されている
@@ -545,7 +533,7 @@ impl Formatter {
         for _ in 0..boolean_nest {
             // 現状ではANDのみを認めているため演算子を読み飛ばす
             cursor.goto_next_sibling();
-            
+
             // 右の子
             cursor.goto_next_sibling();
             let right_expr_node = cursor.node();
@@ -554,7 +542,7 @@ impl Formatter {
 
             cursor.goto_parent();
         }
-        
+
         sep_lines.to_string()
     }
 
