@@ -1,4 +1,4 @@
-use std::str::Utf8Error;
+use std::{arch::x86_64::_MM_EXCEPT_MASK, str::Utf8Error};
 
 use tree_sitter::{Node, Tree, TreeCursor};
 
@@ -33,6 +33,7 @@ struct FormatterState {
     pub depth: usize,
 }
 
+#[derive(Debug)]
 struct Line {
     contents: Vec<String>, // lifetimeの管理が面倒なのでStringに
     len: usize,
@@ -130,6 +131,7 @@ impl Line {
     }
 }
 
+#[derive(Debug)]
 struct SeparatedLines {
     depth: usize,                 // インデントの深さ
     separetor: String,            // セパレータ(e.g., ',', AND)
@@ -398,11 +400,18 @@ impl Formatter {
 
                         self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
 
-                        // WHERE句に現れる式をbool式とする
-                        let bool_expr_node = cursor.node();
-                        let bool_expr_str =
-                            self.format_bool_expr(bool_expr_node, src, self.state.depth);
-                        buf.push_str(bool_expr_str.as_str());
+                        // WHERE句に現れる式
+                        let expr_node = cursor.node();
+                        let expr_line = self.format_expr(expr_node, src);
+
+                        // booblean_exprの場合はcontents[0][0] == '\t'になるはず
+                        if expr_line.contents[0].chars().next().unwrap() == '\t' {
+                            buf.push_str(&expr_line.contents[0]);
+                        } else {
+                            let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
+                            separated_lines.add_line(expr_line);
+                            buf.push_str(&separated_lines.to_string());
+                        }
 
                         cursor.goto_parent();
                     }
@@ -566,6 +575,11 @@ impl Formatter {
                 let expr_line = self.format_expr(rhs_node, src);
                 line.append(expr_line);
             }
+            "boolean_expression" => {
+                //Stringで返ってきたboolean_expressionをlineに格納して返す
+                let str = self.format_bool_expr(node, src);
+                line.add_content(str.as_ref());
+            }
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
                 line.add_content(node.utf8_text(src.as_bytes()).unwrap());
@@ -580,16 +594,9 @@ impl Formatter {
     }
 
     // bool式
-    fn format_bool_expr(&mut self, node: Node, src: &str, depth: usize) -> String {
+    fn format_bool_expr(&mut self, node: Node, src: &str) -> String {
         // 今はANDしか認めない
-        let mut sep_lines = SeparatedLines::new(depth, "AND");
-
-        // ブール式ではない場合
-        if node.kind() != "boolean_expression" {
-            let line = self.format_expr(node, src);
-            sep_lines.add_line(line);
-            return sep_lines.to_string();
-        }
+        let mut sep_lines = SeparatedLines::new(self.state.depth, "AND");
 
         let mut cursor = node.walk();
 
