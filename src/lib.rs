@@ -68,8 +68,18 @@ impl Line {
 
     /// 行の要素を足す(演算子はadd_operator()を使う)
     pub fn add_content(&mut self, content: &str) {
-        self.len += if content.len() > 0 { TAB_SIZE } else { 0 };
-        self.len += content.len() - (content.len() % TAB_SIZE);
+        // TAB_SIZEを1単位として長さを記録する
+        //
+        // contentを文字列にするとき、必ずその前に一つ'\t'が入る
+        // -> 各contentの長さは content + "\t"となる
+        //
+        // e.g., TAB_SIZE = 4のとき
+        // TAB1.NUM: 8文字 = TAB_SIZE * 2 -> tabを足すと長さTAB_SIZE * 2 + TAB_SIZE
+        // TAB1.N  : 5文字 = TAB_SIZE * 1 + 1 -> tabを足すと長さTAB_SIZE + TAB_SIZE
+        // -- 例外 --
+        // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
+        //
+        self.len += TAB_SIZE + content.len() - (content.len() % TAB_SIZE);
         self.contents.push(content.to_ascii_uppercase());
     }
 
@@ -197,8 +207,7 @@ impl SeparatedLines {
                 result.push_str("\t");
                 result.push_str(content);
 
-                current_len += if content.len() > 0 { TAB_SIZE } else { 0 };
-                current_len += content.len() - (content.len() % TAB_SIZE);
+                current_len += TAB_SIZE + content.len() - (content.len() % TAB_SIZE);
             }
 
             result.push_str("\n");
