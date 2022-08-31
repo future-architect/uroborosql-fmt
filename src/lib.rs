@@ -609,13 +609,25 @@ impl Formatter {
         sep_lines.add_line(line);
 
         for _ in 0..boolean_nest {
-            // 現状ではANDのみを認めているため演算子を読み飛ばす
-            cursor.goto_next_sibling();
+            let mut line = Line::new();
+            self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
+            /*
+            sep_linesに追加して、その後to_string()すると
+
+            WHERE
+                    hoge
+            AND     --hoge
+            AND     huga
+
+            みたいになってしまう
+             */
+            // sep_lines.add_line(line);
 
             // 右の子
-            cursor.goto_next_sibling();
+            let mut line = Line::new();
+            self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
             let right_expr_node = cursor.node();
-            let line = self.format_expr(right_expr_node, src);
+            line.append(self.format_expr(right_expr_node, src));
             sep_lines.add_line(line);
 
             cursor.goto_parent();
