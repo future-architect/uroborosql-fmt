@@ -68,7 +68,8 @@ impl Line {
 
     /// 行の要素を足す(演算子はadd_operator()を使う)
     pub fn add_content(&mut self, content: &str) {
-        self.len += content.len();
+        self.len += if content.len() > 0 { TAB_SIZE } else { 0 };
+        self.len += content.len() - (content.len() % TAB_SIZE);
         self.contents.push(content.to_ascii_uppercase());
     }
 
@@ -196,7 +197,8 @@ impl SeparatedLines {
                 result.push_str("\t");
                 result.push_str(content);
 
-                current_len += content.len();
+                current_len += if content.len() > 0 { TAB_SIZE } else { 0 };
+                current_len += content.len() - (content.len() % TAB_SIZE);
             }
 
             result.push_str("\n");
@@ -599,25 +601,12 @@ impl Formatter {
 
         for _ in 0..boolean_nest {
             // 現状ではANDのみを認めているため演算子を読み飛ばす
-            let mut line = Line::new();
-            self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
-            /*
-            sep_linesに追加して、その後to_string()すると
-
-            WHERE
-                    hoge
-            AND     --hoge
-            AND     huga
-
-            みたいになってしまう
-             */
-            // sep_lines.add_line(line);
+            cursor.goto_next_sibling();
 
             // 右の子
-            let mut line = Line::new();
-            self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
+            cursor.goto_next_sibling();
             let right_expr_node = cursor.node();
-            line.append(self.format_expr(right_expr_node, src));
+            let line = self.format_expr(right_expr_node, src);
             sep_lines.add_line(line);
 
             cursor.goto_parent();
