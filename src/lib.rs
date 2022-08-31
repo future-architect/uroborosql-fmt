@@ -503,7 +503,7 @@ impl Formatter {
             }
             _ => {
                 eprintln!("format_expr(): unknown node ({}).", node.kind());
-                line.add_content(self.format_straightforward(buf, node, src).as_ref())
+                line.add_content(self.format_straightforward(node, src).as_ref())
             }
         }
 
@@ -511,7 +511,7 @@ impl Formatter {
     }
 
     // 未対応の構文をそのまま表示する(dfs)
-    fn format_straightforward(&mut self, buf: &mut String, node: Node, src: &str) -> String {
+    fn format_straightforward(&mut self, node: Node, src: &str) -> String {
         let mut result = String::new();
 
         // 葉である場合resultに追加
@@ -530,11 +530,8 @@ impl Formatter {
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
             loop {
-                result.push_str(
-                    self.format_straightforward(buf, cursor.node(), src)
-                        .as_ref(),
-                );
-                if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
+                result.push_str(self.format_straightforward(cursor.node(), src).as_ref());
+                if cursor.goto_next_sibling() {
                     break;
                 }
             }
