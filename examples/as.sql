@@ -10,3 +10,4 @@ from tab1
  , tab2 AS t2, tabtabtabtabtab AS long  --test
 where   --test /*multi*/
         tab1.num  = 2
+/* multi */

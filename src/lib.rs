@@ -209,6 +209,9 @@ impl Formatter {
 
             // 現状はselect_statementのみ
             self.format_select_stmt(buf, stmt_node, src);
+
+            //select_statement以外も追加した場合この部分は削除
+            self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
         }
     }
 
