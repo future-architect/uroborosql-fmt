@@ -37,6 +37,7 @@ struct Line {
     contents: Vec<String>, // lifetimeの管理が面倒なのでStringに
     len: usize,
     len_to_as: Option<usize>, // AS までの距離
+    len_to_op: Option<usize>, // 演算子までの距離(1行に一つ)
 }
 
 impl Line {
@@ -45,6 +46,7 @@ impl Line {
             contents: vec![] as Vec<String>,
             len: 0,
             len_to_as: None,
+            len_to_op: None,
         }
     }
 
@@ -60,6 +62,10 @@ impl Line {
         self.len_to_as
     }
 
+    pub fn len_to_op(&self) -> Option<usize> {
+        self.len_to_op
+    }
+
     /// 行の要素を足す(演算子はadd_operator()を使う)
     pub fn add_content(&mut self, content: &str) {
         self.len += content.len();
@@ -72,11 +78,32 @@ impl Line {
         self.add_content(as_str);
     }
 
+    // 引数の文字列が比較演算子かどうかを判定する
+    fn is_comp_op(op_str: &str) -> bool {
+        match op_str {
+            "<" | "<=" | "<>" | "!=" | "=" | ">" | ">=" | "~" | "!~" | "~*" | "!~*" => true,
+            _ => false,
+        }
+    }
+
+    /// 演算子を追加する
+    pub fn add_op(&mut self, op_str: &str) {
+        // 比較演算子のみをそろえる
+        if Self::is_comp_op(op_str) {
+            self.len_to_op = Some(self.len);
+        }
+        self.add_content(op_str);
+    }
+
     // lineの結合
     pub fn append(&mut self, line: Line) {
         if let Some(len_to_as) = line.len_to_as() {
             // ASはlineに一つと仮定している
             self.len_to_as = Some(self.len + len_to_as);
+        }
+
+        if let Some(len_to_op) = line.len_to_op() {
+            self.len_to_op = Some(self.len + len_to_op);
         }
 
         self.len += line.len();
@@ -97,6 +124,7 @@ struct SeparatedLines {
     separetor: String,            // セパレータ(e.g., ',', AND)
     lines: Vec<Line>,             // 各行の情報
     max_len_to_as: Option<usize>, // ASまでの最長の長さ
+    max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
 }
 
 impl SeparatedLines {
@@ -106,6 +134,7 @@ impl SeparatedLines {
             separetor: sep.to_string(),
             lines: vec![] as Vec<Line>,
             max_len_to_as: None,
+            max_len_to_op: None,
         }
     }
 
@@ -113,6 +142,13 @@ impl SeparatedLines {
     pub fn add_line(&mut self, line: Line) {
         if let Some(len) = line.len_to_as() {
             self.max_len_to_as = match self.max_len_to_as {
+                Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                None => Some(len),
+            };
+        };
+
+        if let Some(len) = line.len_to_op() {
+            self.max_len_to_op = match self.max_len_to_op {
                 Some(maxlen) => Some(std::cmp::max(len, maxlen)),
                 None => Some(len),
             };
@@ -133,33 +169,36 @@ impl SeparatedLines {
             }
 
             if is_first {
-                // 最初の行は\tから始まる
                 is_first = false;
-                result.push_str("\t");
             } else {
-                // 2行目以降は,\tから始まる
+                // 2行目以降は sep から始まる
                 result.push_str(self.separetor.as_ref());
+            }
+
+            let mut current_len = 0;
+            for content in line.contents().into_iter() {
+                // as, opなどまでの最大長とその行での長さを引数にとる
+                // 現在見ているcontentがas, opであれば、必要な数\tを挿入する
+                let mut insert_tab = |max_len_to: Option<usize>, len_to: Option<usize>| -> () {
+                    if let (Some(max_len_to), Some(len_to)) = (max_len_to, len_to) {
+                        if current_len == len_to {
+                            let num_tab = (max_len_to / TAB_SIZE) - (len_to / TAB_SIZE);
+                            for _ in 0..num_tab {
+                                result.push_str("\t");
+                            }
+                        };
+                    };
+                };
+
+                insert_tab(self.max_len_to_as, line.len_to_as());
+                insert_tab(self.max_len_to_op, line.len_to_op());
+
                 result.push_str("\t");
+                result.push_str(content);
+
+                current_len += content.len();
             }
 
-            if let Some(max_len_to_as) = self.max_len_to_as {
-                for content in line.contents().into_iter() {
-                    if content.as_str() == "AS" {
-                        // ASは省略しないと仮定
-                        let num_tab = (max_len_to_as - line.len_to_as().unwrap()) / TAB_SIZE; // タブ文字の長さで割る
-
-                        // num_tabだけ\tを挿入
-                        for _ in 0..num_tab {
-                            result.push_str("\t");
-                        }
-                        result.push_str("\tAS\t");
-                    } else {
-                        result.push_str(content.as_ref());
-                    }
-                }
-            } else {
-                result.push_str(line.to_string().as_ref());
-            }
             result.push_str("\n");
         }
 
@@ -348,15 +387,11 @@ impl Formatter {
 
                         self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
 
-                        self.nest();
-
-                        self.push_indent(buf);
-                        let line = self.format_expr(cursor.node(), src);
-                        buf.push_str(line.to_string().as_ref());
-
-                        buf.push_str("\n");
-
-                        self.unnest();
+                        // WHERE句に現れる式をbool式とする
+                        let bool_expr_node = cursor.node();
+                        let bool_expr_str =
+                            self.format_bool_expr(bool_expr_node, src, self.state.depth);
+                        buf.push_str(bool_expr_str.as_str());
 
                         cursor.goto_parent();
                     }
@@ -512,8 +547,7 @@ impl Formatter {
                 // 演算子
                 self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
                 let op_node = cursor.node();
-                // add_operatorに置き換わる予定
-                line.add_content(op_node.utf8_text(src.as_bytes()).unwrap());
+                line.add_op(op_node.utf8_text(src.as_bytes()).unwrap());
 
                 // 右辺
                 self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
@@ -532,6 +566,51 @@ impl Formatter {
         }
 
         line
+    }
+
+    // bool式
+    fn format_bool_expr(&mut self, node: Node, src: &str, depth: usize) -> String {
+        // 今はANDしか認めない
+        let mut sep_lines = SeparatedLines::new(depth, "AND");
+
+        // ブール式ではない場合
+        if node.kind() != "boolean_expression" {
+            let line = self.format_expr(node, src);
+            sep_lines.add_line(line);
+            return sep_lines.to_string();
+        }
+
+        let mut cursor = node.walk();
+
+        // boolean_expressionは繰り返しではなく、ネストで表現されている
+        // そのため、探索のためにネストの深さを覚えておく
+        let mut boolean_nest = 0;
+
+        // boolean_expressionの最左に移動(NOT, BETWEEN対応のことは考えていない)
+        while cursor.node().kind() == "boolean_expression" {
+            boolean_nest += 1;
+            cursor.goto_first_child();
+        }
+
+        // 一番左下の子
+        let left_expr_node = cursor.node();
+        let line = self.format_expr(left_expr_node, src);
+        sep_lines.add_line(line);
+
+        for _ in 0..boolean_nest {
+            // 現状ではANDのみを認めているため演算子を読み飛ばす
+            cursor.goto_next_sibling();
+
+            // 右の子
+            cursor.goto_next_sibling();
+            let right_expr_node = cursor.node();
+            let line = self.format_expr(right_expr_node, src);
+            sep_lines.add_line(line);
+
+            cursor.goto_parent();
+        }
+
+        sep_lines.to_string()
     }
 
     // 未対応の構文をそのまま表示する(dfs)
@@ -639,6 +718,14 @@ mod test {
     fn test_align_as() {
         let src = "SELECT A FROM TAB1 AS T1, TABTABTABTAB AS L";
         let expect = "SELECT\n\tA\nFROM\n\tTAB1\t\t\tAS\tT1\n,\tTABTABTABTAB\tAS\tL\n";
+        let actual = format_sql(src);
+        assert_eq!(actual, expect);
+    }
+
+    #[test]
+    fn test_align_op() {
+        let src = "SELECT A FROM TAB1 WHERE TAB1.NUM = 1 AND TAB1.NUUUUUUUUUUM = 2 AND TAB1.N = 3";
+        let expect = "SELECT\n\tA\nFROM\n\tTAB1\nWHERE\n\tTAB1.NUM\t\t\t=\t1\nAND\tTAB1.NUUUUUUUUUUM\t=\t2\nAND\tTAB1.N\t\t\t\t=\t3\n";
         let actual = format_sql(src);
         assert_eq!(actual, expect);
     }
