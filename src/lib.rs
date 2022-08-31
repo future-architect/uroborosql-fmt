@@ -601,6 +601,16 @@ impl Formatter {
             // 現状ではANDのみを認めているため演算子を読み飛ばす
             let mut line = Line::new();
             self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
+            /*
+            sep_linesに追加して、その後to_string()すると
+
+            WHERE
+                    hoge
+            AND     --hoge
+            AND     huga
+
+            みたいになってしまう
+             */
             // sep_lines.add_line(line);
 
             // 右の子
