@@ -1,5 +1,3 @@
-use std::str::Utf8Error;
-
 use tree_sitter::{Node, Tree, TreeCursor};
 
 const TAB_SIZE: usize = 4;
@@ -130,10 +128,15 @@ impl Line {
     }
 }
 
+enum Content {
+    SeparatedLines(SeparatedLines),
+    Line(Line),
+}
+
 struct SeparatedLines {
-    depth: usize,                 // インデントの深さ
+    // depth: usize,                 // インデントの深さ
     separetor: String,            // セパレータ(e.g., ',', AND)
-    lines: Vec<Line>,             // 各行の情報
+    lines: Vec<Content>,          // 各行の情報
     max_len_to_as: Option<usize>, // ASまでの最長の長さ
     max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
 }
@@ -141,41 +144,46 @@ struct SeparatedLines {
 impl SeparatedLines {
     pub fn new(depth: usize, sep: &str) -> SeparatedLines {
         SeparatedLines {
-            depth,
+            // depth,
             separetor: sep.to_string(),
-            lines: vec![] as Vec<Line>,
+            lines: vec![] as Vec<Content>,
             max_len_to_as: None,
             max_len_to_op: None,
         }
     }
 
     /// Line構造体を追加
-    pub fn add_line(&mut self, line: Line) {
-        if let Some(len) = line.len_to_as() {
-            self.max_len_to_as = match self.max_len_to_as {
-                Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                None => Some(len),
-            };
-        };
+    pub fn add_line(&mut self, content: Content) {
+        match content {
+            Content::Line(line) => {
+                if let Some(len) = line.len_to_as() {
+                    self.max_len_to_as = match self.max_len_to_as {
+                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                        None => Some(len),
+                    };
+                };
 
-        if let Some(len) = line.len_to_op() {
-            self.max_len_to_op = match self.max_len_to_op {
-                Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                None => Some(len),
-            };
-        };
+                if let Some(len) = line.len_to_op() {
+                    self.max_len_to_op = match self.max_len_to_op {
+                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                        None => Some(len),
+                    };
+                };
 
-        self.lines.push(line);
+                self.lines.push(Content::Line(line));
+            }
+            _ => {}
+        }
     }
 
     /// AS句で揃えたものを返す
-    pub fn to_string(&self) -> String {
+    pub fn render(&self, depth: usize) -> String {
         let mut result = String::new();
 
         let mut is_first = true;
         for line in (&self.lines).into_iter() {
             //ネスト分だけ\tを挿入
-            for _ in 0..self.depth {
+            for _ in 0..depth {
                 result.push_str("\t");
             }
 
@@ -385,7 +393,7 @@ impl Formatter {
                             };
                         }
 
-                        buf.push_str(separated_lines.to_string().as_ref());
+                        buf.push_str(separated_lines.render().as_ref());
 
                         cursor.goto_parent();
                     }
@@ -471,7 +479,7 @@ impl Formatter {
                     }
                 }
 
-                let string = sepapated_lines.to_string();
+                let string = sepapated_lines.render();
                 buf.push_str(string.as_str());
             }
         }
@@ -588,7 +596,7 @@ impl Formatter {
         if node.kind() != "boolean_expression" {
             let line = self.format_expr(node, src);
             sep_lines.add_line(line);
-            return sep_lines.to_string();
+            return sep_lines.render();
         }
 
         let mut cursor = node.walk();
@@ -633,7 +641,7 @@ impl Formatter {
             cursor.goto_parent();
         }
 
-        sep_lines.to_string()
+        sep_lines.render()
     }
 
     // 未対応の構文をそのまま表示する(dfs)
