@@ -6,6 +6,11 @@ use std::{
     path,
 };
 
+/*
+   `cargo test`で、testfiles/src/にあるファイルすべてをフォーマットする
+   フォーマット結果は、testfiles/dst/ディレクトリの同名ファイルに書き込まれる。
+   commitしてあるファイルと比較し、違っていたらバグの可能性がある。
+*/
 #[test]
 fn test_all_files() {
     // testの対象を格納するディレクトリ
