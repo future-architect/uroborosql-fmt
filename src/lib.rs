@@ -650,13 +650,6 @@ impl Formatter {
         // 今はANDしか認めない
         let mut sep_lines = SeparatedLines::new(self.state.depth, "AND");
 
-        // ブール式ではない場合
-        // if node.kind() != "boolean_expression" {
-        //     let line = self.format_expr(node, src);
-        //     sep_lines.add_line(line);
-        //     // return sep_lines.render();
-        // }
-
         let mut cursor = node.walk();
 
         // boolean_expressionは繰り返しではなく、ネストで表現されている
