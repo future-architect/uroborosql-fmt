@@ -26,14 +26,9 @@ pub fn format_sql(src: &str) -> String {
     res.render()
 }
 
-/// インデントの深さや位置をそろえるための情報を保持する構造体
-struct FormatterState {
-    pub depth: usize,
-}
-
 #[derive(Debug, Clone)]
 pub struct Line {
-    contents: Vec<String>, // lifetimeの管理が面倒なのでStringに
+    elements: Vec<String>, // lifetimeの管理が面倒なのでStringに
     len: usize,
     len_to_as: Option<usize>, // AS までの距離
     len_to_op: Option<usize>, // 演算子までの距離(1行に一つ)
@@ -42,7 +37,7 @@ pub struct Line {
 impl Line {
     pub fn new() -> Line {
         Line {
-            contents: vec![] as Vec<String>,
+            elements: vec![] as Vec<String>,
             len: 0,
             len_to_as: None,
             len_to_op: None,
@@ -50,7 +45,7 @@ impl Line {
     }
 
     pub fn contents(&self) -> &Vec<String> {
-        &self.contents
+        &self.elements
     }
 
     pub fn len(&self) -> usize {
@@ -79,7 +74,7 @@ impl Line {
         // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
         //
         self.len += TAB_SIZE * (content.len() / TAB_SIZE + 1);
-        self.contents.push(content.to_ascii_uppercase());
+        self.elements.push(content.to_ascii_uppercase());
     }
 
     /// AS句を追加する
@@ -119,13 +114,13 @@ impl Line {
         self.len += line.len();
 
         for content in (&line.contents()).into_iter() {
-            self.contents.push(content.to_string());
+            self.elements.push(content.to_string());
         }
     }
 
     /// contentsを"\t"でjoinして返す
     pub fn to_string(&self) -> String {
-        self.contents.join("\t")
+        self.elements.join("\t")
     }
 }
 
@@ -139,7 +134,7 @@ pub enum Content {
 pub struct SeparatedLines {
     depth: usize,                 // インデントの深さ
     separetor: String,            // セパレータ(e.g., ',', AND)
-    lines: Vec<Content>,          // 各行の情報
+    contents: Vec<Content>,       // 各行の情報
     max_len_to_as: Option<usize>, // ASまでの最長の長さ
     max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
 }
@@ -147,22 +142,23 @@ pub struct SeparatedLines {
 impl SeparatedLines {
     pub fn new(depth: usize, sep: &str) -> SeparatedLines {
         SeparatedLines {
-            depth: depth,
+            depth,
             separetor: sep.to_string(),
-            lines: vec![] as Vec<Content>,
+            contents: vec![] as Vec<Content>,
             max_len_to_as: None,
             max_len_to_op: None,
         }
     }
 
-    fn lines(&self) -> &Vec<Content> {
-        &self.lines
+    fn contents(&self) -> &Vec<Content> {
+        &self.contents
     }
 
     /// Contentを追加
-    pub fn add_line(&mut self, content: Content) {
+    pub fn add_content(&mut self, content: Content) {
         match content {
             Content::Line(line) => {
+                // len_to_asの更新
                 if let Some(len) = line.len_to_as() {
                     self.max_len_to_as = match self.max_len_to_as {
                         Some(maxlen) => Some(std::cmp::max(len, maxlen)),
@@ -170,16 +166,17 @@ impl SeparatedLines {
                     };
                 };
 
+                // len_to_opの更新
                 if let Some(len) = line.len_to_op() {
                     self.max_len_to_op = match self.max_len_to_op {
                         Some(maxlen) => Some(std::cmp::max(len, maxlen)),
                         None => Some(len),
                     };
                 };
-                self.lines.push(Content::Line(line));
+                self.contents.push(Content::Line(line));
             }
             Content::SeparatedLines(ls) => {
-                self.lines.push(Content::SeparatedLines(ls));
+                self.contents.push(Content::SeparatedLines(ls));
             }
         }
     }
@@ -187,18 +184,27 @@ impl SeparatedLines {
     /// AS句で揃えたものを返す
     pub fn render(&mut self) -> String {
         let mut result = String::new();
-        let mut is_first = true;
-        for content in self.lines.clone() {
+
+        let mut is_first_line = true;
+
+        // 再帰的に再構成した木を見る
+        for content in self.contents.clone() {
             match content {
                 Content::Line(line) => {
                     //ネスト分だけ\tを挿入
-                    for i in 0..self.depth {
+                    for current_depth in 0..self.depth {
                         // 1つ上のネストにsepを挿入
-                        if i == self.depth - 1 {
-                            if is_first {
-                                is_first = false;
+                        // ex)
+                        //     depth = 2
+                        //     sep = ","
+                        //     の場合
+                        //
+                        //     "\t,\thoge"
+
+                        if current_depth == self.depth - 1 {
+                            if is_first_line {
+                                is_first_line = false;
                             } else {
-                                // 2行目以降は sep から始まる
                                 result.push_str(self.separetor.as_ref());
                             }
                         }
@@ -208,7 +214,8 @@ impl SeparatedLines {
                     let mut current_len = 0;
 
                     for i in 0..line.contents().len() {
-                        let content = line.contents.get(i).unwrap();
+                        let element = line.elements.get(i).unwrap();
+
                         // as, opなどまでの最大長とその行での長さを引数にとる
                         // 現在見ているcontentがas, opであれば、必要な数\tを挿入する
                         let mut insert_tab =
@@ -223,27 +230,37 @@ impl SeparatedLines {
                                 };
                             };
 
+                        // ASの位置揃え
                         insert_tab(self.max_len_to_as, line.len_to_as());
+                        // OPの位置揃え
                         insert_tab(self.max_len_to_op, line.len_to_op());
 
-                        result.push_str(content);
+                        result.push_str(element);
 
+                        //最後のelement以外は"\t"を挿入
                         if i != line.contents().len() - 1 {
                             result.push('\t');
                         }
 
-                        current_len += TAB_SIZE * (content.len() / TAB_SIZE + 1);
+                        // element.len()より大きく、かつTAB_SIZEの倍数のうち最小のものを足す
+                        current_len += TAB_SIZE * (element.len() / TAB_SIZE + 1);
                     }
 
                     result.push_str("\n");
                 }
                 Content::SeparatedLines(mut sl) => {
+                    // 再帰的にrender()を呼び、結果をresultに格納
                     result.push_str(&sl.render());
                 }
             }
         }
         result
     }
+}
+
+/// インデントの深さや位置をそろえるための情報を保持する構造体
+struct FormatterState {
+    pub depth: usize,
 }
 
 pub struct Formatter {
@@ -315,7 +332,7 @@ impl Formatter {
             let stmt_node = cursor.node();
 
             // 現状はselect_statementのみ
-            result.add_line(self.format_select_stmt(stmt_node, src));
+            result.add_content(self.format_select_stmt(stmt_node, src));
 
             //select_statement以外も追加した場合この部分は削除
             // self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
@@ -341,7 +358,7 @@ impl Formatter {
         if cursor.goto_first_child() {
             let select_clause_node = cursor.node();
 
-            result.add_line(self.format_select_clause(select_clause_node, src));
+            result.add_content(self.format_select_clause(select_clause_node, src));
         }
         // else {
         //     return ();
@@ -364,7 +381,7 @@ impl Formatter {
                         // 最初は必ずFROM
                         let mut line = Line::new();
                         line.add_content("FROM");
-                        result.add_line(Content::Line(line));
+                        result.add_content(Content::Line(line));
 
                         self.nest();
                         let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
@@ -375,7 +392,7 @@ impl Formatter {
                         if cursor.goto_next_sibling() {
                             let expr_node = cursor.node();
 
-                            separated_lines.add_line(self.format_aliasable_expr(expr_node, src));
+                            separated_lines.add_content(self.format_aliasable_expr(expr_node, src));
                         }
 
                         // while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
@@ -388,12 +405,12 @@ impl Formatter {
                                 }
                                 _ => {
                                     separated_lines
-                                        .add_line(self.format_aliasable_expr(child_node, src));
+                                        .add_content(self.format_aliasable_expr(child_node, src));
                                 }
                             };
                         }
 
-                        result.add_line(Content::SeparatedLines(separated_lines));
+                        result.add_content(Content::SeparatedLines(separated_lines));
                         // buf.push_str(separated_lines.render().as_ref());
 
                         cursor.goto_parent();
@@ -409,7 +426,7 @@ impl Formatter {
                         self.nest();
                         let mut separated_lines = SeparatedLines::new(self.state.depth, "AND");
 
-                        result.add_line(Content::Line(line));
+                        result.add_content(Content::Line(line));
 
                         // self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
                         cursor.goto_next_sibling();
@@ -417,11 +434,11 @@ impl Formatter {
                         //expr
                         let expr_node = cursor.node();
                         let expr = self.format_expr(expr_node, src);
-                        separated_lines.add_line(expr);
+                        separated_lines.add_content(expr);
                         // buf.push_str(bool_expr.as_str());
 
                         eprintln!("{:#?}", separated_lines);
-                        result.add_line(Content::SeparatedLines(separated_lines));
+                        result.add_content(Content::SeparatedLines(separated_lines));
                         self.unnest();
                         cursor.goto_parent();
                     }
@@ -458,9 +475,7 @@ impl Formatter {
 
             let mut line = Line::new();
             line.add_content("SELECT");
-            result.add_line(Content::Line(line));
-            // self.push_indent(buf);
-            // buf.push_str("SELECT\n");
+            result.add_content(Content::Line(line));
 
             // if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
             if cursor.goto_next_sibling() {
@@ -478,7 +493,7 @@ impl Formatter {
                 let mut sepapated_lines = SeparatedLines::new(self.state.depth, ",");
 
                 let content = self.format_aliasable_expr(expr_node, src);
-                sepapated_lines.add_line(content);
+                sepapated_lines.add_content(content);
 
                 self.unnest();
 
@@ -492,15 +507,12 @@ impl Formatter {
                         }
                         _ => {
                             let content = self.format_aliasable_expr(child_node, src);
-                            sepapated_lines.add_line(content);
+                            sepapated_lines.add_content(content);
                         }
                     }
                 }
 
-                result.add_line(Content::SeparatedLines(sepapated_lines));
-
-                // let string = sepapated_lines.render();
-                // buf.push_str(string.as_str());
+                result.add_content(Content::SeparatedLines(sepapated_lines));
             }
         }
 
@@ -563,7 +575,6 @@ impl Formatter {
 
     // 式
     fn format_expr(&mut self, node: Node, src: &str) -> Content {
-        // expressionは1行と仮定する(boolean_exprssionなどは2行以上になったりするので要修正)
         let res: Content;
 
         match node.kind() {
@@ -665,7 +676,7 @@ impl Formatter {
         // 一番左下の子
         let left_expr_node = cursor.node();
         let line = self.format_expr(left_expr_node, src);
-        sep_lines.add_line(line);
+        sep_lines.add_content(line);
 
         for _ in 0..boolean_nest {
             let mut line = Line::new();
@@ -686,14 +697,16 @@ impl Formatter {
             let mut line = Line::new();
             self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
             let right_expr_node = cursor.node();
-            let mut res = self.format_expr(right_expr_node, src);
+            let res = self.format_expr(right_expr_node, src);
             match res {
                 Content::Line(ln) => {
                     line.append(ln);
                 }
-                Content::SeparatedLines(sl) => {}
+                Content::SeparatedLines(sl) => {
+                    // 右辺が複数行の場合は未対応
+                }
             }
-            sep_lines.add_line(Content::Line(line));
+            sep_lines.add_content(Content::Line(line));
 
             cursor.goto_parent();
         }
