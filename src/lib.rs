@@ -150,10 +150,6 @@ impl SeparatedLines {
         }
     }
 
-    fn contents(&self) -> &Vec<Content> {
-        &self.contents
-    }
-
     /// Contentを追加
     pub fn add_content(&mut self, content: Content) {
         match content {
@@ -545,7 +541,9 @@ impl Formatter {
                 Content::Line(ln) => {
                     line.append(ln);
                 }
-                Content::SeparatedLines(sl) => {}
+                Content::SeparatedLines(_) => {
+                    //未対応
+                }
             }
 
             // ("AS"? identifier)?
@@ -566,7 +564,9 @@ impl Formatter {
             let res = self.format_expr(node, src);
             match res {
                 Content::Line(ln) => line = ln,
-                Content::SeparatedLines(sl) => {}
+                Content::SeparatedLines(_) => {
+                    //未対応
+                }
             }
         }
 
@@ -614,7 +614,9 @@ impl Formatter {
                     Content::Line(ln) => {
                         line.append(ln);
                     }
-                    Content::SeparatedLines(sl) => {}
+                    Content::SeparatedLines(_) => {
+                        //右辺が複数行の場合は未対応
+                    }
                 }
 
                 // 演算子
@@ -632,7 +634,9 @@ impl Formatter {
                     Content::Line(ln) => {
                         line.append(ln);
                     }
-                    Content::SeparatedLines(sl) => {}
+                    Content::SeparatedLines(_) => {
+                        //右辺が複数行の場合は未対応
+                    }
                 }
                 res = Content::Line(line);
             }
@@ -702,7 +706,7 @@ impl Formatter {
                 Content::Line(ln) => {
                     line.append(ln);
                 }
-                Content::SeparatedLines(sl) => {
+                Content::SeparatedLines(_) => {
                     // 右辺が複数行の場合は未対応
                 }
             }
