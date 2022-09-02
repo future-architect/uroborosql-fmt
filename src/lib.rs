@@ -186,25 +186,29 @@ impl SeparatedLines {
 
     /// AS句で揃えたものを返す
     pub fn render(&mut self) -> String {
-        let mut buf = String::new();
+        let mut result = String::new();
+        let mut is_first = true;
         for content in self.lines.clone() {
             match content {
                 Content::Line(line) => {
-                    let mut is_first = true;
                     //ネスト分だけ\tを挿入
-                    for _ in 0..self.depth {
-                        buf.push_str("\t");
-                    }
-
-                    if is_first {
-                        is_first = false;
-                    } else {
-                        // 2行目以降は sep から始まる
-                        buf.push_str(self.separetor.as_ref());
+                    for i in 0..self.depth {
+                        // 1つ上のネストにsepを挿入
+                        if i == self.depth - 1 {
+                            if is_first {
+                                is_first = false;
+                            } else {
+                                // 2行目以降は sep から始まる
+                                result.push_str(self.separetor.as_ref());
+                            }
+                        }
+                        result.push_str("\t");
                     }
 
                     let mut current_len = 0;
-                    for content in line.contents().into_iter() {
+
+                    for i in 0..line.contents().len() {
+                        let content = line.contents.get(i).unwrap();
                         // as, opなどまでの最大長とその行での長さを引数にとる
                         // 現在見ているcontentがas, opであれば、必要な数\tを挿入する
                         let mut insert_tab =
@@ -213,7 +217,7 @@ impl SeparatedLines {
                                     if current_len == len_to {
                                         let num_tab = (max_len_to / TAB_SIZE) - (len_to / TAB_SIZE);
                                         for _ in 0..num_tab {
-                                            buf.push_str("\t");
+                                            result.push_str("\t");
                                         }
                                     };
                                 };
@@ -222,20 +226,23 @@ impl SeparatedLines {
                         insert_tab(self.max_len_to_as, line.len_to_as());
                         insert_tab(self.max_len_to_op, line.len_to_op());
 
-                        buf.push_str("\t");
-                        buf.push_str(content);
+                        result.push_str(content);
+
+                        if i != line.contents().len() - 1 {
+                            result.push('\t');
+                        }
 
                         current_len += TAB_SIZE * (content.len() / TAB_SIZE + 1);
                     }
 
-                    buf.push_str("\n");
+                    result.push_str("\n");
                 }
                 Content::SeparatedLines(mut sl) => {
-                    buf.push_str(&sl.render());
+                    result.push_str(&sl.render());
                 }
             }
         }
-        buf
+        result
     }
 }
 
@@ -356,10 +363,10 @@ impl Formatter {
                     if cursor.goto_first_child() {
                         // 最初は必ずFROM
                         let mut line = Line::new();
-                        line.add_content("\t");
-                        line.add_content("FROM\n");
+                        line.add_content("FROM");
                         result.add_line(Content::Line(line));
 
+                        self.nest();
                         let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
 
                         // commaSep
@@ -368,9 +375,7 @@ impl Formatter {
                         if cursor.goto_next_sibling() {
                             let expr_node = cursor.node();
 
-                            self.nest();
                             separated_lines.add_line(self.format_aliasable_expr(expr_node, src));
-                            self.unnest();
                         }
 
                         // while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
@@ -392,14 +397,18 @@ impl Formatter {
                         // buf.push_str(separated_lines.render().as_ref());
 
                         cursor.goto_parent();
+                        self.unnest();
                     }
                 }
                 // where_clause: $ => seq(kw("WHERE"), $._expression),
                 "where_clause" => {
                     if cursor.goto_first_child() {
                         let mut line = Line::new();
-                        line.add_content("\t");
-                        line.add_content("WHERE\n");
+                        line.add_content("WHERE");
+
+                        self.nest();
+                        let mut separated_lines = SeparatedLines::new(self.state.depth, "AND");
+
                         result.add_line(Content::Line(line));
 
                         // self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
@@ -408,9 +417,12 @@ impl Formatter {
                         //expr
                         let expr_node = cursor.node();
                         let expr = self.format_expr(expr_node, src);
-                        result.add_line(expr);
+                        separated_lines.add_line(expr);
                         // buf.push_str(bool_expr.as_str());
 
+                        eprintln!("{:#?}", separated_lines);
+                        result.add_line(Content::SeparatedLines(separated_lines));
+                        self.unnest();
                         cursor.goto_parent();
                     }
                 }
@@ -445,8 +457,7 @@ impl Formatter {
             // select_clauseの最初の子供は必ず"SELECT"であるはず
 
             let mut line = Line::new();
-            line.add_content("\t");
-            line.add_content("SELECT\n");
+            line.add_content("SELECT");
             result.add_line(Content::Line(line));
             // self.push_indent(buf);
             // buf.push_str("SELECT\n");
@@ -463,9 +474,8 @@ impl Formatter {
                 // 最初のノードは_aliasable_expressionのはず
                 let expr_node = cursor.node();
 
-                let mut sepapated_lines = SeparatedLines::new(self.state.depth, ",");
-
                 self.nest();
+                let mut sepapated_lines = SeparatedLines::new(self.state.depth, ",");
 
                 let content = self.format_aliasable_expr(expr_node, src);
                 sepapated_lines.add_line(content);
@@ -554,7 +564,7 @@ impl Formatter {
     // 式
     fn format_expr(&mut self, node: Node, src: &str) -> Content {
         // expressionは1行と仮定する(boolean_exprssionなどは2行以上になったりするので要修正)
-        let mut res: Content;
+        let res: Content;
 
         match node.kind() {
             "dotted_name" => {
