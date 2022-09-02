@@ -61,7 +61,7 @@ impl Line {
     }
 
     /// 行の要素を足す(演算子はadd_operator()を使う)
-    pub fn add_content(&mut self, content: &str) {
+    pub fn add_element(&mut self, element: &str) {
         // TAB_SIZEを1単位として長さを記録する
         //
         // contentを文字列にするとき、必ずその前に一つ'\t'が入る
@@ -73,14 +73,14 @@ impl Line {
         // -- 例外 --
         // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
         //
-        self.len += TAB_SIZE * (content.len() / TAB_SIZE + 1);
-        self.elements.push(content.to_ascii_uppercase());
+        self.len += TAB_SIZE * (element.len() / TAB_SIZE + 1);
+        self.elements.push(element.to_ascii_uppercase());
     }
 
     /// AS句を追加する
     pub fn add_as(&mut self, as_str: &str) {
         self.len_to_as = Some(self.len);
-        self.add_content(as_str);
+        self.add_element(as_str);
     }
 
     // 引数の文字列が比較演算子かどうかを判定する
@@ -97,7 +97,7 @@ impl Line {
         if Self::is_comp_op(op_str) {
             self.len_to_op = Some(self.len);
         }
-        self.add_content(op_str);
+        self.add_element(op_str);
     }
 
     // lineの結合
@@ -148,6 +148,10 @@ impl SeparatedLines {
             max_len_to_as: None,
             max_len_to_op: None,
         }
+    }
+
+    pub fn set_separetor(&mut self, sep: &str) {
+        self.separetor = sep.to_string();
     }
 
     /// Contentを追加
@@ -246,7 +250,29 @@ impl SeparatedLines {
                 }
                 Content::SeparatedLines(mut sl) => {
                     // 再帰的にrender()を呼び、結果をresultに格納
-                    result.push_str(&sl.render());
+                    let mut sl_res = sl.render();
+
+                    if is_first_line {
+                        is_first_line = false;
+                    } else {
+                        // sl.depth() - 1の位置にsepを挿入
+                        //
+                        // ex) sepがORの場合
+                        //
+                        //     t.n     =   5
+                        // AND test    =   1
+                        //
+                        // が返ってきたら
+                        //
+                        // OR  t.n     =   5
+                        // AND test    =   1
+
+                        if sl.depth != 0 {
+                            sl_res.insert_str(sl.depth - 1, &self.separetor);
+                        }
+                    }
+
+                    result.push_str(&sl_res);
                 }
             }
         }
@@ -300,7 +326,7 @@ impl Formatter {
         //コメントノードであればbufに追記していく
         while cursor.node().kind() == "comment" {
             let comment_node = cursor.node();
-            line.add_content(comment_node.utf8_text(src.as_bytes()).unwrap());
+            line.add_element(comment_node.utf8_text(src.as_bytes()).unwrap());
 
             if !cursor.goto_next_sibling() {
                 return false;
@@ -376,7 +402,7 @@ impl Formatter {
                     if cursor.goto_first_child() {
                         // 最初は必ずFROM
                         let mut line = Line::new();
-                        line.add_content("FROM");
+                        line.add_element("FROM");
                         result.add_content(Content::Line(line));
 
                         self.nest();
@@ -417,7 +443,7 @@ impl Formatter {
                 "where_clause" => {
                     if cursor.goto_first_child() {
                         let mut line = Line::new();
-                        line.add_content("WHERE");
+                        line.add_element("WHERE");
 
                         self.nest();
                         let mut separated_lines = SeparatedLines::new(self.state.depth, "AND");
@@ -470,7 +496,7 @@ impl Formatter {
             // select_clauseの最初の子供は必ず"SELECT"であるはず
 
             let mut line = Line::new();
-            line.add_content("SELECT");
+            line.add_element("SELECT");
             result.add_content(Content::Line(line));
 
             // if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
@@ -557,7 +583,7 @@ impl Formatter {
 
                 // identifier
                 if cursor.node().kind() == "identifier" {
-                    line.add_content(cursor.node().utf8_text(src.as_bytes()).unwrap());
+                    line.add_element(cursor.node().utf8_text(src.as_bytes()).unwrap());
                 }
             }
         } else {
@@ -597,7 +623,7 @@ impl Formatter {
                         _ => result.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
                     };
                 }
-                line.add_content(result.as_str());
+                line.add_element(result.as_str());
 
                 res = Content::Line(line);
             }
@@ -646,13 +672,13 @@ impl Formatter {
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
                 let mut line = Line::new();
-                line.add_content(node.utf8_text(src.as_bytes()).unwrap());
+                line.add_element(node.utf8_text(src.as_bytes()).unwrap());
                 res = Content::Line(line);
             }
             _ => {
                 let mut line = Line::new();
                 eprintln!("format_expr(): unknown node ({}).", node.kind());
-                line.add_content(self.format_straightforward(node, src).as_ref());
+                line.add_element(self.format_straightforward(node, src).as_ref());
                 res = Content::Line(line);
             }
         }
@@ -660,61 +686,32 @@ impl Formatter {
         res
     }
 
-    // bool式
+    // boolean_expression: $ =>
+    // choice(
+    //   prec.left(PREC.unary, seq(kw("NOT"), $._expression)),
+    //   prec.left(PREC.and, seq($._expression, kw("AND"), $._expression)),
+    //   prec.left(PREC.or, seq($._expression, kw("OR"), $._expression)),
+    // ),
     fn format_bool_expr(&mut self, node: Node, src: &str) -> Content {
-        // 今はANDしか認めない
-        let mut sep_lines = SeparatedLines::new(self.state.depth, "AND");
+        let mut sep_lines = SeparatedLines::new(self.state.depth, "");
 
         let mut cursor = node.walk();
 
-        // boolean_expressionは繰り返しではなく、ネストで表現されている
-        // そのため、探索のためにネストの深さを覚えておく
-        let mut boolean_nest = 0;
+        cursor.goto_first_child();
 
-        // boolean_expressionの最左に移動(NOT, BETWEEN対応のことは考えていない)
-        while cursor.node().kind() == "boolean_expression" {
-            boolean_nest += 1;
-            cursor.goto_first_child();
+        if cursor.node().kind() == "NOT" {
+            // 未対応
+        } else {
+            sep_lines.add_content(self.format_expr(cursor.node(), src));
+
+            cursor.goto_next_sibling();
+
+            sep_lines.set_separetor(cursor.node().kind());
+
+            cursor.goto_next_sibling();
+
+            sep_lines.add_content(self.format_expr(cursor.node(), src));
         }
-
-        // 一番左下の子
-        let left_expr_node = cursor.node();
-        let line = self.format_expr(left_expr_node, src);
-        sep_lines.add_content(line);
-
-        for _ in 0..boolean_nest {
-            let mut line = Line::new();
-            self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
-            /*
-            sep_linesに追加して、その後to_string()すると
-
-            WHERE
-                    hoge
-            AND     --hoge
-            AND     huga
-
-            みたいになってしまう
-             */
-            // sep_lines.add_line(line);
-
-            // 右の子
-            let mut line = Line::new();
-            self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
-            let right_expr_node = cursor.node();
-            let res = self.format_expr(right_expr_node, src);
-            match res {
-                Content::Line(ln) => {
-                    line.append(ln);
-                }
-                Content::SeparatedLines(_) => {
-                    // 右辺が複数行の場合は未対応
-                }
-            }
-            sep_lines.add_content(Content::Line(line));
-
-            cursor.goto_parent();
-        }
-
         Content::SeparatedLines(sep_lines)
     }
 
