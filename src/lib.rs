@@ -1,4 +1,4 @@
-use tree_sitter::{Node, Tree, TreeCursor};
+use tree_sitter::{Node, TreeCursor};
 
 const TAB_SIZE: usize = 4;
 
@@ -18,13 +18,12 @@ pub fn format_sql(src: &str) -> String {
 
     // フォーマッタオブジェクトを生成
     let mut formatter = Formatter::new();
-    // 結果を格納するバッファ
-    let mut result = String::new();
+
     // formatを行い、バッファに結果を格納
-    let res = formatter.format_sql(root_node, src.as_ref());
+    let mut res = formatter.format_sql(root_node, src.as_ref());
     println!("{:#?}", res);
 
-    result
+    res.render()
 }
 
 /// インデントの深さや位置をそろえるための情報を保持する構造体
@@ -32,7 +31,7 @@ struct FormatterState {
     pub depth: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Line {
     contents: Vec<String>, // lifetimeの管理が面倒なのでStringに
     len: usize,
@@ -130,13 +129,13 @@ impl Line {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Content {
     SeparatedLines(SeparatedLines),
     Line(Line),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SeparatedLines {
     depth: usize,                 // インデントの深さ
     separetor: String,            // セパレータ(e.g., ',', AND)
@@ -156,7 +155,11 @@ impl SeparatedLines {
         }
     }
 
-    /// Line構造体を追加
+    fn lines(&self) -> &Vec<Content> {
+        &self.lines
+    }
+
+    /// Contentを追加
     pub fn add_line(&mut self, content: Content) {
         match content {
             Content::Line(line) => {
@@ -173,31 +176,31 @@ impl SeparatedLines {
                         None => Some(len),
                     };
                 };
-
                 self.lines.push(Content::Line(line));
             }
-            Content::SeparatedLines(sl) => {}
+            Content::SeparatedLines(ls) => {
+                self.lines.push(Content::SeparatedLines(ls));
+            }
         }
     }
 
     /// AS句で揃えたものを返す
-    pub fn render(&self) -> String {
-        let mut result = String::new();
-
-        let mut is_first = true;
-        for content in (&self.lines).into_iter() {
+    pub fn render(&mut self) -> String {
+        let mut buf = String::new();
+        for content in self.lines.clone() {
             match content {
                 Content::Line(line) => {
+                    let mut is_first = true;
                     //ネスト分だけ\tを挿入
                     for _ in 0..self.depth {
-                        result.push_str("\t");
+                        buf.push_str("\t");
                     }
 
                     if is_first {
                         is_first = false;
                     } else {
                         // 2行目以降は sep から始まる
-                        result.push_str(self.separetor.as_ref());
+                        buf.push_str(self.separetor.as_ref());
                     }
 
                     let mut current_len = 0;
@@ -210,7 +213,7 @@ impl SeparatedLines {
                                     if current_len == len_to {
                                         let num_tab = (max_len_to / TAB_SIZE) - (len_to / TAB_SIZE);
                                         for _ in 0..num_tab {
-                                            result.push_str("\t");
+                                            buf.push_str("\t");
                                         }
                                     };
                                 };
@@ -219,19 +222,20 @@ impl SeparatedLines {
                         insert_tab(self.max_len_to_as, line.len_to_as());
                         insert_tab(self.max_len_to_op, line.len_to_op());
 
-                        result.push_str("\t");
-                        result.push_str(content);
+                        buf.push_str("\t");
+                        buf.push_str(content);
 
                         current_len += TAB_SIZE * (content.len() / TAB_SIZE + 1);
                     }
 
-                    result.push_str("\n");
+                    buf.push_str("\n");
                 }
-                Content::SeparatedLines(sl) => {}
+                Content::SeparatedLines(mut sl) => {
+                    buf.push_str(&sl.render());
+                }
             }
         }
-
-        result
+        buf
     }
 }
 
@@ -251,13 +255,6 @@ impl Formatter {
         self.format_source(node, src)
     }
 
-    // インデントをbufにプッシュする
-    // fn push_indent(&mut self, buf: &mut String) {
-    //     for _ in 0..self.state.depth {
-    //         buf.push_str("\t");
-    //     }
-    // }
-
     // ネストを1つ深くする
     fn nest(&mut self) {
         self.state.depth += 1;
@@ -267,32 +264,6 @@ impl Formatter {
     fn unnest(&mut self) {
         self.state.depth -= 1;
     }
-
-    // goto_next_sibiling()をコメントの処理を行うように拡張したもの
-    // fn goto_not_comment_next_sibiling(
-    //     &mut self,
-    //     // buf: &mut String,
-    //     cursor: &mut TreeCursor,
-    //     src: &str,
-    // ) -> bool {
-    //     //兄弟ノードがない場合
-    //     if !cursor.goto_next_sibling() {
-    //         return false;
-    //     }
-
-    //     //コメントノードであればbufに追記していく
-    //     while cursor.node().kind() == "comment" {
-    //         let comment_node = cursor.node();
-    //         buf.push_str(comment_node.utf8_text(src.as_bytes()).unwrap());
-    //         buf.push_str("\n");
-
-    //         if !cursor.goto_next_sibling() {
-    //             return false;
-    //         }
-    //     }
-
-    //     return true;
-    // }
 
     // goto_next_sibiling()をコメントの処理を行うように拡張したもの
     fn goto_not_comment_next_sibiling_for_line(
@@ -475,7 +446,7 @@ impl Formatter {
 
             let mut line = Line::new();
             line.add_content("\t");
-            line.add_content("WHERE\n");
+            line.add_content("SELECT\n");
             result.add_line(Content::Line(line));
             // self.push_indent(buf);
             // buf.push_str("SELECT\n");
@@ -515,6 +486,8 @@ impl Formatter {
                         }
                     }
                 }
+
+                result.add_line(Content::SeparatedLines(sepapated_lines));
 
                 // let string = sepapated_lines.render();
                 // buf.push_str(string.as_str());
