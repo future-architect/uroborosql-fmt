@@ -132,8 +132,9 @@ pub enum Content {
 
 #[derive(Debug, Clone)]
 pub struct SeparatedLines {
-    depth: usize,                 // インデントの深さ
-    separetor: String,            // セパレータ(e.g., ',', AND)
+    depth: usize,              // インデントの深さ
+    default_separator: String, // セパレータ(e.g., ',', AND)
+    separator: Vec<String>,
     contents: Vec<Content>,       // 各行の情報
     max_len_to_as: Option<usize>, // ASまでの最長の長さ
     max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
@@ -143,15 +144,58 @@ impl SeparatedLines {
     pub fn new(depth: usize, sep: &str) -> SeparatedLines {
         SeparatedLines {
             depth,
-            separetor: sep.to_string(),
+            default_separator: sep.to_string(),
+            separator: vec![] as Vec<String>,
             contents: vec![] as Vec<Content>,
             max_len_to_as: None,
             max_len_to_op: None,
         }
     }
 
-    pub fn set_separetor(&mut self, sep: &str) {
-        self.separetor = sep.to_string();
+    pub fn max_len_to_as(&self) -> Option<usize> {
+        self.max_len_to_as
+    }
+
+    pub fn max_len_to_op(&self) -> Option<usize> {
+        self.max_len_to_op
+    }
+
+    pub fn set_separator(&mut self, sep: &str) {
+        // let old_sep = &self.default_separator;
+        // for i in 0..self.separator.len() {
+        //     if self.separator.get(i).unwrap() == old_sep {
+        //         self.separator[i] = sep.to_string();
+        //     }
+        // }
+
+        self.default_separator = sep.to_string();
+    }
+
+    pub fn add_content_with_sep(&mut self, content: Content, separator: String) {
+        match content {
+            Content::Line(line) => {
+                // len_to_asの更新
+                if let Some(len) = line.len_to_as() {
+                    self.max_len_to_as = match self.max_len_to_as {
+                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                        None => Some(len),
+                    };
+                };
+
+                // len_to_opの更新
+                if let Some(len) = line.len_to_op() {
+                    self.max_len_to_op = match self.max_len_to_op {
+                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                        None => Some(len),
+                    };
+                };
+                self.contents.push(Content::Line(line));
+            }
+            Content::SeparatedLines(ls) => {
+                self.contents.push(Content::SeparatedLines(ls));
+            }
+        }
+        self.separator.push(separator);
     }
 
     /// Contentを追加
@@ -179,6 +223,35 @@ impl SeparatedLines {
                 self.contents.push(Content::SeparatedLines(ls));
             }
         }
+        self.separator.push(self.default_separator.clone());
+    }
+
+    pub fn merge(&mut self, other: Content) {
+        match other {
+            Content::Line(_) => self.add_content(other),
+            Content::SeparatedLines(ls) => {
+                // len_to_asの更新
+                if let Some(len) = ls.max_len_to_as() {
+                    self.max_len_to_as = match self.max_len_to_as {
+                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                        None => Some(len),
+                    };
+                };
+
+                // len_to_opの更新
+                if let Some(len) = ls.max_len_to_op() {
+                    self.max_len_to_op = match self.max_len_to_op {
+                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                        None => Some(len),
+                    };
+                };
+
+                for i in 0..ls.contents.len() {
+                    let content = ls.contents[i].clone();
+                    self.add_content_with_sep(content, ls.separator[i].clone());
+                }
+            }
+        }
     }
 
     /// AS句で揃えたものを返す
@@ -188,7 +261,10 @@ impl SeparatedLines {
         let mut is_first_line = true;
 
         // 再帰的に再構成した木を見る
-        for content in self.contents.clone() {
+
+        // for content in self.contents.clone() {
+        for i in 0..self.contents.len() {
+            let content = self.contents.get(i).unwrap().clone();
             match content {
                 Content::Line(line) => {
                     //ネスト分だけ\tを挿入
@@ -205,7 +281,7 @@ impl SeparatedLines {
                             if is_first_line {
                                 is_first_line = false;
                             } else {
-                                result.push_str(self.separetor.as_ref());
+                                result.push_str(self.separator.get(i).unwrap())
                             }
                         }
                         result.push_str("\t");
@@ -213,8 +289,8 @@ impl SeparatedLines {
 
                     let mut current_len = 0;
 
-                    for i in 0..line.contents().len() {
-                        let element = line.elements.get(i).unwrap();
+                    for j in 0..line.contents().len() {
+                        let element = line.elements.get(j).unwrap();
 
                         // as, opなどまでの最大長とその行での長さを引数にとる
                         // 現在見ているcontentがas, opであれば、必要な数\tを挿入する
@@ -238,7 +314,7 @@ impl SeparatedLines {
                         result.push_str(element);
 
                         //最後のelement以外は"\t"を挿入
-                        if i != line.contents().len() - 1 {
+                        if j != line.contents().len() - 1 {
                             result.push('\t');
                         }
 
@@ -268,7 +344,7 @@ impl SeparatedLines {
                         // AND test    =   1
 
                         if sl.depth != 0 {
-                            sl_res.insert_str(sl.depth - 1, &self.separetor);
+                            sl_res.insert_str(sl.depth - 1, self.separator.get(i).unwrap());
                         }
                     }
 
@@ -446,7 +522,7 @@ impl Formatter {
                         line.add_element("WHERE");
 
                         self.nest();
-                        let mut separated_lines = SeparatedLines::new(self.state.depth, "AND");
+                        let mut separated_lines = SeparatedLines::new(self.state.depth, "");
 
                         result.add_content(Content::Line(line));
 
@@ -686,13 +762,15 @@ impl Formatter {
         res
     }
 
-    // boolean_expression: $ =>
-    // choice(
-    //   prec.left(PREC.unary, seq(kw("NOT"), $._expression)),
-    //   prec.left(PREC.and, seq($._expression, kw("AND"), $._expression)),
-    //   prec.left(PREC.or, seq($._expression, kw("OR"), $._expression)),
-    // ),
     fn format_bool_expr(&mut self, node: Node, src: &str) -> Content {
+        /*
+        boolean_expression: $ =>
+            choice(
+            prec.left(PREC.unary, seq(kw("NOT"), $._expression)),
+            prec.left(PREC.and, seq($._expression, kw("AND"), $._expression)),
+            prec.left(PREC.or, seq($._expression, kw("OR"), $._expression)),
+        ),
+         */
         let mut sep_lines = SeparatedLines::new(self.state.depth, "");
 
         let mut cursor = node.walk();
@@ -702,15 +780,16 @@ impl Formatter {
         if cursor.node().kind() == "NOT" {
             // 未対応
         } else {
-            sep_lines.add_content(self.format_expr(cursor.node(), src));
+            sep_lines.merge(self.format_expr(cursor.node(), src));
+            println!("{:#?}", sep_lines);
 
             cursor.goto_next_sibling();
 
-            sep_lines.set_separetor(cursor.node().kind());
+            sep_lines.set_separator(cursor.node().kind());
 
             cursor.goto_next_sibling();
 
-            sep_lines.add_content(self.format_expr(cursor.node(), src));
+            sep_lines.merge(self.format_expr(cursor.node(), src));
         }
         Content::SeparatedLines(sep_lines)
     }
