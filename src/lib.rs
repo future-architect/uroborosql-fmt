@@ -627,57 +627,63 @@ impl Formatter {
                     )
                 )?
         */
-        let mut result = SeparatedLines::new(self.state.depth, "");
-
         let mut cursor = node.walk();
+
+        let mut clause = Clause::new("SELECT".to_string(), node.range());
 
         if cursor.goto_first_child() {
             // select_clauseの最初の子供は必ず"SELECT"であるはず
 
-            let mut line = Line::new();
-            line.add_element("SELECT");
-            result.add_content(Content::Line(line));
-
             // if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
-            if cursor.goto_next_sibling() {
+            cursor.goto_next_sibling();
+
+            let body = self.format_select_clause_body(node, src);
+            clause.set_body(body);
+
+            {
                 // ここで、cursorはselect_clause_bodyを指している
 
                 // 子供に移動
-                cursor.goto_first_child();
-
-                // select_clause_body -> _aliasable_expression ("," _aliasable_expression)*
-
-                // 最初のノードは_aliasable_expressionのはず
-                let expr_node = cursor.node();
-
-                self.nest();
-                let mut sepapated_lines = SeparatedLines::new(self.state.depth, ",");
-
-                let content = self.format_aliasable_expr(expr_node, src);
-                sepapated_lines.add_content(content);
-
-                self.unnest();
-
-                // (',' _aliasable_expression)*
-                // while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
-                while cursor.goto_next_sibling() {
-                    let child_node = cursor.node();
-                    match child_node.kind() {
-                        "," => {
-                            continue;
-                        }
-                        _ => {
-                            let content = self.format_aliasable_expr(child_node, src);
-                            sepapated_lines.add_content(content);
-                        }
-                    }
-                }
-
-                result.add_content(Content::SeparatedLines(sepapated_lines));
             }
         }
 
         Content::SeparatedLines(result)
+    }
+
+    fn format_select_clause_body(&mut self, node: Node, src: &str) -> SeparatedLines {
+        let mut cursor = node.walk();
+
+        cursor.goto_first_child();
+
+        // select_clause_body -> _aliasable_expression ("," _aliasable_expression)*
+
+        // 最初のノードは_aliasable_expressionのはず
+        let expr_node = cursor.node();
+
+        self.nest();
+        let mut sepapated_lines = SeparatedLines::new(self.state.depth, ",");
+
+        let content = self.format_aliasable_expr(expr_node, src);
+        sepapated_lines.add_content(content);
+
+        self.unnest();
+
+        // (',' _aliasable_expression)*
+        // while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
+        while cursor.goto_next_sibling() {
+            let child_node = cursor.node();
+            match child_node.kind() {
+                "," => {
+                    continue;
+                }
+                _ => {
+                    let content = self.format_aliasable_expr(child_node, src);
+                    sepapated_lines.add_content(content);
+                }
+            }
+        }
+
+        sepapated_lines;
     }
 
     // エイリアス可能な式
@@ -692,50 +698,42 @@ impl Formatter {
                 identifier
                 << 未対応!! "(" identifier ("," identifier)* ")" >>
         */
+        match node.kind() {
+            "alias" => {
+                let mut cursor = node.walk();
+                cursor.goto_first_child();
 
-        // aliasable_expressionは1行と仮定(要修正)
-        let mut line = Line::new();
+                // _expression
+                let lhs_expr = self.format_expr(cursor.node(), src);
 
-        if node.kind() == "alias" {
-            let mut cursor = node.walk();
-            cursor.goto_first_child();
+                let mut aligned = AlignedExpr::new(lhs_expr, lhs_expr.loc());
 
-            // _expression
-            let expr_line = self.format_expr(cursor.node(), src);
-            match expr_line {
-                Content::Line(ln) => {
-                    line.append(ln);
+                // ("AS"? identifier)?
+                if cursor.goto_next_sibling() && cursor.node().kind() == "AS" {
+                    // "AS"?
+
+                    //左辺に移動
+                    cursor.goto_next_sibling();
+
+                    // identifier
+                    if cursor.node().kind() == "identifier" {
+                        let rhs = cursor.node().utf8_text(src.as_bytes()).unwrap();
+                        aligned.add_rhs(Some("AS".to_string()), rhs)
+                    }
                 }
-                Content::SeparatedLines(_) => {
-                    //未対応
-                }
+                aligned
             }
+            _ => {
+                // _expression
 
-            // ("AS"? identifier)?
-            if self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src) {
-                // "AS"?
+                let mut cursor = node.walk();
+                let expr = self.format_expr(cursor.node(), src);
 
-                if cursor.node().kind() == "AS" {
-                    line.add_as("AS");
-                    self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
-                }
+                let mut aligned = AlignedExpr::new(expr, expr.loc());
 
-                // identifier
-                if cursor.node().kind() == "identifier" {
-                    line.add_element(cursor.node().utf8_text(src.as_bytes()).unwrap());
-                }
-            }
-        } else {
-            let res = self.format_expr(node, src);
-            match res {
-                Content::Line(ln) => line = ln,
-                Content::SeparatedLines(_) => {
-                    //未対応
-                }
+                aligned
             }
         }
-
-        Content::Line(line)
     }
 
     // 引数の文字列が比較演算子かどうかを判定する
@@ -826,19 +824,23 @@ impl Formatter {
                 // res = Content::Line(line);
             }
             "boolean_expression" => {
-                res = self.format_bool_expr(node, src);
+                todo!()
+                // res = self.format_bool_expr(node, src);
             }
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
-                let mut line = Line::new();
-                line.add_element(node.utf8_text(src.as_bytes()).unwrap());
-                res = Content::Line(line);
+                let mut primary = PrimaryExpr::new(
+                    node.utf8_text(src.as_bytes()).unwrap().to_string(),
+                    node.range(),
+                );
+                Box::new(primary)
             }
             _ => {
-                let mut line = Line::new();
-                eprintln!("format_expr(): unknown node ({}).", node.kind());
-                line.add_element(self.format_straightforward(node, src).as_ref());
-                res = Content::Line(line);
+                todo!()
+                // let mut line = Line::new();
+                // eprintln!("format_expr(): unknown node ({}).", node.kind());
+                // line.add_element(self.format_straightforward(node, src).as_ref());
+                // res = Content::Line(line);
             }
         }
     }
