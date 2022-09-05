@@ -1,4 +1,4 @@
-use tree_sitter::{Node, TreeCursor};
+use tree_sitter::{Node, Range, TreeCursor};
 
 const TAB_SIZE: usize = 4;
 
@@ -322,6 +322,102 @@ impl SeparatedLines {
             }
         }
         Ok(result)
+    }
+}
+
+// enum Expr {
+//     Aligned(Box<AlignedExpr>),
+//     Primary(Box<PrimaryExpr>),
+//     Boolean(Box<SeparatedLines>),
+// }
+
+pub trait Expr {
+    fn loc(&self) -> Range;
+}
+
+struct AlignedExpr<T: Expr> {
+    lhs: T,
+    rhs: Option<T>,
+    op: Option<String>,
+    loc: Range,
+    tail_comment: Option<String>,
+}
+
+impl<T: Expr> Expr for AlignedExpr<T> {
+    fn loc(&self) -> Range {
+        self.loc
+    }
+}
+
+impl<T: Expr> AlignedExpr<T> {
+    pub fn new(lhs: T, loc: Range) -> AlignedExpr<T> {
+        AlignedExpr {
+            lhs,
+            rhs: None,
+            op: None,
+            loc,
+            tail_comment: None,
+        }
+    }
+
+    pub fn add_rhs(&mut self, op: String, rhs: T) {
+        self.loc.end_point = rhs.loc().end_point;
+        self.op = Some(op);
+        self.rhs = Some(rhs);
+    }
+}
+
+struct PrimaryExpr {
+    elements: Vec<String>,
+    loc: Range,
+    len: usize,
+    // head_comment: Option<String>,
+}
+
+impl Expr for PrimaryExpr {
+    fn loc(&self) -> Range {
+        self.loc
+    }
+}
+
+impl PrimaryExpr {
+    pub fn new(element: String, loc: Range) -> PrimaryExpr {
+        let len = TAB_SIZE * (element.len() / TAB_SIZE + 1);
+        PrimaryExpr {
+            elements: vec![element],
+            loc,
+            len,
+        }
+    }
+
+    pub fn element(&self) -> &Vec<String> {
+        &self.elements
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// elementsにelementを追加する
+    pub fn add_element(&mut self, element: &str) {
+        // TAB_SIZEを1単位として長さを記録する
+        //
+        // contentを文字列にするとき、必ずその前に一つ'\t'が入る
+        // -> 各contentの長さは content + "\t"となる
+        //
+        // e.g., TAB_SIZE = 4のとき
+        // TAB1.NUM: 8文字 = TAB_SIZE * 2 -> tabを足すと長さTAB_SIZE * 2 + TAB_SIZE
+        // TAB1.N  : 5文字 = TAB_SIZE * 1 + 1 -> tabを足すと長さTAB_SIZE + TAB_SIZE
+        // -- 例外 --
+        // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
+        //
+        self.len += TAB_SIZE * (element.len() / TAB_SIZE + 1);
+        self.elements.push(element.to_ascii_uppercase());
+    }
+
+    // lineの結合
+    pub fn append(&mut self, primary: PrimaryExpr) {
+        self.elements.append(&mut primary.element().clone())
     }
 }
 
