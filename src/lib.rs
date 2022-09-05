@@ -21,7 +21,7 @@ pub fn format_sql(src: &str) -> String {
 
     // formatを行い、バッファに結果を格納
     let mut res = formatter.format_sql(root_node, src.as_ref());
-    println!("{:#?}", res);
+    eprintln!("{:#?}", res);
 
     res.render()
 }
@@ -795,8 +795,6 @@ impl Formatter {
             sep_lines.set_separator(sep);
             sep_lines.merge(left);
             sep_lines.merge(right);
-
-            println!("{:#?}", sep_lines);
         }
         Content::SeparatedLines(sep_lines)
     }
