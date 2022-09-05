@@ -240,8 +240,6 @@ impl SeparatedLines {
     pub fn render(&mut self) -> String {
         let mut result = String::new();
 
-        let mut is_first_line = true;
-
         // 再帰的に再構成した木を見る
 
         // for content in self.contents.clone() {
@@ -260,9 +258,7 @@ impl SeparatedLines {
                         //     "\t,\thoge"
 
                         if current_depth == self.depth - 1 {
-                            if is_first_line {
-                                is_first_line = false;
-                            } else {
+                            if i != 0 {
                                 result.push_str(self.separator.get(i).unwrap())
                             }
                         }
@@ -310,9 +306,7 @@ impl SeparatedLines {
                     // 再帰的にrender()を呼び、結果をresultに格納
                     let mut sl_res = sl.render();
 
-                    if is_first_line {
-                        is_first_line = false;
-                    } else {
+                    if i != 0 {
                         // sl.depth() - 1の位置にsepを挿入
                         //
                         // ex) sepがORの場合
