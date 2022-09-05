@@ -21,7 +21,7 @@ pub fn format_sql(src: &str) -> String {
 
     // formatを行い、バッファに結果を格納
     let mut res = formatter.format_sql(root_node, src.as_ref());
-    println!("{:#?}", res);
+    eprintln!("{:#?}", res);
 
     res.render()
 }
@@ -61,7 +61,7 @@ impl Line {
     }
 
     /// 行の要素を足す(演算子はadd_operator()を使う)
-    pub fn add_content(&mut self, content: &str) {
+    pub fn add_element(&mut self, element: &str) {
         // TAB_SIZEを1単位として長さを記録する
         //
         // contentを文字列にするとき、必ずその前に一つ'\t'が入る
@@ -73,14 +73,14 @@ impl Line {
         // -- 例外 --
         // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
         //
-        self.len += TAB_SIZE * (content.len() / TAB_SIZE + 1);
-        self.elements.push(content.to_ascii_uppercase());
+        self.len += TAB_SIZE * (element.len() / TAB_SIZE + 1);
+        self.elements.push(element.to_ascii_uppercase());
     }
 
     /// AS句を追加する
     pub fn add_as(&mut self, as_str: &str) {
         self.len_to_as = Some(self.len);
-        self.add_content(as_str);
+        self.add_element(as_str);
     }
 
     // 引数の文字列が比較演算子かどうかを判定する
@@ -97,7 +97,7 @@ impl Line {
         if Self::is_comp_op(op_str) {
             self.len_to_op = Some(self.len);
         }
-        self.add_content(op_str);
+        self.add_element(op_str);
     }
 
     // lineの結合
@@ -132,8 +132,9 @@ pub enum Content {
 
 #[derive(Debug, Clone)]
 pub struct SeparatedLines {
-    depth: usize,                 // インデントの深さ
-    separetor: String,            // セパレータ(e.g., ',', AND)
+    depth: usize,              // インデントの深さ
+    default_separator: String, // セパレータ(e.g., ',', AND)
+    separator: Vec<String>,
     contents: Vec<Content>,       // 各行の情報
     max_len_to_as: Option<usize>, // ASまでの最長の長さ
     max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
@@ -143,15 +144,27 @@ impl SeparatedLines {
     pub fn new(depth: usize, sep: &str) -> SeparatedLines {
         SeparatedLines {
             depth,
-            separetor: sep.to_string(),
+            default_separator: sep.to_string(),
+            separator: vec![] as Vec<String>,
             contents: vec![] as Vec<Content>,
             max_len_to_as: None,
             max_len_to_op: None,
         }
     }
 
-    /// Contentを追加
-    pub fn add_content(&mut self, content: Content) {
+    pub fn max_len_to_as(&self) -> Option<usize> {
+        self.max_len_to_as
+    }
+
+    pub fn max_len_to_op(&self) -> Option<usize> {
+        self.max_len_to_op
+    }
+
+    pub fn set_separator(&mut self, sep: &str) {
+        self.default_separator = sep.to_string();
+    }
+
+    pub fn add_content_with_sep(&mut self, content: Content, separator: String) {
         match content {
             Content::Line(line) => {
                 // len_to_asの更新
@@ -175,16 +188,63 @@ impl SeparatedLines {
                 self.contents.push(Content::SeparatedLines(ls));
             }
         }
+        self.separator.push(separator);
+    }
+
+    /// Contentを追加
+    pub fn add_content(&mut self, content: Content) {
+        self.add_content_with_sep(content, self.default_separator.clone());
+    }
+
+    pub fn merge(&mut self, other: Content) {
+        match other {
+            Content::Line(_) => self.add_content(other),
+            Content::SeparatedLines(ls) => {
+                // len_to_asの更新
+                if let Some(len) = ls.max_len_to_as() {
+                    self.max_len_to_as = match self.max_len_to_as {
+                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                        None => Some(len),
+                    };
+                };
+
+                // len_to_opの更新
+                if let Some(len) = ls.max_len_to_op() {
+                    self.max_len_to_op = match self.max_len_to_op {
+                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                        None => Some(len),
+                    };
+                };
+
+                // separatorをマージする
+                //
+                // ["AND", "AND"]
+                // ["OR", "OR", "OR"]
+                // default_separator = "DEF"
+                //
+                // => ["AND", "AND", "DEF", "OR", "OR"]
+
+                for i in 0..ls.contents.len() {
+                    let content = ls.contents[i].clone();
+                    if i == 0 {
+                        self.add_content_with_sep(content, self.default_separator.clone())
+                    } else {
+                        self.add_content_with_sep(content, ls.separator[i].clone());
+                    }
+                }
+            }
+        }
     }
 
     /// AS句で揃えたものを返す
     pub fn render(&mut self) -> String {
         let mut result = String::new();
 
-        let mut is_first_line = true;
-
         // 再帰的に再構成した木を見る
-        for content in self.contents.clone() {
+
+        // for content in self.contents.clone() {
+        for i in 0..self.contents.len() {
+            let content = self.contents.get(i).unwrap().clone();
             match content {
                 Content::Line(line) => {
                     //ネスト分だけ\tを挿入
@@ -198,10 +258,8 @@ impl SeparatedLines {
                         //     "\t,\thoge"
 
                         if current_depth == self.depth - 1 {
-                            if is_first_line {
-                                is_first_line = false;
-                            } else {
-                                result.push_str(self.separetor.as_ref());
+                            if i != 0 {
+                                result.push_str(self.separator.get(i).unwrap())
                             }
                         }
                         result.push_str("\t");
@@ -209,8 +267,8 @@ impl SeparatedLines {
 
                     let mut current_len = 0;
 
-                    for i in 0..line.contents().len() {
-                        let element = line.elements.get(i).unwrap();
+                    for j in 0..line.contents().len() {
+                        let element = line.elements.get(j).unwrap();
 
                         // as, opなどまでの最大長とその行での長さを引数にとる
                         // 現在見ているcontentがas, opであれば、必要な数\tを挿入する
@@ -234,7 +292,7 @@ impl SeparatedLines {
                         result.push_str(element);
 
                         //最後のelement以外は"\t"を挿入
-                        if i != line.contents().len() - 1 {
+                        if j != line.contents().len() - 1 {
                             result.push('\t');
                         }
 
@@ -246,7 +304,9 @@ impl SeparatedLines {
                 }
                 Content::SeparatedLines(mut sl) => {
                     // 再帰的にrender()を呼び、結果をresultに格納
-                    result.push_str(&sl.render());
+                    let sl_res = sl.render();
+
+                    result.push_str(&sl_res);
                 }
             }
         }
@@ -300,7 +360,7 @@ impl Formatter {
         //コメントノードであればbufに追記していく
         while cursor.node().kind() == "comment" {
             let comment_node = cursor.node();
-            line.add_content(comment_node.utf8_text(src.as_bytes()).unwrap());
+            line.add_element(comment_node.utf8_text(src.as_bytes()).unwrap());
 
             if !cursor.goto_next_sibling() {
                 return false;
@@ -376,7 +436,7 @@ impl Formatter {
                     if cursor.goto_first_child() {
                         // 最初は必ずFROM
                         let mut line = Line::new();
-                        line.add_content("FROM");
+                        line.add_element("FROM");
                         result.add_content(Content::Line(line));
 
                         self.nest();
@@ -417,10 +477,10 @@ impl Formatter {
                 "where_clause" => {
                     if cursor.goto_first_child() {
                         let mut line = Line::new();
-                        line.add_content("WHERE");
+                        line.add_element("WHERE");
 
                         self.nest();
-                        let mut separated_lines = SeparatedLines::new(self.state.depth, "AND");
+                        let mut separated_lines = SeparatedLines::new(self.state.depth, "");
 
                         result.add_content(Content::Line(line));
 
@@ -470,7 +530,7 @@ impl Formatter {
             // select_clauseの最初の子供は必ず"SELECT"であるはず
 
             let mut line = Line::new();
-            line.add_content("SELECT");
+            line.add_element("SELECT");
             result.add_content(Content::Line(line));
 
             // if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
@@ -557,7 +617,7 @@ impl Formatter {
 
                 // identifier
                 if cursor.node().kind() == "identifier" {
-                    line.add_content(cursor.node().utf8_text(src.as_bytes()).unwrap());
+                    line.add_element(cursor.node().utf8_text(src.as_bytes()).unwrap());
                 }
             }
         } else {
@@ -597,7 +657,7 @@ impl Formatter {
                         _ => result.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
                     };
                 }
-                line.add_content(result.as_str());
+                line.add_element(result.as_str());
 
                 res = Content::Line(line);
             }
@@ -646,13 +706,13 @@ impl Formatter {
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
                 let mut line = Line::new();
-                line.add_content(node.utf8_text(src.as_bytes()).unwrap());
+                line.add_element(node.utf8_text(src.as_bytes()).unwrap());
                 res = Content::Line(line);
             }
             _ => {
                 let mut line = Line::new();
                 eprintln!("format_expr(): unknown node ({}).", node.kind());
-                line.add_content(self.format_straightforward(node, src).as_ref());
+                line.add_element(self.format_straightforward(node, src).as_ref());
                 res = Content::Line(line);
             }
         }
@@ -660,61 +720,35 @@ impl Formatter {
         res
     }
 
-    // bool式
     fn format_bool_expr(&mut self, node: Node, src: &str) -> Content {
-        // 今はANDしか認めない
-        let mut sep_lines = SeparatedLines::new(self.state.depth, "AND");
+        /*
+        boolean_expression: $ =>
+            choice(
+            prec.left(PREC.unary, seq(kw("NOT"), $._expression)),
+            prec.left(PREC.and, seq($._expression, kw("AND"), $._expression)),
+            prec.left(PREC.or, seq($._expression, kw("OR"), $._expression)),
+        ),
+         */
+
+        let mut sep_lines = SeparatedLines::new(self.state.depth, "");
 
         let mut cursor = node.walk();
 
-        // boolean_expressionは繰り返しではなく、ネストで表現されている
-        // そのため、探索のためにネストの深さを覚えておく
-        let mut boolean_nest = 0;
+        cursor.goto_first_child();
 
-        // boolean_expressionの最左に移動(NOT, BETWEEN対応のことは考えていない)
-        while cursor.node().kind() == "boolean_expression" {
-            boolean_nest += 1;
-            cursor.goto_first_child();
+        if cursor.node().kind() == "NOT" {
+            // 未対応
+        } else {
+            let left = self.format_expr(cursor.node(), src);
+            cursor.goto_next_sibling();
+            let sep = cursor.node().kind();
+            cursor.goto_next_sibling();
+            let right = self.format_expr(cursor.node(), src);
+
+            sep_lines.set_separator(sep);
+            sep_lines.merge(left);
+            sep_lines.merge(right);
         }
-
-        // 一番左下の子
-        let left_expr_node = cursor.node();
-        let line = self.format_expr(left_expr_node, src);
-        sep_lines.add_content(line);
-
-        for _ in 0..boolean_nest {
-            let mut line = Line::new();
-            self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
-            /*
-            sep_linesに追加して、その後to_string()すると
-
-            WHERE
-                    hoge
-            AND     --hoge
-            AND     huga
-
-            みたいになってしまう
-             */
-            // sep_lines.add_line(line);
-
-            // 右の子
-            let mut line = Line::new();
-            self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
-            let right_expr_node = cursor.node();
-            let res = self.format_expr(right_expr_node, src);
-            match res {
-                Content::Line(ln) => {
-                    line.append(ln);
-                }
-                Content::SeparatedLines(_) => {
-                    // 右辺が複数行の場合は未対応
-                }
-            }
-            sep_lines.add_content(Content::Line(line));
-
-            cursor.goto_parent();
-        }
-
         Content::SeparatedLines(sep_lines)
     }
 

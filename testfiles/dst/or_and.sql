@@ -1,0 +1,13 @@
+SELECT
+	A
+FROM
+	TAB1
+WHERE
+	L.A											=	2
+OR	T.SOLONGLONG								=	42
+OR	T.A											=	433
+AND	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA	=	2
+AND	TEST										=	1
+OR	TEST										=	2
+AND	TEST										=	3
+OR	TEST										=	2
