@@ -161,13 +161,6 @@ impl SeparatedLines {
     }
 
     pub fn set_separator(&mut self, sep: &str) {
-        // let old_sep = &self.default_separator;
-        // for i in 0..self.separator.len() {
-        //     if self.separator.get(i).unwrap() == old_sep {
-        //         self.separator[i] = sep.to_string();
-        //     }
-        // }
-
         self.default_separator = sep.to_string();
     }
 
@@ -246,9 +239,21 @@ impl SeparatedLines {
                     };
                 };
 
+                // separatorをマージする
+                //
+                // ["AND", "AND"]
+                // ["OR", "OR", "OR"]
+                // default_separator = "DEF"
+                //
+                // => ["AND", "AND", "DEF", "OR", "OR"]
+
                 for i in 0..ls.contents.len() {
                     let content = ls.contents[i].clone();
-                    self.add_content_with_sep(content, ls.separator[i].clone());
+                    if i == 0 {
+                        self.add_content_with_sep(content, self.default_separator.clone())
+                    } else {
+                        self.add_content_with_sep(content, ls.separator[i].clone());
+                    }
                 }
             }
         }
@@ -771,6 +776,7 @@ impl Formatter {
             prec.left(PREC.or, seq($._expression, kw("OR"), $._expression)),
         ),
          */
+
         let mut sep_lines = SeparatedLines::new(self.state.depth, "");
 
         let mut cursor = node.walk();
@@ -780,16 +786,17 @@ impl Formatter {
         if cursor.node().kind() == "NOT" {
             // 未対応
         } else {
-            sep_lines.merge(self.format_expr(cursor.node(), src));
+            let left = self.format_expr(cursor.node(), src);
+            cursor.goto_next_sibling();
+            let sep = cursor.node().kind();
+            cursor.goto_next_sibling();
+            let right = self.format_expr(cursor.node(), src);
+
+            sep_lines.set_separator(sep);
+            sep_lines.merge(left);
+            sep_lines.merge(right);
+
             println!("{:#?}", sep_lines);
-
-            cursor.goto_next_sibling();
-
-            sep_lines.set_separator(cursor.node().kind());
-
-            cursor.goto_next_sibling();
-
-            sep_lines.merge(self.format_expr(cursor.node(), src));
         }
         Content::SeparatedLines(sep_lines)
     }
