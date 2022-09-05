@@ -304,25 +304,7 @@ impl SeparatedLines {
                 }
                 Content::SeparatedLines(mut sl) => {
                     // 再帰的にrender()を呼び、結果をresultに格納
-                    let mut sl_res = sl.render();
-
-                    if i != 0 {
-                        // sl.depth() - 1の位置にsepを挿入
-                        //
-                        // ex) sepがORの場合
-                        //
-                        //     t.n     =   5
-                        // AND test    =   1
-                        //
-                        // が返ってきたら
-                        //
-                        // OR  t.n     =   5
-                        // AND test    =   1
-
-                        if sl.depth != 0 {
-                            sl_res.insert_str(sl.depth - 1, self.separator.get(i).unwrap());
-                        }
-                    }
+                    let sl_res = sl.render();
 
                     result.push_str(&sl_res);
                 }
