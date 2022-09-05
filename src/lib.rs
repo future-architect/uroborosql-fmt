@@ -193,30 +193,7 @@ impl SeparatedLines {
 
     /// Contentを追加
     pub fn add_content(&mut self, content: Content) {
-        match content {
-            Content::Line(line) => {
-                // len_to_asの更新
-                if let Some(len) = line.len_to_as() {
-                    self.max_len_to_as = match self.max_len_to_as {
-                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                        None => Some(len),
-                    };
-                };
-
-                // len_to_opの更新
-                if let Some(len) = line.len_to_op() {
-                    self.max_len_to_op = match self.max_len_to_op {
-                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                        None => Some(len),
-                    };
-                };
-                self.contents.push(Content::Line(line));
-            }
-            Content::SeparatedLines(ls) => {
-                self.contents.push(Content::SeparatedLines(ls));
-            }
-        }
-        self.separator.push(self.default_separator.clone());
+        self.add_content_with_sep(content, self.default_separator.clone());
     }
 
     pub fn merge(&mut self, other: Content) {
