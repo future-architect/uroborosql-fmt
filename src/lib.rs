@@ -91,14 +91,6 @@ impl Line {
         self.add_element(as_str);
     }
 
-    // 引数の文字列が比較演算子かどうかを判定する
-    fn is_comp_op(op_str: &str) -> bool {
-        match op_str {
-            "<" | "<=" | "<>" | "!=" | "=" | ">" | ">=" | "~" | "!~" | "~*" | "!~*" => true,
-            _ => false,
-        }
-    }
-
     /// 演算子を追加する
     pub fn add_op(&mut self, op_str: &str) {
         // 比較演算子のみをそろえる
@@ -132,196 +124,185 @@ impl Line {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum Content {
-    SeparatedLines(SeparatedLines),
-    Line(Line),
-}
+// #[derive(Debug, Clone)]
+// pub enum Content {
+//     SeparatedLines(SeparatedLines),
+//     Line(Line),
+// }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SeparatedLines {
-    depth: usize,              // インデントの深さ
-    default_separator: String, // セパレータ(e.g., ',', AND)
-    separator: Vec<String>,
-    contents: Vec<Content>,       // 各行の情報
-    max_len_to_as: Option<usize>, // ASまでの最長の長さ
+    depth: usize,               // インデントの深さ
+    separator: String,          // セパレータ(e.g., ',', AND)
+    contents: Vec<AlignedExpr>, // 各行の情報
+    loc: Option<Range>,
     max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
 }
+
+// BooleanExpr: Expr
 
 impl SeparatedLines {
     pub fn new(depth: usize, sep: &str) -> SeparatedLines {
         SeparatedLines {
             depth,
-            default_separator: sep.to_string(),
-            separator: vec![] as Vec<String>,
-            contents: vec![] as Vec<Content>,
-            max_len_to_as: None,
+            separator: sep.to_string(),
+            contents: vec![] as Vec<AlignedExpr>,
+            loc: None,
             max_len_to_op: None,
         }
     }
 
-    pub fn max_len_to_as(&self) -> Option<usize> {
-        self.max_len_to_as
+    pub fn loc(&self) -> Option<Range> {
+        self.loc
     }
 
     pub fn max_len_to_op(&self) -> Option<usize> {
         self.max_len_to_op
     }
 
-    pub fn set_separator(&mut self, sep: &str) {
-        self.default_separator = sep.to_string();
-    }
+    pub fn add_expr(&mut self, expr: AlignedExpr) {
+        // len_to_opの更新
+        if let Some(len) = expr.len_to_op() {
+            self.max_len_to_op = match self.max_len_to_op {
+                Some(maxlen) => Some(std::cmp::max(len, maxlen)),
+                None => Some(len),
+            };
+        };
 
-    pub fn add_content_with_sep(&mut self, content: Content, separator: String) {
-        match content {
-            Content::Line(line) => {
-                // len_to_asの更新
-                if let Some(len) = line.len_to_as() {
-                    self.max_len_to_as = match self.max_len_to_as {
-                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                        None => Some(len),
-                    };
-                };
-
-                // len_to_opの更新
-                if let Some(len) = line.len_to_op() {
-                    self.max_len_to_op = match self.max_len_to_op {
-                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                        None => Some(len),
-                    };
-                };
-                self.contents.push(Content::Line(line));
-            }
-            Content::SeparatedLines(ls) => {
-                self.contents.push(Content::SeparatedLines(ls));
-            }
-        }
-        self.separator.push(separator);
-    }
-
-    /// Contentを追加
-    pub fn add_content(&mut self, content: Content) {
-        self.add_content_with_sep(content, self.default_separator.clone());
-    }
-
-    pub fn merge(&mut self, other: Content) {
-        match other {
-            Content::Line(_) => self.add_content(other),
-            Content::SeparatedLines(ls) => {
-                // len_to_asの更新
-                if let Some(len) = ls.max_len_to_as() {
-                    self.max_len_to_as = match self.max_len_to_as {
-                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                        None => Some(len),
-                    };
-                };
-
-                // len_to_opの更新
-                if let Some(len) = ls.max_len_to_op() {
-                    self.max_len_to_op = match self.max_len_to_op {
-                        Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                        None => Some(len),
-                    };
-                };
-
-                // separatorをマージする
-                //
-                // ["AND", "AND"]
-                // ["OR", "OR", "OR"]
-                // default_separator = "DEF"
-                //
-                // => ["AND", "AND", "DEF", "OR", "OR"]
-
-                for i in 0..ls.contents.len() {
-                    let content = ls.contents[i].clone();
-                    if i == 0 {
-                        self.add_content_with_sep(content, self.default_separator.clone())
-                    } else {
-                        self.add_content_with_sep(content, ls.separator[i].clone());
-                    }
-                }
-            }
-        }
+        self.contents.push(expr);
     }
 
     /// AS句で揃えたものを返す
     pub fn render(&mut self) -> Result<String, Error> {
-        let mut result = String::new();
+        todo!()
+        // let mut result = String::new();
 
-        // 再帰的に再構成した木を見る
+        // // 再帰的に再構成した木を見る
 
-        // for content in self.contents.clone() {
-        for i in 0..self.contents.len() {
-            let content = self.contents.get(i).unwrap().clone();
-            match content {
-                Content::Line(line) => {
-                    //ネスト分だけ\tを挿入
-                    for current_depth in 0..self.depth {
-                        // 1つ上のネストにsepを挿入
-                        // ex)
-                        //     depth = 2
-                        //     sep = ","
-                        //     の場合
-                        //
-                        //     "\t,\thoge"
+        // // for content in self.contents.clone() {
+        // for i in 0..self.contents.len() {
+        //     let content = self.contents.get(i).unwrap().clone();
+        //     match content {
+        //         Content::Line(line) => {
+        //             //ネスト分だけ\tを挿入
+        //             for current_depth in 0..self.depth {
+        //                 // 1つ上のネストにsepを挿入
+        //                 // ex)
+        //                 //     depth = 2
+        //                 //     sep = ","
+        //                 //     の場合
+        //                 //
+        //                 //     "\t,\thoge"
 
-                        if current_depth == self.depth - 1 {
-                            if i != 0 {
-                                result.push_str(self.separator.get(i).unwrap())
-                            }
-                        }
-                        result.push_str("\t");
-                    }
+        //                 if current_depth == self.depth - 1 {
+        //                     if i != 0 {
+        //                         result.push_str(self.separator.get(i).unwrap())
+        //                     }
+        //                 }
+        //                 result.push_str("\t");
+        //             }
 
-                    let mut current_len = 0;
+        //             let mut current_len = 0;
 
-                    for j in 0..line.contents().len() {
-                        let element = line.elements.get(j).unwrap();
+        //             for j in 0..line.contents().len() {
+        //                 let element = line.elements.get(j).unwrap();
 
-                        // as, opなどまでの最大長とその行での長さを引数にとる
-                        // 現在見ているcontentがas, opであれば、必要な数\tを挿入する
-                        let mut insert_tab =
-                            |max_len_to: Option<usize>, len_to: Option<usize>| -> () {
-                                if let (Some(max_len_to), Some(len_to)) = (max_len_to, len_to) {
-                                    if current_len == len_to {
-                                        let num_tab = (max_len_to / TAB_SIZE) - (len_to / TAB_SIZE);
-                                        for _ in 0..num_tab {
-                                            result.push_str("\t");
-                                        }
-                                    };
-                                };
-                            };
+        //                 // as, opなどまでの最大長とその行での長さを引数にとる
+        //                 // 現在見ているcontentがas, opであれば、必要な数\tを挿入する
+        //                 let mut insert_tab =
+        //                     |max_len_to: Option<usize>, len_to: Option<usize>| -> () {
+        //                         if let (Some(max_len_to), Some(len_to)) = (max_len_to, len_to) {
+        //                             if current_len == len_to {
+        //                                 let num_tab = (max_len_to / TAB_SIZE) - (len_to / TAB_SIZE);
+        //                                 for _ in 0..num_tab {
+        //                                     result.push_str("\t");
+        //                                 }
+        //                             };
+        //                         };
+        //                     };
 
-                        // ASの位置揃え
-                        insert_tab(self.max_len_to_as, line.len_to_as());
-                        // OPの位置揃え
-                        insert_tab(self.max_len_to_op, line.len_to_op());
+        //                 // ASの位置揃え
+        //                 insert_tab(self.max_len_to_as, line.len_to_as());
+        //                 // OPの位置揃え
+        //                 insert_tab(self.max_len_to_op, line.len_to_op());
 
-                        result.push_str(element);
+        //                 result.push_str(element);
 
-                        //最後のelement以外は"\t"を挿入
-                        if j != line.contents().len() - 1 {
-                            result.push('\t');
-                        }
+        //                 //最後のelement以外は"\t"を挿入
+        //                 if j != line.contents().len() - 1 {
+        //                     result.push('\t');
+        //                 }
 
-                        // element.len()より大きく、かつTAB_SIZEの倍数のうち最小のものを足す
-                        current_len += TAB_SIZE * (element.len() / TAB_SIZE + 1);
-                    }
+        //                 // element.len()より大きく、かつTAB_SIZEの倍数のうち最小のものを足す
+        //                 current_len += TAB_SIZE * (element.len() / TAB_SIZE + 1);
+        //             }
 
-                    result.push_str("\n");
-                }
-                Content::SeparatedLines(mut sl) => {
-                    // 再帰的にrender()を呼び、結果をresultに格納
-                    let sl_res = sl.render();
+        //             result.push_str("\n");
+        //         }
+        //         Content::SeparatedLines(mut sl) => {
+        //             // 再帰的にrender()を呼び、結果をresultに格納
+        //             let sl_res = sl.render();
 
-                    match sl_res {
-                        Ok(res) => result.push_str(&res),
-                        Err(e) => panic!("{:?}", e),
-                    }
-                }
+        //             match sl_res {
+        //                 Ok(res) => result.push_str(&res),
+        //                 Err(e) => panic!("{:?}", e),
+        //             }
+        //         }
+        //     }
+        // }
+        // Ok(result)
+    }
+}
+
+struct Statement {
+    clauses: Vec<Clause>,
+    loc: Option<Range>,
+}
+
+impl<T: Expr> Statement {
+    pub fn new() -> Statement {
+        Statement {
+            clauses: vec![] as Vec<Clause>,
+            loc: None,
+        }
+    }
+
+    pub fn add_clause(&mut self, clause: Clause) {
+        match self.loc {
+            Some(mut loc) => {
+                loc.end_point = clause.loc().end_point;
+            }
+            None => {
+                self.loc = Some(clause.loc());
             }
         }
-        Ok(result)
+        self.clauses.push(clause);
+    }
+}
+
+struct Clause {
+    keyword: String, // e.g., SELECT, FROM
+    body: Option<SeparatedLines>,
+    loc: Range,
+}
+
+impl Clause {
+    pub fn new(keyword: String, loc: Range) -> Clause {
+        Clause {
+            keyword,
+            body: None,
+            loc,
+        }
+    }
+
+    pub fn loc(&self) -> Range {
+        self.loc
+    }
+
+    // bodyをセットする
+    pub fn set_body(&mut self, body: SeparatedLines) {
+        self.loc.end_point = body.loc().unwrap().end_point;
+        self.body = Some(body);
     }
 }
 
@@ -333,24 +314,30 @@ impl SeparatedLines {
 
 pub trait Expr {
     fn loc(&self) -> Range;
+    fn len(&self) -> usize;
 }
 
-struct AlignedExpr<T: Expr> {
-    lhs: T,
-    rhs: Option<T>,
+#[derive(Debug)]
+struct AlignedExpr {
+    lhs: Box<dyn Expr>,
+    rhs: Option<Box<dyn Expr>>,
     op: Option<String>,
     loc: Range,
     tail_comment: Option<String>,
 }
 
-impl<T: Expr> Expr for AlignedExpr<T> {
+impl<T: Expr> Expr for AlignedExpr {
     fn loc(&self) -> Range {
         self.loc
     }
+
+    fn len(&self) -> usize {
+        todo!()
+    }
 }
 
-impl<T: Expr> AlignedExpr<T> {
-    pub fn new(lhs: T, loc: Range) -> AlignedExpr<T> {
+impl AlignedExpr {
+    pub fn new(lhs: Box<dyn Expr>, loc: Range) -> AlignedExpr {
         AlignedExpr {
             lhs,
             rhs: None,
@@ -360,10 +347,17 @@ impl<T: Expr> AlignedExpr<T> {
         }
     }
 
-    pub fn add_rhs(&mut self, op: String, rhs: T) {
+    pub fn add_rhs(&mut self, op: String, rhs: Box<dyn Expr>) {
         self.loc.end_point = rhs.loc().end_point;
         self.op = Some(op);
         self.rhs = Some(rhs);
+    }
+
+    pub fn len_to_op(&self) -> Option<usize> {
+        match self.op {
+            Some(_) => Some(self.lhs.len()),
+            None => None,
+        }
     }
 }
 
@@ -377,6 +371,10 @@ struct PrimaryExpr {
 impl Expr for PrimaryExpr {
     fn loc(&self) -> Range {
         self.loc
+    }
+
+    fn len(&self) -> usize {
+        self.len
     }
 }
 
@@ -438,7 +436,7 @@ impl Formatter {
     }
 
     /// sqlソースファイルをフォーマットし、bufに入れる
-    pub fn format_sql(&mut self, node: Node, src: &str) -> SeparatedLines {
+    pub fn format_sql(&mut self, node: Node, src: &str) -> Statement {
         self.format_source(node, src)
     }
 
@@ -477,7 +475,7 @@ impl Formatter {
         return true;
     }
 
-    fn format_source(&mut self, node: Node, src: &str) -> SeparatedLines {
+    fn format_source(&mut self, node: Node, src: &str) -> Statement {
         // source_file -> _statement*
 
         let mut result = SeparatedLines::new(self.state.depth, "");
@@ -505,7 +503,7 @@ impl Formatter {
     }
 
     // SELECT文
-    fn format_select_stmt(&mut self, node: Node, src: &str) -> Content {
+    fn format_select_stmt(&mut self, node: Node, src: &str) -> Statement {
         /*
             _select_statement ->
                 select_clause
@@ -616,7 +614,7 @@ impl Formatter {
     }
 
     // SELECT句
-    fn format_select_clause(&mut self, node: Node, src: &str) -> Content {
+    fn format_select_clause(&mut self, node: Node, src: &str) -> Clause {
         /*
             select_clause ->
                 "SELECT"
@@ -683,7 +681,7 @@ impl Formatter {
     }
 
     // エイリアス可能な式
-    fn format_aliasable_expr(&mut self, node: Node, src: &str) -> Content {
+    fn format_aliasable_expr(&mut self, node: Node, src: &str) -> AlignedExpr {
         /*
             _aliasable_expression ->
                 alias | _expression
@@ -740,16 +738,23 @@ impl Formatter {
         Content::Line(line)
     }
 
-    // 式
-    fn format_expr(&mut self, node: Node, src: &str) -> Content {
-        let res: Content;
+    // 引数の文字列が比較演算子かどうかを判定する
+    fn is_comp_op(op_str: &str) -> bool {
+        match op_str {
+            "<" | "<=" | "<>" | "!=" | "=" | ">" | ">=" | "~" | "!~" | "~*" | "!~*" => true,
+            _ => false,
+        }
+    }
 
+    // 式
+    fn format_expr(&mut self, node: Node, src: &str) -> Box<dyn Expr> {
         match node.kind() {
             "dotted_name" => {
                 // dotted_name -> identifier ("." identifier)*
 
-                let mut line = Line::new();
                 let mut cursor = node.walk();
+                let range = node.walk().range();
+
                 cursor.goto_first_child();
 
                 let mut result = String::new();
@@ -764,9 +769,10 @@ impl Formatter {
                         _ => result.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
                     };
                 }
-                line.add_element(result.as_str());
 
-                res = Content::Line(line);
+                let primary = PrimaryExpr::new(result, range);
+
+                Box::new(primary)
             }
             "binary_expression" => {
                 let mut line = Line::new();
@@ -776,36 +782,48 @@ impl Formatter {
 
                 // 左辺
                 let lhs_node = cursor.node();
-                let lhs_line = self.format_expr(lhs_node, src);
-                match lhs_line {
-                    Content::Line(ln) => {
-                        line.append(ln);
-                    }
-                    Content::SeparatedLines(_) => {
-                        //右辺が複数行の場合は未対応
-                    }
-                }
+                let mut lhs_expr = self.format_expr(lhs_node, src);
+
+                // match lhs_line {
+                //     Content::Line(ln) => {
+                //         line.append(ln);
+                //     }
+                //     Content::SeparatedLines(_) => {
+                //         //右辺が複数行の場合は未対応
+                //     }
+                // }
 
                 // 演算子
                 // self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
                 cursor.goto_next_sibling();
                 let op_node = cursor.node();
-                line.add_op(op_node.utf8_text(src.as_bytes()).unwrap());
+                let op_str = op_node.utf8_text(&src).unwrap();
 
                 // 右辺
-                self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
+                cursor.goto_next_sibling();
                 let rhs_node = cursor.node();
-                let expr_line = self.format_expr(rhs_node, src);
+                let rhs_expr = self.format_expr(rhs_node, src);
 
-                match expr_line {
-                    Content::Line(ln) => {
-                        line.append(ln);
-                    }
-                    Content::SeparatedLines(_) => {
-                        //右辺が複数行の場合は未対応
-                    }
+                if self.is_comp(op_str) {
+                    // 比較演算子 -> AlignedExpr
+                    let mut aligned = AlignedExpr::new(lhs_expr, lhs_expr.loc());
+                    aligned.add_rhs(op_str.to_string(), rhs_expr);
+                } else {
+                    // 比較演算子でない -> PrimaryExpr
+                    // e.g.,) 1 + 1
                 }
-                res = Content::Line(line);
+
+                line.add_op(op_node.utf8_text(src.as_bytes()).unwrap());
+
+                // match expr_line {
+                //     Content::Line(ln) => {
+                //         line.append(ln);
+                //     }
+                //     Content::SeparatedLines(_) => {
+                //         //右辺が複数行の場合は未対応
+                //     }
+                // }
+                // res = Content::Line(line);
             }
             "boolean_expression" => {
                 res = self.format_bool_expr(node, src);
@@ -823,41 +841,39 @@ impl Formatter {
                 res = Content::Line(line);
             }
         }
-
-        res
     }
 
-    fn format_bool_expr(&mut self, node: Node, src: &str) -> Content {
-        /*
-        boolean_expression: $ =>
-            choice(
-            prec.left(PREC.unary, seq(kw("NOT"), $._expression)),
-            prec.left(PREC.and, seq($._expression, kw("AND"), $._expression)),
-            prec.left(PREC.or, seq($._expression, kw("OR"), $._expression)),
-        ),
-         */
+    // fn format_bool_expr(&mut self, node: Node, src: &str) -> Content {
+    /*
+    boolean_expression: $ =>
+        choice(
+        prec.left(PREC.unary, seq(kw("NOT"), $._expression)),
+        prec.left(PREC.and, seq($._expression, kw("AND"), $._expression)),
+        prec.left(PREC.or, seq($._expression, kw("OR"), $._expression)),
+    ),
+     */
 
-        let mut sep_lines = SeparatedLines::new(self.state.depth, "");
+    // let mut sep_lines = SeparatedLines::new(self.state.depth, "");
 
-        let mut cursor = node.walk();
+    // let mut cursor = node.walk();
 
-        cursor.goto_first_child();
+    // cursor.goto_first_child();
 
-        if cursor.node().kind() == "NOT" {
-            // 未対応
-        } else {
-            let left = self.format_expr(cursor.node(), src);
-            cursor.goto_next_sibling();
-            let sep = cursor.node().kind();
-            cursor.goto_next_sibling();
-            let right = self.format_expr(cursor.node(), src);
+    // if cursor.node().kind() == "NOT" {
+    // 未対応
+    // } else {
+    //         let left = self.format_expr(cursor.node(), src);
+    //         cursor.goto_next_sibling();
+    //         let sep = cursor.node().kind();
+    //         cursor.goto_next_sibling();
+    //         let right = self.format_expr(cursor.node(), src);
 
-            sep_lines.set_separator(sep);
-            sep_lines.merge(left);
-            sep_lines.merge(right);
-        }
-        Content::SeparatedLines(sep_lines)
-    }
+    //         sep_lines.set_separator(sep);
+    //         sep_lines.merge(left);
+    //         sep_lines.merge(right);
+    //     }
+    //     Content::SeparatedLines(sep_lines)
+    // }
 
     // 未対応の構文をそのまま表示する(dfs)
     fn format_straightforward(&mut self, node: Node, src: &str) -> String {
