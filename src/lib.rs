@@ -23,7 +23,15 @@ pub fn format_sql(src: &str) -> String {
     let mut res = formatter.format_sql(root_node, src.as_ref());
     eprintln!("{:#?}", res);
 
-    res.render()
+    match res.render() {
+        Ok(res) => res,
+        Err(e) => panic!("{:?}", e),
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    ParseError,
 }
 
 #[derive(Debug, Clone)]
@@ -237,7 +245,7 @@ impl SeparatedLines {
     }
 
     /// AS句で揃えたものを返す
-    pub fn render(&mut self) -> String {
+    pub fn render(&mut self) -> Result<String, Error> {
         let mut result = String::new();
 
         // 再帰的に再構成した木を見る
@@ -306,11 +314,14 @@ impl SeparatedLines {
                     // 再帰的にrender()を呼び、結果をresultに格納
                     let sl_res = sl.render();
 
-                    result.push_str(&sl_res);
+                    match sl_res {
+                        Ok(res) => result.push_str(&res),
+                        Err(e) => panic!("{:?}", e),
+                    }
                 }
             }
         }
-        result
+        Ok(result)
     }
 }
 
