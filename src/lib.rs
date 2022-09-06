@@ -42,18 +42,20 @@ pub struct SeparatedLines {
     contents: Vec<AlignedExpr>, // 各行の情報
     loc: Option<Range>,
     max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
+    is_omit_op: bool,             // render時にopを省略
 }
 
 // BooleanExpr: Expr
 
 impl SeparatedLines {
-    pub fn new(depth: usize, sep: &str) -> SeparatedLines {
+    pub fn new(depth: usize, sep: &str, is_omit_op: bool) -> SeparatedLines {
         SeparatedLines {
             depth,
             separator: sep.to_string(),
             contents: vec![] as Vec<AlignedExpr>,
             loc: None,
             max_len_to_op: None,
+            is_omit_op,
         }
     }
 
@@ -114,7 +116,7 @@ impl SeparatedLines {
             }
 
             // alignedに演算子までの最長の長さを与えてフォーマット済みの文字列をもらう
-            match aligned.render(self.max_len_to_op) {
+            match aligned.render(self.max_len_to_op, self.is_omit_op) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
                     result.push_str("\n")
@@ -388,7 +390,7 @@ impl AlignedExpr {
     }
 
     // 演算子までの長さを与え、演算子の前にtab文字を挿入した文字列を返す
-    pub fn render(&self, max_len_to_op: Option<usize>) -> Result<String, Error> {
+    pub fn render(&self, max_len_to_op: Option<usize>, is_omit_op: bool) -> Result<String, Error> {
         let mut result = String::new();
 
         //左辺をrender
@@ -404,9 +406,13 @@ impl AlignedExpr {
 
                 (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
 
-                result.push_str("\t");
-                result.push_str(&op);
-                result.push_str("\t");
+                if is_omit_op {
+                    result.push_str("\t");
+                } else {
+                    result.push_str("\t");
+                    result.push_str(&op);
+                    result.push_str("\t");
+                }
 
                 //右辺をrender
                 match &self.rhs {
@@ -612,7 +618,7 @@ impl BooleanExpr {
                 result.push_str("\t");
             }
 
-            match content.render(self.max_len_to_op) {
+            match content.render(self.max_len_to_op, false) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
                     result.push_str("\n")
@@ -798,7 +804,7 @@ impl Formatter {
                         let mut clause =
                             Clause::new("FROM".to_string(), from_node.range(), self.state.depth);
 
-                        let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
+                        let mut separated_lines = SeparatedLines::new(self.state.depth, ",", true);
 
                         // commaSep
                         if cursor.goto_next_sibling() {
@@ -869,7 +875,8 @@ impl Formatter {
 
                         match expr {
                             Expr::Aligned(aligned) => {
-                                let mut separated_lines = SeparatedLines::new(self.state.depth, "");
+                                let mut separated_lines =
+                                    SeparatedLines::new(self.state.depth, "", false);
                                 separated_lines.add_expr(*aligned);
                                 body = Body::SepLines(separated_lines);
                             }
@@ -949,7 +956,7 @@ impl Formatter {
 
         let expr_node = cursor.node();
 
-        let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
+        let mut separated_lines = SeparatedLines::new(self.state.depth, ",", false);
 
         let aligned = self.format_aliasable_expr(expr_node, src);
         separated_lines.add_expr(aligned);
@@ -1006,10 +1013,15 @@ impl Formatter {
                 let mut aligned = AlignedExpr::new(lhs_expr, lhs_expr_loc);
 
                 // ("AS"? identifier)?
-                if cursor.goto_next_sibling() && cursor.node().kind() == "AS" {
-                    // cursor -> AS ("AS"が省略されることは現状考慮していない)
+                if cursor.goto_next_sibling() {
+                    // cursor -> "AS"?
 
-                    //左辺に移動
+                    // ASが存在する場合は読み飛ばす
+                    if cursor.node().kind() == "AS" {
+                        cursor.goto_next_sibling();
+                    }
+
+                    //右辺に移動
                     cursor.goto_next_sibling();
                     // cursor -> identifier
 
