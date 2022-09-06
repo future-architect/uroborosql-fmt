@@ -1,0 +1,10 @@
+SELECT
+	A
+,	(
+		SELECT
+			B
+		FROM
+			TAB2
+	)
+FROM
+	TAB2
