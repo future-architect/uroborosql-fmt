@@ -87,6 +87,11 @@ impl SeparatedLines {
         self.contents.push(expr);
     }
 
+    pub fn add_comment_to_child(&mut self, comment: Comment) {
+        let last_idx = self.contents.len() - 1;
+        self.contents[last_idx].set_tail_comment(comment);
+    }
+
     /// AS句で揃えたものを返す
     pub fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
@@ -139,6 +144,10 @@ impl Statement {
         }
     }
 
+    pub fn loc(&self) -> Option<Range> {
+        self.loc
+    }
+
     // 文に句を追加する
     pub fn add_clause(&mut self, clause: Clause) {
         match self.loc {
@@ -151,6 +160,11 @@ impl Statement {
             }
         }
         self.clauses.push(clause);
+    }
+
+    pub fn add_comment_to_child(&mut self, comment: Comment) {
+        let last_idx = self.clauses.len() - 1;
+        self.clauses[last_idx].add_comment_to_child(comment);
     }
 
     pub fn render(&self) -> Result<String, Error> {
@@ -173,6 +187,18 @@ impl Statement {
 }
 
 #[derive(Debug, Clone)]
+pub struct Comment {
+    comment: String,
+    loc: Range,
+}
+
+impl Comment {
+    pub fn new(comment: String, loc: Range) -> Comment {
+        Comment { comment, loc }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Body {
     SepLines(SeparatedLines),
     BooleanExpr(BooleanExpr),
@@ -190,6 +216,13 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.render(),
             Body::BooleanExpr(bool_expr) => bool_expr.render(),
+        }
+    }
+
+    pub fn add_comment_to_child(&mut self, comment: Comment) {
+        match self {
+            Body::SepLines(sep_lines) => sep_lines.add_comment_to_child(comment),
+            Body::BooleanExpr(bool_expr) => bool_expr.add_comment_to_child(comment),
         }
     }
 }
@@ -221,6 +254,13 @@ impl Clause {
     pub fn set_body(&mut self, body: Body) {
         self.loc.end_point = body.loc().unwrap().end_point;
         self.body = Some(body);
+    }
+
+    pub fn add_comment_to_child(&mut self, comment: Comment) {
+        match &mut self.body {
+            Some(body) => body.add_comment_to_child(comment),
+            _ => (),
+        }
     }
 
     pub fn render(&self) -> Result<String, Error> {
@@ -284,6 +324,14 @@ impl Expr {
             _ => todo!(),
         }
     }
+
+    pub fn add_comment_to_child(&mut self, comment: Comment) {
+        match self {
+            Expr::Aligned(aligned) => aligned.set_tail_comment(comment),
+            Expr::Primary(primary) => (),
+            Expr::Boolean(boolean) => boolean.add_comment_to_child(comment),
+        }
+    }
 }
 
 // 次を入れるとエラーになる
@@ -309,6 +357,13 @@ impl AlignedExpr {
 
     fn loc(&self) -> Range {
         self.loc
+    }
+
+    pub fn set_tail_comment(&mut self, comment: Comment) {
+        if let Comment { comment, loc } = comment {
+            self.tail_comment = Some(comment.clone());
+            self.loc.end_point = loc.end_point;
+        }
     }
 
     // 演算子と右辺の式を追加する
@@ -356,11 +411,21 @@ impl AlignedExpr {
                     }
                     _ => (),
                 }
-
-                Ok(result)
             }
-            (_, _) => Ok(result),
+            (_, _) => (),
         }
+
+        //とりあえずコメントそのまま出力
+        match &self.tail_comment {
+            Some(comment) => {
+                result.push_str("\t");
+                result.push_str(comment);
+                eprintln!("{:#?}", comment);
+            }
+            None => (),
+        }
+
+        Ok(result)
     }
 }
 
@@ -458,6 +523,11 @@ impl BooleanExpr {
 
     pub fn set_default_separator(&mut self, sep: String) {
         self.default_separator = sep;
+    }
+
+    pub fn add_comment_to_child(&mut self, comment: Comment) {
+        let last_idx = self.contents.len() - 1;
+        self.contents[last_idx].content.set_tail_comment(comment);
     }
 
     pub fn add_expr_with_sep(&mut self, expr: AlignedExpr, sep: String) {
@@ -624,12 +694,25 @@ impl Formatter {
 
             // 現状はselect_statementのみ
             // 文が増えたらマッチ式で分岐させる
-            let stmt = self.format_select_stmt(stmt_node, src);
-            return stmt;
-        }
+            let mut stmt = self.format_select_stmt(stmt_node, src);
 
-        // result
-        todo!()
+            if cursor.goto_next_sibling() && cursor.node().kind() == "comment" {
+                let comment_loc = cursor.node().range();
+
+                //同じ行の場合
+                if comment_loc.start_point.row == stmt.loc().unwrap().end_point.row {
+                    stmt.add_comment_to_child(Comment::new(
+                        cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                        comment_loc,
+                    ));
+                } else {
+                    //違う行の場合
+                }
+            }
+            stmt
+        } else {
+            todo!()
+        }
     }
 
     // SELECT文
@@ -670,15 +753,14 @@ impl Formatter {
                             Clause::new("FROM".to_string(), from_node.range(), self.state.depth);
 
                         let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
+
                         // commaSep
-                        // if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                         if cursor.goto_next_sibling() {
                             // cursor -> _aliasable_expression
                             let expr_node = cursor.node();
 
                             separated_lines.add_expr(self.format_aliasable_expr(expr_node, src));
 
-                            // while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
                             while cursor.goto_next_sibling() {
                                 // cursor -> , または cursor -> _aliasable_expression
                                 let child_node = cursor.node();
@@ -686,6 +768,24 @@ impl Formatter {
                                 match child_node.kind() {
                                     "," => {
                                         continue;
+                                    }
+                                    "comment" => {
+                                        let comment_loc = child_node.range();
+
+                                        //同じ行の場合
+                                        if comment_loc.start_point.row
+                                            == separated_lines.loc().unwrap().end_point.row
+                                        {
+                                            separated_lines.add_comment_to_child(Comment::new(
+                                                child_node
+                                                    .utf8_text(src.as_bytes())
+                                                    .unwrap()
+                                                    .to_string(),
+                                                comment_loc,
+                                            ));
+                                        } else {
+                                            //違う行の場合
+                                        }
                                     }
                                     _ => {
                                         separated_lines
@@ -743,6 +843,19 @@ impl Formatter {
                         statement.add_clause(clause);
                     }
                 }
+                "comment" => {
+                    let comment_loc = clause_node.range();
+
+                    //同じ行の場合
+                    if comment_loc.start_point.row == statement.loc().unwrap().end_point.row {
+                        statement.add_comment_to_child(Comment::new(
+                            clause_node.utf8_text(src.as_bytes()).unwrap().to_string(),
+                            clause_node.range(),
+                        ));
+                    } else {
+                        //違う行の場合
+                    }
+                }
                 _ => {
                     break;
                 }
@@ -792,7 +905,7 @@ impl Formatter {
         let mut sepapated_lines = SeparatedLines::new(self.state.depth, ",");
 
         let aligned = self.format_aliasable_expr(expr_node, src);
-        sepapated_lines.add_expr(aligned);
+        separated_lines.add_expr(aligned);
 
         // (',' _aliasable_expression)*
         // while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
@@ -803,14 +916,20 @@ impl Formatter {
                 "," => {
                     continue;
                 }
+                "comment" => {
+                    separated_lines.add_comment_to_child(Comment::new(
+                        child_node.utf8_text(src.as_bytes()).unwrap().to_string(),
+                        child_node.range(),
+                    ));
+                }
                 _ => {
                     let aligned = self.format_aliasable_expr(child_node, src);
-                    sepapated_lines.add_expr(aligned);
+                    separated_lines.add_expr(aligned);
                 }
             }
         }
 
-        sepapated_lines
+        separated_lines
     }
 
     // エイリアス可能な式
