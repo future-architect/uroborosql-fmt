@@ -243,6 +243,14 @@ impl Expr {
             Expr::Boolean(sep_lines) => sep_lines.render(),
         }
     }
+
+    // 最後の行の長さをタブ文字換算した結果を返す
+    fn len(&self) -> usize {
+        match self {
+            Expr::Primary(primary) => primary.len(),
+            _ => todo!(),
+        }
+    }
 }
 
 // 次を入れるとエラーになる
@@ -280,13 +288,9 @@ impl AlignedExpr {
     // 演算子までの長さを返す
     pub fn len_to_op(&self) -> Option<usize> {
         // 左辺の長さを返せばよい
-        match &self.lhs {
-            Expr::Aligned(_) => todo!(),
-            Expr::Primary(primary) => match self.op {
-                Some(_) => Some(primary.len()),
-                None => None,
-            },
-            Expr::Boolean(_) => todo!(),
+        match self.op {
+            Some(_) => Some(self.lhs.len()),
+            None => None,
         }
     }
 
@@ -303,32 +307,26 @@ impl AlignedExpr {
         // 演算子等辺をrender
         match (&self.op, max_len_to_op) {
             (Some(op), Some(max_len)) => {
-                match &self.lhs {
-                    Expr::Aligned(_) => todo!(),
-                    Expr::Primary(lhs) => {
-                        let tab_num = (max_len - lhs.len()) / TAB_SIZE;
+                let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
 
-                        // ここもイテレータで書きたい
-                        for _ in 0..tab_num {
-                            result.push_str("\t");
-                        }
-                        result.push_str("\t");
-                        result.push_str(&op);
-                        result.push_str("\t");
-
-                        //右辺をrender
-                        match &self.rhs {
-                            Some(rhs) => {
-                                let formatted = rhs.render().unwrap();
-                                result.push_str(&formatted);
-                            }
-                            _ => (),
-                        }
-
-                        Ok(result)
-                    }
-                    Expr::Boolean(_) => todo!(),
+                // ここもイテレータで書きたい
+                for _ in 0..tab_num {
+                    result.push_str("\t");
                 }
+                result.push_str("\t");
+                result.push_str(&op);
+                result.push_str("\t");
+
+                //右辺をrender
+                match &self.rhs {
+                    Some(rhs) => {
+                        let formatted = rhs.render().unwrap();
+                        result.push_str(&formatted);
+                    }
+                    _ => (),
+                }
+
+                Ok(result)
             }
             (_, _) => Ok(result),
         }
