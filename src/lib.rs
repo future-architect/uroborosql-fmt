@@ -284,7 +284,7 @@ impl Expr {
     fn len(&self) -> usize {
         match self {
             Expr::Primary(primary) => primary.len(),
-            Expr::SelectSub(select_sub) => todo!(),
+            Expr::SelectSub(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
             _ => todo!(),
         }
     }
