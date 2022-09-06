@@ -334,6 +334,7 @@ impl Expr {
             Expr::Aligned(aligned) => aligned.set_tail_comment(comment),
             Expr::Primary(primary) => (),
             Expr::Boolean(boolean) => boolean.add_comment_to_child(comment),
+            Expr::SelectSub(select_sub) => select_sub.add_comment_to_child(comment),
         }
     }
 }
@@ -639,6 +640,10 @@ impl SelectSubExpr {
 
     pub fn loc(&self) -> Range {
         self.loc
+    }
+
+    pub fn add_comment_to_child(&mut self, comment: Comment) {
+        self.stmt.add_comment_to_child(comment);
     }
 
     pub fn render(&self) -> Result<String, Error> {
