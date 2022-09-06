@@ -34,104 +34,6 @@ pub enum Error {
     ParseError,
 }
 
-#[derive(Debug, Clone)]
-pub struct Line {
-    elements: Vec<String>, // lifetimeの管理が面倒なのでStringに
-    len: usize,
-    len_to_as: Option<usize>, // AS までの距離
-    len_to_op: Option<usize>, // 演算子までの距離(1行に一つ)
-}
-
-impl Line {
-    pub fn new() -> Line {
-        Line {
-            elements: vec![] as Vec<String>,
-            len: 0,
-            len_to_as: None,
-            len_to_op: None,
-        }
-    }
-
-    pub fn contents(&self) -> &Vec<String> {
-        &self.elements
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn len_to_as(&self) -> Option<usize> {
-        self.len_to_as
-    }
-
-    pub fn len_to_op(&self) -> Option<usize> {
-        self.len_to_op
-    }
-
-    /// 行の要素を足す(演算子はadd_operator()を使う)
-    pub fn add_element(&mut self, element: &str) {
-        // TAB_SIZEを1単位として長さを記録する
-        //
-        // contentを文字列にするとき、必ずその前に一つ'\t'が入る
-        // -> 各contentの長さは content + "\t"となる
-        //
-        // e.g., TAB_SIZE = 4のとき
-        // TAB1.NUM: 8文字 = TAB_SIZE * 2 -> tabを足すと長さTAB_SIZE * 2 + TAB_SIZE
-        // TAB1.N  : 5文字 = TAB_SIZE * 1 + 1 -> tabを足すと長さTAB_SIZE + TAB_SIZE
-        // -- 例外 --
-        // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
-        //
-        self.len += TAB_SIZE * (element.len() / TAB_SIZE + 1);
-        self.elements.push(element.to_ascii_uppercase());
-    }
-
-    /// AS句を追加する
-    pub fn add_as(&mut self, as_str: &str) {
-        self.len_to_as = Some(self.len);
-        self.add_element(as_str);
-    }
-
-    // 引数の文字列が比較演算子かどうかを判定する
-    fn is_comp_op(op_str: &str) -> bool {
-        match op_str {
-            "<" | "<=" | "<>" | "!=" | "=" | ">" | ">=" | "~" | "!~" | "~*" | "!~*" => true,
-            _ => false,
-        }
-    }
-
-    /// 演算子を追加する
-    pub fn add_op(&mut self, op_str: &str) {
-        // 比較演算子のみをそろえる
-        if Self::is_comp_op(op_str) {
-            self.len_to_op = Some(self.len);
-        }
-        self.add_element(op_str);
-    }
-
-    // lineの結合
-    pub fn append(&mut self, line: Line) {
-        if let Some(len_to_as) = line.len_to_as() {
-            // ASはlineに一つと仮定している
-            self.len_to_as = Some(self.len + len_to_as);
-        }
-
-        if let Some(len_to_op) = line.len_to_op() {
-            self.len_to_op = Some(self.len + len_to_op);
-        }
-
-        self.len += line.len();
-
-        for content in (&line.contents()).into_iter() {
-            self.elements.push(content.to_string());
-        }
-    }
-
-    /// contentsを"\t"でjoinして返す
-    pub fn to_string(&self) -> String {
-        self.elements.join("\t")
-    }
-}
-
 // #[derive(Debug, Clone)]
 // pub enum Content {
 //     SeparatedLines(SeparatedLines),
@@ -218,78 +120,6 @@ impl SeparatedLines {
         }
 
         Ok(result)
-        // for content in self.contents.clone() {
-        // for i in 0..self.contents.len() {
-        //     let content = self.contents.get(i).unwrap().clone();
-        //     match content {
-        //         Content::Line(line) => {
-        //             //ネスト分だけ\tを挿入
-        //             for current_depth in 0..self.depth {
-        //                 // 1つ上のネストにsepを挿入
-        //                 // ex)
-        //                 //     depth = 2
-        //                 //     sep = ","
-        //                 //     の場合
-        //                 //
-        //                 //     "\t,\thoge"
-
-        //                 if current_depth == self.depth - 1 {
-        //                     if i != 0 {
-        //                         result.push_str(self.separator.get(i).unwrap())
-        //                     }
-        //                 }
-        //                 result.push_str("\t");
-        //             }
-
-        //             let mut current_len = 0;
-
-        //             for j in 0..line.contents().len() {
-        //                 let element = line.elements.get(j).unwrap();
-
-        //                 // as, opなどまでの最大長とその行での長さを引数にとる
-        //                 // 現在見ているcontentがas, opであれば、必要な数\tを挿入する
-        //                 let mut insert_tab =
-        //                     |max_len_to: Option<usize>, len_to: Option<usize>| -> () {
-        //                         if let (Some(max_len_to), Some(len_to)) = (max_len_to, len_to) {
-        //                             if current_len == len_to {
-        //                                 let num_tab = (max_len_to / TAB_SIZE) - (len_to / TAB_SIZE);
-        //                                 for _ in 0..num_tab {
-        //                                     result.push_str("\t");
-        //                                 }
-        //                             };
-        //                         };
-        //                     };
-
-        //                 // ASの位置揃え
-        //                 insert_tab(self.max_len_to_as, line.len_to_as());
-        //                 // OPの位置揃え
-        //                 insert_tab(self.max_len_to_op, line.len_to_op());
-
-        //                 result.push_str(element);
-
-        //                 //最後のelement以外は"\t"を挿入
-        //                 if j != line.contents().len() - 1 {
-        //                     result.push('\t');
-        //                 }
-
-        //                 // element.len()より大きく、かつTAB_SIZEの倍数のうち最小のものを足す
-        //                 current_len += TAB_SIZE * (element.len() / TAB_SIZE + 1);
-        //             }
-
-        //             result.push_str("\n");
-        //         }
-        //         Content::SeparatedLines(mut sl) => {
-        //             // 再帰的にrender()を呼び、結果をresultに格納
-        //             let sl_res = sl.render();
-
-        //             match sl_res {
-        //                 Ok(res) => result.push_str(&res),
-        //                 Err(e) => panic!("{:?}", e),
-        //             }
-        //         }
-        //     }
-        // }
-        // Ok(result)
     }
 }
 
@@ -597,29 +427,29 @@ impl Formatter {
     }
 
     // goto_next_sibiling()をコメントの処理を行うように拡張したもの
-    fn goto_not_comment_next_sibiling_for_line(
-        &mut self,
-        line: &mut Line,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> bool {
-        //兄弟ノードがない場合
-        if !cursor.goto_next_sibling() {
-            return false;
-        }
+    // fn goto_not_comment_next_sibiling_for_line(
+    //     &mut self,
+    //     line: &mut Line,
+    //     cursor: &mut TreeCursor,
+    //     src: &str,
+    // ) -> bool {
+    //     //兄弟ノードがない場合
+    //     if !cursor.goto_next_sibling() {
+    //         return false;
+    //     }
 
-        //コメントノードであればbufに追記していく
-        while cursor.node().kind() == "comment" {
-            let comment_node = cursor.node();
-            line.add_element(comment_node.utf8_text(src.as_bytes()).unwrap());
+    //     //コメントノードであればbufに追記していく
+    //     while cursor.node().kind() == "comment" {
+    //         let comment_node = cursor.node();
+    //         line.add_element(comment_node.utf8_text(src.as_bytes()).unwrap());
 
-            if !cursor.goto_next_sibling() {
-                return false;
-            }
-        }
+    //         if !cursor.goto_next_sibling() {
+    //             return false;
+    //         }
+    //     }
 
-        return true;
-    }
+    //     return true;
+    // }
 
     fn format_source(&mut self, node: Node, src: &str) -> Statement {
         // source_file -> _statement*
