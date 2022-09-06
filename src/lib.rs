@@ -138,7 +138,7 @@ impl Line {
 //     Line(Line),
 // }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SeparatedLines {
     depth: usize,               // インデントの深さ
     separator: String,          // セパレータ(e.g., ',', AND)
@@ -292,7 +292,7 @@ impl SeparatedLines {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Statement {
     clauses: Vec<Clause>,
     loc: Option<Range>,
@@ -338,7 +338,7 @@ impl Statement {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Clause {
     keyword: String, // e.g., SELECT, FROM
     body: Option<SeparatedLines>,
@@ -385,58 +385,35 @@ impl Clause {
     }
 }
 
-// enum Expr {
-//     Aligned(Box<AlignedExpr>),
-//     Primary(Box<PrimaryExpr>),
-//     Boolean(Box<SeparatedLines>),
-// }
-
-pub trait Expr {
-    fn loc(&self) -> Range;
-    fn len(&self) -> usize;
-
-    fn to_primary(&self) -> Option<PrimaryExpr>;
-    fn render(&self) -> Result<String, Error>;
+#[derive(Debug, Clone)]
+pub enum Expr {
+    Aligned(Box<AlignedExpr>),
+    Primary(Box<PrimaryExpr>),
+    Boolean(Box<SeparatedLines>),
 }
 
-use std::fmt::Debug;
-
-impl Debug for dyn Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "hogehoge")
+impl Expr {
+    fn loc(&self) -> Range {
+        match self {
+            Expr::Aligned(aligned) => aligned.loc(),
+            Expr::Primary(primary) => primary.loc(),
+            Expr::Boolean(sep_lines) => sep_lines.loc().unwrap(),
+        }
     }
 }
 
 // 次を入れるとエラーになる
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AlignedExpr {
-    lhs: Box<dyn Expr>,
-    rhs: Option<Box<dyn Expr>>,
+    lhs: Expr,
+    rhs: Option<Expr>,
     op: Option<String>,
     loc: Range,
     tail_comment: Option<String>,
 }
 
-impl Expr for AlignedExpr {
-    fn loc(&self) -> Range {
-        self.loc
-    }
-
-    fn len(&self) -> usize {
-        todo!()
-    }
-
-    fn to_primary(&self) -> Option<PrimaryExpr> {
-        None
-    }
-
-    fn render(&self) -> Result<String, Error> {
-        todo!();
-    }
-}
-
 impl AlignedExpr {
-    pub fn new(lhs: Box<dyn Expr>, loc: Range) -> AlignedExpr {
+    pub fn new(lhs: Expr, loc: Range) -> AlignedExpr {
         AlignedExpr {
             lhs,
             rhs: None,
@@ -446,16 +423,24 @@ impl AlignedExpr {
         }
     }
 
-    pub fn add_rhs(&mut self, op: String, rhs: Box<dyn Expr>) {
+    fn loc(&self) -> Range {
+        self.loc
+    }
+
+    pub fn add_rhs(&mut self, op: String, rhs: Expr) {
         self.loc.end_point = rhs.loc().end_point;
         self.op = Some(op);
         self.rhs = Some(rhs);
     }
 
     pub fn len_to_op(&self) -> Option<usize> {
-        match self.op {
-            Some(_) => Some(self.lhs.len()),
-            None => None,
+        match &self.lhs {
+            Expr::Aligned(_) => todo!(),
+            Expr::Primary(primary) => match self.op {
+                Some(_) => Some(primary.len()),
+                None => None,
+            },
+            Expr::Boolean(_) => todo!(),
         }
     }
 
@@ -501,37 +486,6 @@ pub struct PrimaryExpr {
     // head_comment: Option<String>,
 }
 
-impl Expr for PrimaryExpr {
-    fn loc(&self) -> Range {
-        self.loc
-    }
-
-    fn len(&self) -> usize {
-        self.len
-    }
-
-    fn to_primary(&self) -> Option<PrimaryExpr> {
-        Some(self.clone())
-    }
-
-    fn render(&self) -> Result<String, Error> {
-        // elem1 \t elem2 \t ... \t elemn
-
-        let mut result = String::new();
-        let mut is_first_elem = true;
-        for elem in (&self.elements).into_iter() {
-            if is_first_elem {
-                is_first_elem = false;
-            } else {
-                result.push_str("\t");
-            }
-            result.push_str(&elem.to_ascii_uppercase());
-        }
-
-        Ok(result)
-    }
-}
-
 impl PrimaryExpr {
     pub fn new(element: String, loc: Range) -> PrimaryExpr {
         let len = TAB_SIZE * (element.len() / TAB_SIZE + 1);
@@ -542,12 +496,16 @@ impl PrimaryExpr {
         }
     }
 
-    pub fn elements(&self) -> &Vec<String> {
-        &self.elements
+    fn loc(&self) -> Range {
+        self.loc
     }
 
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn element(&self) -> &Vec<String> {
+        &self.elements
     }
 
     /// elementsにelementを追加する
@@ -746,21 +704,18 @@ impl Formatter {
                         self.nest();
                         let mut separated_lines = SeparatedLines::new(self.state.depth, "");
 
-                        // result.add_content(Content::Line(line));
-
                         // self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
                         cursor.goto_next_sibling();
 
                         //expr
                         let expr_node = cursor.node();
                         let expr = self.format_expr(expr_node, src);
-                        let loc = expr.loc();
-                        let aligned = AlignedExpr::new(expr, loc);
-                        separated_lines.add_expr(aligned);
-                        // buf.push_str(bool_expr.as_str());
 
-                        // eprintln!("{:#?}", separated_lines);
-                        // result.add_content(Content::SeparatedLines(separated_lines));
+                        match expr {
+                            Expr::Aligned(aligned) => separated_lines.add_expr(*aligned),
+                            _ => {}
+                        }
+
                         self.unnest();
                         cursor.goto_parent();
 
@@ -884,10 +839,8 @@ impl Formatter {
                     // identifier
                     if cursor.node().kind() == "identifier" {
                         let rhs = cursor.node().utf8_text(src.as_bytes()).unwrap();
-                        aligned.add_rhs(
-                            "AS".to_string(),
-                            Box::new(PrimaryExpr::new(rhs.to_string(), cursor.node().range())),
-                        );
+                        let rhs_expr = PrimaryExpr::new(rhs.to_string(), cursor.node().range());
+                        aligned.add_rhs("AS".to_string(), Expr::Primary(Box::new(rhs_expr)));
                     }
                 }
                 aligned
@@ -895,11 +848,11 @@ impl Formatter {
             _ => {
                 // _expression
 
-                let mut cursor = node.walk();
+                let cursor = node.walk();
                 let expr = self.format_expr(cursor.node(), src);
                 let loc = expr.loc();
 
-                let mut aligned = AlignedExpr::new(expr, loc);
+                let aligned = AlignedExpr::new(expr, loc);
 
                 aligned
             }
@@ -915,7 +868,7 @@ impl Formatter {
     }
 
     // 式
-    fn format_expr(&mut self, node: Node, src: &str) -> Box<dyn Expr> {
+    fn format_expr(&mut self, node: Node, src: &str) -> Expr {
         match node.kind() {
             "dotted_name" => {
                 // dotted_name -> identifier ("." identifier)*
@@ -940,26 +893,15 @@ impl Formatter {
 
                 let primary = PrimaryExpr::new(result, range);
 
-                Box::new(primary)
+                Expr::Primary(Box::new(primary))
             }
             "binary_expression" => {
-                let mut line = Line::new();
-
                 let mut cursor = node.walk();
                 cursor.goto_first_child();
 
                 // 左辺
                 let lhs_node = cursor.node();
-                let mut lhs_expr = self.format_expr(lhs_node, src);
-
-                // match lhs_line {
-                //     Content::Line(ln) => {
-                //         line.append(ln);
-                //     }
-                //     Content::SeparatedLines(_) => {
-                //         //右辺が複数行の場合は未対応
-                //     }
-                // }
+                let lhs_expr = self.format_expr(lhs_node, src);
 
                 // 演算子
                 // self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
@@ -978,28 +920,29 @@ impl Formatter {
                     let mut aligned = AlignedExpr::new(lhs_expr, loc);
                     aligned.add_rhs(op_str.to_string(), rhs_expr);
 
-                    Box::new(aligned)
+                    Expr::Aligned(Box::new(aligned))
                 } else {
                     // 比較演算子でない -> PrimaryExpr
                     // e.g.,) 1 + 1
-                    let mut lhs_expr = lhs_expr.to_primary().unwrap();
-                    lhs_expr.add_element(op_str);
-                    lhs_expr.append(rhs_expr.to_primary().unwrap());
-
-                    Box::new(lhs_expr)
+                    let lhs_expr = lhs_expr;
+                    match lhs_expr {
+                        Expr::Primary(mut lhs) => {
+                            lhs.add_element(op_str);
+                            match rhs_expr {
+                                Expr::Primary(rhs) => lhs.append(*rhs),
+                                _ => {
+                                    // 右辺が複数行の場合
+                                    todo!()
+                                }
+                            }
+                            Expr::Primary(lhs)
+                        }
+                        _ => {
+                            // 左辺が複数行の場合
+                            todo!()
+                        }
+                    }
                 }
-
-                // line.add_op(op_node.utf8_text(src.as_bytes()).unwrap());
-
-                // match expr_line {
-                //     Content::Line(ln) => {
-                //         line.append(ln);
-                //     }
-                //     Content::SeparatedLines(_) => {
-                //         //右辺が複数行の場合は未対応
-                //     }
-                // }
-                // res = Content::Line(line);
             }
             "boolean_expression" => {
                 todo!()
@@ -1011,10 +954,9 @@ impl Formatter {
                     node.utf8_text(src.as_bytes()).unwrap().to_string(),
                     node.range(),
                 );
-                Box::new(primary)
+                Expr::Primary(Box::new(primary))
             }
             _ => {
-                eprintln!("format_expr(): unknown node ({}).", node.kind());
                 todo!()
                 // let mut line = Line::new();
                 // line.add_element(self.format_straightforward(node, src).as_ref());
