@@ -177,6 +177,7 @@ impl SeparatedLines {
             };
         };
 
+        // locationの更新
         match self.loc {
             Some(mut range) => {
                 range.end_point = expr.loc().end_point;
@@ -292,6 +293,7 @@ impl SeparatedLines {
     }
 }
 
+// *_statementに対応した構造体
 #[derive(Debug, Clone)]
 pub struct Statement {
     clauses: Vec<Clause>,
@@ -306,6 +308,7 @@ impl Statement {
         }
     }
 
+    // 文に句を追加する
     pub fn add_clause(&mut self, clause: Clause) {
         match self.loc {
             Some(mut loc) => {
@@ -338,6 +341,7 @@ impl Statement {
     }
 }
 
+// 句に対応した構造体
 #[derive(Debug, Clone)]
 pub struct Clause {
     keyword: String, // e.g., SELECT, FROM
@@ -385,11 +389,12 @@ impl Clause {
     }
 }
 
+// 式に対応した列挙体
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Aligned(Box<AlignedExpr>),
-    Primary(Box<PrimaryExpr>),
-    Boolean(Box<SeparatedLines>),
+    Aligned(Box<AlignedExpr>),    // AS句、二項比較演算
+    Primary(Box<PrimaryExpr>),    // 識別子、文字列、数値など
+    Boolean(Box<SeparatedLines>), // boolean式
 }
 
 impl Expr {
@@ -422,7 +427,7 @@ pub struct AlignedExpr {
     rhs: Option<Expr>,
     op: Option<String>,
     loc: Range,
-    tail_comment: Option<String>,
+    tail_comment: Option<String>, // 行末コメント
 }
 
 impl AlignedExpr {
@@ -440,6 +445,7 @@ impl AlignedExpr {
         self.loc
     }
 
+    // 演算子と右辺の式を追加する
     pub fn add_rhs(&mut self, op: String, rhs: Expr) {
         self.loc.end_point = rhs.loc().end_point;
         self.op = Some(op);
@@ -457,6 +463,7 @@ impl AlignedExpr {
         }
     }
 
+    // 演算子までの長さを与え、演算子の前にtab文字を挿入した文字列を返す
     pub fn render(&self, max_len_to_op: Option<usize>) -> Result<String, Error> {
         let mut result = String::new();
 
@@ -737,10 +744,11 @@ impl Formatter {
                         //expr
                         let expr_node = cursor.node();
                         let expr = self.format_expr(expr_node, src);
+                        let expr_loc = expr.loc();
 
                         match expr {
                             Expr::Aligned(aligned) => separated_lines.add_expr(*aligned),
-                            _ => {}
+                            _ => separated_lines.add_expr(AlignedExpr::new(expr, expr_loc)),
                         }
 
                         self.unnest();
@@ -977,7 +985,7 @@ impl Formatter {
             }
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
-                let mut primary = PrimaryExpr::new(
+                let primary = PrimaryExpr::new(
                     node.utf8_text(src.as_bytes()).unwrap().to_string(),
                     node.range(),
                 );
