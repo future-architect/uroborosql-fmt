@@ -1057,11 +1057,13 @@ impl Formatter {
 
     // 式
     fn format_expr(&mut self, node: Node, src: &str) -> Expr {
-        match node.kind() {
+        let mut cursor = node.walk();
+        if cursor.node().kind() == "comment" {}
+
+        match cursor.node().kind() {
             "dotted_name" => {
                 // dotted_name -> identifier ("." identifier)*
 
-                let mut cursor = node.walk();
                 // cursor -> dotted_name
 
                 let range = node.range();
@@ -1088,7 +1090,6 @@ impl Formatter {
                 Expr::Primary(Box::new(primary))
             }
             "binary_expression" => {
-                let mut cursor = node.walk();
                 // cursor -> binary_expression
 
                 cursor.goto_first_child();
