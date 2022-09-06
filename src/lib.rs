@@ -295,6 +295,7 @@ pub enum Expr {
     Aligned(Box<AlignedExpr>), // AS句、二項比較演算
     Primary(Box<PrimaryExpr>), // 識別子、文字列、数値など
     Boolean(Box<BooleanExpr>), // boolean式
+    SelectSub(Box<SelectSubExpr>),
 }
 
 impl Expr {
@@ -303,6 +304,7 @@ impl Expr {
             Expr::Aligned(aligned) => aligned.loc(),
             Expr::Primary(primary) => primary.loc(),
             Expr::Boolean(sep_lines) => sep_lines.loc().unwrap(),
+            Expr::SelectSub(select_sub) => select_sub.loc(),
         }
     }
 
@@ -314,6 +316,7 @@ impl Expr {
             }
             Expr::Primary(primary) => primary.render(),
             Expr::Boolean(boolean) => boolean.render(),
+            Expr::SelectSub(select_sub) => select_sub.render(),
         }
     }
 
@@ -321,6 +324,7 @@ impl Expr {
     fn len(&self) -> usize {
         match self {
             Expr::Primary(primary) => primary.len(),
+            Expr::SelectSub(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
             _ => todo!(),
         }
     }
@@ -595,7 +599,6 @@ impl BooleanExpr {
         let mut is_first_line = true;
 
         for ContentWithSep { separator, content } in (&self.contents).into_iter() {
-            // ネストは後で
             (0..self.depth)
                 .into_iter()
                 .for_each(|_| result.push_str("\t"));
@@ -618,6 +621,44 @@ impl BooleanExpr {
         }
 
         Ok(result)
+    }
+}
+
+// SELECTサブクエリに対応する構造体
+#[derive(Debug, Clone)]
+pub struct SelectSubExpr {
+    depth: usize,
+    stmt: Statement,
+    loc: Range,
+}
+
+impl SelectSubExpr {
+    pub fn new(stmt: Statement, loc: Range, depth: usize) -> SelectSubExpr {
+        SelectSubExpr { depth, stmt, loc }
+    }
+
+    pub fn loc(&self) -> Range {
+        self.loc
+    }
+
+    pub fn render(&self) -> Result<String, Error> {
+        let mut result = String::new();
+
+        result.push_str("(\n");
+
+        match self.stmt.render() {
+            Ok(formatted) => {
+                result.push_str(&formatted);
+
+                (0..self.depth)
+                    .into_iter()
+                    .for_each(|_| result.push_str("\t"));
+
+                result.push_str(")");
+                Ok(result)
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -834,6 +875,7 @@ impl Formatter {
                                 // body = Body::SepLines(separated_lines);
                             }
                             Expr::Boolean(boolean) => body = Body::BooleanExpr(*boolean),
+                            Expr::SelectSub(select_sub) => todo!(),
                         }
 
                         cursor.goto_parent();
@@ -1092,7 +1134,14 @@ impl Formatter {
                 );
                 Expr::Primary(Box::new(primary))
             }
+            "select_subexpression" => {
+                self.nest();
+                let select_subexpr = self.format_select_subexpr(node, src);
+                self.unnest();
+                Expr::SelectSub(Box::new(select_subexpr))
+            }
             _ => {
+                eprintln!("format_expr(): unimplemented expression {}", node.kind());
                 todo!()
                 // let mut line = Line::new();
                 // line.add_element(self.format_straightforward(node, src).as_ref());
@@ -1125,6 +1174,7 @@ impl Formatter {
                 Expr::Aligned(aligned) => boolean_expr.add_expr(*aligned),
                 Expr::Primary(_) => todo!(),
                 Expr::Boolean(boolean) => boolean_expr.merge(*boolean),
+                Expr::SelectSub(_) => todo!(),
             }
 
             cursor.goto_next_sibling();
@@ -1139,9 +1189,35 @@ impl Formatter {
                 Expr::Aligned(aligned) => boolean_expr.add_expr(*aligned),
                 Expr::Primary(_) => todo!(),
                 Expr::Boolean(boolean) => boolean_expr.merge(*boolean),
+                Expr::SelectSub(_) => todo!(),
             }
         }
         Expr::Boolean(Box::new(boolean_expr))
+    }
+
+    fn format_select_subexpr(&mut self, node: Node, src: &str) -> SelectSubExpr {
+        // select_subexpression -> "(" select_statement ")"
+
+        let loc = node.range();
+
+        let mut cursor = node.walk(); // cursor -> select_subexpression
+
+        cursor.goto_first_child();
+        // cursor -> (
+        // 将来的には、かっこの数を数えるかもしれない
+
+        cursor.goto_next_sibling();
+        // cursor -> select_statement
+
+        self.nest();
+        let select_stmt_node = cursor.node();
+        let select_stmt = self.format_select_stmt(select_stmt_node, src);
+        self.unnest();
+
+        cursor.goto_next_sibling();
+        // cursor -> )
+
+        SelectSubExpr::new(select_stmt, loc, self.state.depth)
     }
 
     // 未対応の構文をそのまま表示する(dfs)
