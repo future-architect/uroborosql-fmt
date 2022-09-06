@@ -21,12 +21,14 @@ pub fn format_sql(src: &str) -> String {
 
     // formatを行い、バッファに結果を格納
     let mut res = formatter.format_sql(root_node, src.as_ref());
-    eprintln!("{:#?}", res);
+    // eprintln!("{:#?}", res);
 
-    match res.render() {
-        Ok(res) => res,
-        Err(e) => panic!("{:?}", e),
-    }
+    // match res.render() {
+    // Ok(res) => res,
+    // Err(e) => panic!("{:?}", e),
+    // }
+    format!("{:#?}", res)
+    // "".to_string()
 }
 
 #[derive(Debug)]
@@ -91,6 +93,14 @@ impl Line {
         self.add_element(as_str);
     }
 
+    // 引数の文字列が比較演算子かどうかを判定する
+    fn is_comp_op(op_str: &str) -> bool {
+        match op_str {
+            "<" | "<=" | "<>" | "!=" | "=" | ">" | ">=" | "~" | "!~" | "~*" | "!~*" => true,
+            _ => false,
+        }
+    }
+
     /// 演算子を追加する
     pub fn add_op(&mut self, op_str: &str) {
         // 比較演算子のみをそろえる
@@ -130,7 +140,7 @@ impl Line {
 //     Line(Line),
 // }
 
-// #[derive(Debug)]
+#[derive(Debug)]
 pub struct SeparatedLines {
     depth: usize,               // インデントの深さ
     separator: String,          // セパレータ(e.g., ',', AND)
@@ -167,6 +177,14 @@ impl SeparatedLines {
                 Some(maxlen) => Some(std::cmp::max(len, maxlen)),
                 None => Some(len),
             };
+        };
+
+        match self.loc {
+            Some(mut range) => {
+                range.end_point = expr.loc().end_point;
+                self.loc = Some(range);
+            }
+            None => self.loc = Some(expr.loc()),
         };
 
         self.contents.push(expr);
@@ -254,7 +272,8 @@ impl SeparatedLines {
     }
 }
 
-struct Statement {
+#[derive(Debug)]
+pub struct Statement {
     clauses: Vec<Clause>,
     loc: Option<Range>,
 }
@@ -271,6 +290,7 @@ impl Statement {
         match self.loc {
             Some(mut loc) => {
                 loc.end_point = clause.loc().end_point;
+                self.loc = Some(loc)
             }
             None => {
                 self.loc = Some(clause.loc());
@@ -280,7 +300,8 @@ impl Statement {
     }
 }
 
-struct Clause {
+#[derive(Debug)]
+pub struct Clause {
     keyword: String, // e.g., SELECT, FROM
     body: Option<SeparatedLines>,
     loc: Range,
@@ -319,9 +340,17 @@ pub trait Expr {
     fn to_primary(&self) -> Option<PrimaryExpr>;
 }
 
+use std::fmt::Debug;
+
+impl Debug for dyn Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "hogehoge")
+    }
+}
+
 // 次を入れるとエラーになる
-// #[derive(Debug)]
-struct AlignedExpr {
+#[derive(Debug)]
+pub struct AlignedExpr {
     lhs: Box<dyn Expr>,
     rhs: Option<Box<dyn Expr>>,
     op: Option<String>,
@@ -368,7 +397,8 @@ impl AlignedExpr {
     }
 }
 
-struct PrimaryExpr {
+#[derive(Clone, Debug)]
+pub struct PrimaryExpr {
     elements: Vec<String>,
     loc: Range,
     len: usize,
@@ -385,7 +415,7 @@ impl Expr for PrimaryExpr {
     }
 
     fn to_primary(&self) -> Option<PrimaryExpr> {
-        Some(*self)
+        Some(self.clone())
     }
 }
 
@@ -489,7 +519,7 @@ impl Formatter {
     fn format_source(&mut self, node: Node, src: &str) -> Statement {
         // source_file -> _statement*
 
-        let mut result = SeparatedLines::new(self.state.depth, "");
+        // let mut result = SeparatedLines::new(self.state.depth, "");
 
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
@@ -504,13 +534,14 @@ impl Formatter {
             let stmt_node = cursor.node();
 
             // 現状はselect_statementのみ
-            result.add_content(self.format_select_stmt(stmt_node, src));
-
+            let stmt = self.format_select_stmt(stmt_node, src);
+            return stmt;
             //select_statement以外も追加した場合この部分は削除
             // self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
         }
 
-        result
+        // result
+        todo!()
     }
 
     // SELECT文
@@ -528,13 +559,11 @@ impl Formatter {
 
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
+            // select_clauseを指す
             let select_clause_node = cursor.node();
 
             statement.add_clause(self.format_select_clause(select_clause_node, src));
         }
-        // else {
-        //     return ();
-        // }
 
         loop {
             // 次の兄弟へ移動
@@ -546,12 +575,12 @@ impl Formatter {
             }
 
             let clause_node = cursor.node();
+            // println!("{}", clause_node.kind());
 
             match clause_node.kind() {
                 "from_clause" => {
                     if cursor.goto_first_child() {
-                        // 最初は必ずFROM
-                        // line.add_element("FROM");
+                        // FROMを指している
 
                         let mut clause = Clause::new("FROM".to_string(), cursor.node().range());
 
@@ -564,22 +593,22 @@ impl Formatter {
                         if cursor.goto_next_sibling() {
                             let expr_node = cursor.node();
 
-                            separated_lines.add_content(self.format_aliasable_expr(expr_node, src));
-                        }
+                            separated_lines.add_expr(self.format_aliasable_expr(expr_node, src));
 
-                        // while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
-                        while cursor.goto_next_sibling() {
-                            let child_node = cursor.node();
+                            // while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
+                            while cursor.goto_next_sibling() {
+                                let child_node = cursor.node();
 
-                            match child_node.kind() {
-                                "," => {
-                                    continue;
-                                }
-                                _ => {
-                                    separated_lines
-                                        .add_content(self.format_aliasable_expr(child_node, src));
-                                }
-                            };
+                                match child_node.kind() {
+                                    "," => {
+                                        continue;
+                                    }
+                                    _ => {
+                                        separated_lines
+                                            .add_expr(self.format_aliasable_expr(child_node, src));
+                                    }
+                                };
+                            }
                         }
 
                         // result.add_content(Content::SeparatedLines(separated_lines));
@@ -587,18 +616,24 @@ impl Formatter {
 
                         cursor.goto_parent();
                         self.unnest();
+
+                        clause.set_body(separated_lines);
+
+                        statement.add_clause(clause);
                     }
                 }
                 // where_clause: $ => seq(kw("WHERE"), $._expression),
                 "where_clause" => {
                     if cursor.goto_first_child() {
-                        let mut line = Line::new();
-                        line.add_element("WHERE");
+                        // let mut line = Line::new();
+                        // line.add_element("WHERE");
+
+                        let mut clause = Clause::new("WHERE".to_string(), cursor.node().range());
 
                         self.nest();
                         let mut separated_lines = SeparatedLines::new(self.state.depth, "");
 
-                        result.add_content(Content::Line(line));
+                        // result.add_content(Content::Line(line));
 
                         // self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
                         cursor.goto_next_sibling();
@@ -606,13 +641,19 @@ impl Formatter {
                         //expr
                         let expr_node = cursor.node();
                         let expr = self.format_expr(expr_node, src);
-                        separated_lines.add_content(expr);
+                        let loc = expr.loc();
+                        let aligned = AlignedExpr::new(expr, loc);
+                        separated_lines.add_expr(aligned);
                         // buf.push_str(bool_expr.as_str());
 
-                        eprintln!("{:#?}", separated_lines);
-                        result.add_content(Content::SeparatedLines(separated_lines));
+                        // eprintln!("{:#?}", separated_lines);
+                        // result.add_content(Content::SeparatedLines(separated_lines));
                         self.unnest();
                         cursor.goto_parent();
+
+                        clause.set_body(separated_lines);
+
+                        statement.add_clause(clause);
                     }
                 }
                 _ => {
@@ -621,7 +662,7 @@ impl Formatter {
             }
         }
 
-        Content::SeparatedLines(result)
+        statement
     }
 
     // SELECT句
@@ -638,18 +679,22 @@ impl Formatter {
                     )
                 )?
         */
-        let mut cursor = node.walk();
+        let mut cursor = node.walk(); // select_clauseノードのはず
 
         let mut clause = Clause::new("SELECT".to_string(), node.range());
 
         if cursor.goto_first_child() {
+            // SELECTに移動
             // select_clauseの最初の子供は必ず"SELECT"であるはず
+            // println!("expect SELECT, acutal {}", cursor.node().kind());
 
             // if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
             cursor.goto_next_sibling();
+            // select_caluse_body
+            // println!("expect select_clause_body, actual {}", cursor.node().kind());
 
             // select_clause_bodyをカーソルが指している
-            let body = self.format_select_clause_body(node, src);
+            let body = self.format_select_clause_body(cursor.node(), src);
             clause.set_body(body);
         }
 
@@ -658,6 +703,7 @@ impl Formatter {
 
     fn format_select_clause_body(&mut self, node: Node, src: &str) -> SeparatedLines {
         let mut cursor = node.walk();
+        // println!("select_clause_body, {}", cursor.node().kind());
 
         cursor.goto_first_child();
 
@@ -711,8 +757,9 @@ impl Formatter {
 
                 // _expression
                 let lhs_expr = self.format_expr(cursor.node(), src);
+                let loc = lhs_expr.loc();
 
-                let mut aligned = AlignedExpr::new(lhs_expr, lhs_expr.loc());
+                let mut aligned = AlignedExpr::new(lhs_expr, loc);
 
                 // ("AS"? identifier)?
                 if cursor.goto_next_sibling() && cursor.node().kind() == "AS" {
@@ -737,8 +784,9 @@ impl Formatter {
 
                 let mut cursor = node.walk();
                 let expr = self.format_expr(cursor.node(), src);
+                let loc = expr.loc();
 
-                let mut aligned = AlignedExpr::new(expr, expr.loc());
+                let mut aligned = AlignedExpr::new(expr, loc);
 
                 aligned
             }
@@ -813,7 +861,8 @@ impl Formatter {
 
                 if Self::is_comp_op(op_str) {
                     // 比較演算子 -> AlignedExpr
-                    let mut aligned = AlignedExpr::new(lhs_expr, lhs_expr.loc());
+                    let loc = lhs_expr.loc();
+                    let mut aligned = AlignedExpr::new(lhs_expr, loc);
                     aligned.add_rhs(op_str.to_string(), rhs_expr);
 
                     Box::new(aligned)
