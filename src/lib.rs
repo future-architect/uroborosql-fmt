@@ -20,15 +20,13 @@ pub fn format_sql(src: &str) -> String {
     let mut formatter = Formatter::new();
 
     // formatを行い、バッファに結果を格納
-    let res = formatter.format_sql(root_node, src.as_ref());
-    // eprintln!("{:#?}", res);
+    let mut res = formatter.format_sql(root_node, src.as_ref());
+    eprintln!("{:#?}", res);
 
-    // match res.render() {
-    // Ok(res) => res,
-    // Err(e) => panic!("{:?}", e),
-    // }
-    format!("{:#?}", res)
-    // "".to_string()
+    match res.render() {
+        Ok(res) => res,
+        Err(e) => panic!("{:?}", e),
+    }
 }
 
 #[derive(Debug)]
@@ -191,13 +189,35 @@ impl SeparatedLines {
     }
 
     /// AS句で揃えたものを返す
-    pub fn render(&mut self) -> Result<String, Error> {
-        todo!()
-        // let mut result = String::new();
+    pub fn render(&self) -> Result<String, Error> {
+        let mut result = String::new();
 
-        // // 再帰的に再構成した木を見る
+        // 再帰的に再構成した木を見る
 
-        // // for content in self.contents.clone() {
+        let mut is_first_line = true;
+
+        for aligned in (&self.contents).into_iter() {
+            // ネストは後で
+
+            if is_first_line {
+                is_first_line = false;
+                result.push_str("\t")
+            } else {
+                result.push_str(&self.separator);
+                result.push_str("\t");
+            }
+
+            match aligned.render_align(self.max_len_to_op) {
+                Ok(formatted) => {
+                    result.push_str(&formatted);
+                    result.push_str("\n")
+                }
+                Err(e) => return Err(e),
+            };
+        }
+
+        Ok(result)
+        // for content in self.contents.clone() {
         // for i in 0..self.contents.len() {
         //     let content = self.contents.get(i).unwrap().clone();
         //     match content {
@@ -298,6 +318,24 @@ impl Statement {
         }
         self.clauses.push(clause);
     }
+
+    pub fn render(&self) -> Result<String, Error> {
+        // clause1
+        // ...
+        // clausen
+
+        let mut result = String::new();
+        for i in 0..self.clauses.len() {
+            // 後でイテレータで書き直す
+            let clause = self.clauses.get(i).unwrap();
+            match clause.render() {
+                Ok(formatted_clause) => result.push_str(&formatted_clause),
+                Err(_) => return Err(Error::ParseError),
+            }
+        }
+
+        Ok(result)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -324,6 +362,26 @@ impl Clause {
     pub fn set_body(&mut self, body: SeparatedLines) {
         self.loc.end_point = body.loc().unwrap().end_point;
         self.body = Some(body);
+    }
+
+    pub fn render(&self) -> Result<String, Error> {
+        // kw
+        // body...
+        let mut result = String::new();
+        result.push_str(&self.keyword);
+
+        match &self.body {
+            Some(sl) => match sl.render() {
+                Ok(formatted_body) => {
+                    result.push_str("\n");
+                    result.push_str(&formatted_body);
+                }
+                Err(e) => return Err(e),
+            },
+            None => (),
+        };
+
+        Ok(result)
     }
 }
 
@@ -385,6 +443,39 @@ impl AlignedExpr {
             Expr::Boolean(_) => todo!(),
         }
     }
+
+    pub fn render_align(&self, max_len_to_op: Option<usize>) -> Result<String, Error> {
+        let mut result = String::new();
+        match self.lhs.render() {
+            Ok(formatted) => result.push_str(&formatted),
+            Err(e) => return Err(e),
+        };
+
+        match (&self.op, max_len_to_op) {
+            (Some(op), Some(max_len)) => {
+                let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
+
+                // ここもイテレータで書きたい
+                for _ in 0..tab_num {
+                    result.push_str("\t");
+                }
+                result.push_str("\t");
+                result.push_str(&op);
+                result.push_str("\t");
+
+                match &self.rhs {
+                    Some(rhs) => {
+                        let formatted = rhs.render().unwrap();
+                        result.push_str(&formatted);
+                    }
+                    _ => (),
+                }
+
+                Ok(result)
+            }
+            (_, _) => Ok(result),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -436,7 +527,7 @@ impl PrimaryExpr {
 
     // lineの結合
     pub fn append(&mut self, primary: PrimaryExpr) {
-        self.elements.append(&mut primary.element().clone())
+        self.elements.append(&mut primary.elements().clone())
     }
 }
 
