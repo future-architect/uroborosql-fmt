@@ -902,7 +902,7 @@ impl Formatter {
 
         let expr_node = cursor.node();
 
-        let mut sepapated_lines = SeparatedLines::new(self.state.depth, ",");
+        let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
 
         let aligned = self.format_aliasable_expr(expr_node, src);
         separated_lines.add_expr(aligned);
