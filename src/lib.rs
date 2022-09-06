@@ -1006,10 +1006,14 @@ impl Formatter {
                 let mut aligned = AlignedExpr::new(lhs_expr, lhs_expr_loc);
 
                 // ("AS"? identifier)?
-                if cursor.goto_next_sibling() && cursor.node().kind() == "AS" {
+                if cursor.goto_next_sibling() {
+                    if cursor.node().kind() == "AS" {
+                        cursor.goto_next_sibling();
+                    }
+
                     // cursor -> AS ("AS"が省略されることは現状考慮していない)
 
-                    //左辺に移動
+                    //右辺に移動
                     cursor.goto_next_sibling();
                     // cursor -> identifier
 
