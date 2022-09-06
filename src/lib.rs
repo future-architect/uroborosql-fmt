@@ -406,15 +406,12 @@ impl AlignedExpr {
 
                 (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
 
-                match is_omit_op {
-                    true => {
-                        result.push_str("\t");
-                    }
-                    false => {
-                        result.push_str("\t");
-                        result.push_str(&op);
-                        result.push_str("\t");
-                    }
+                if is_omit_op {
+                    result.push_str("\t");
+                } else {
+                    result.push_str("\t");
+                    result.push_str(&op);
+                    result.push_str("\t");
                 }
 
                 //右辺をrender
