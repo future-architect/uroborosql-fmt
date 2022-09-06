@@ -309,10 +309,8 @@ impl AlignedExpr {
             (Some(op), Some(max_len)) => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
 
-                // ここもイテレータで書きたい
-                for _ in 0..tab_num {
-                    result.push_str("\t");
-                }
+                (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
+
                 result.push_str("\t");
                 result.push_str(&op);
                 result.push_str("\t");
