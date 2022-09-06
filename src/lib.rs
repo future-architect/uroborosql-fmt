@@ -101,6 +101,10 @@ impl SeparatedLines {
         for aligned in (&self.contents).into_iter() {
             // ネストは後で
 
+            (0..self.depth)
+                .into_iter()
+                .for_each(|_| result.push_str("\t"));
+
             if is_first_line {
                 is_first_line = false;
                 result.push_str("\t")
@@ -128,13 +132,15 @@ impl SeparatedLines {
 pub struct Statement {
     clauses: Vec<Clause>,
     loc: Option<Range>,
+    depth: usize,
 }
 
 impl Statement {
-    pub fn new() -> Statement {
+    pub fn new(depth: usize) -> Statement {
         Statement {
             clauses: vec![] as Vec<Clause>,
             loc: None,
+            depth,
         }
     }
 
@@ -227,14 +233,16 @@ pub struct Clause {
     keyword: String, // e.g., SELECT, FROM
     body: Option<Body>,
     loc: Range,
+    depth: usize,
 }
 
 impl Clause {
-    pub fn new(keyword: String, loc: Range) -> Clause {
+    pub fn new(keyword: String, loc: Range, depth: usize) -> Clause {
         Clause {
             keyword,
             body: None,
             loc,
+            depth,
         }
     }
 
@@ -259,6 +267,11 @@ impl Clause {
         // kw
         // body...
         let mut result = String::new();
+
+        (0..self.depth)
+            .into_iter()
+            .for_each(|_| result.push_str("\t"));
+
         result.push_str(&self.keyword);
 
         match &self.body {
@@ -583,6 +596,9 @@ impl BooleanExpr {
 
         for ContentWithSep { separator, content } in (&self.contents).into_iter() {
             // ネストは後で
+            (0..self.depth)
+                .into_iter()
+                .for_each(|_| result.push_str("\t"));
 
             if is_first_line {
                 is_first_line = false;
@@ -708,7 +724,7 @@ impl Formatter {
                 where_clause?
         */
 
-        let mut statement = Statement::new();
+        let mut statement = Statement::new(self.state.depth);
 
         let mut cursor = node.walk(); // cursor -> select_statement
         if cursor.goto_first_child() {
@@ -733,10 +749,8 @@ impl Formatter {
                     if cursor.goto_first_child() {
                         // cursor -> FROM
                         let from_node = cursor.node();
-
-                        let mut clause = Clause::new("FROM".to_string(), from_node.range());
-
-                        self.nest();
+                        let mut clause =
+                            Clause::new("FROM".to_string(), from_node.range(), self.state.depth);
 
                         let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
 
@@ -782,7 +796,6 @@ impl Formatter {
                         }
 
                         cursor.goto_parent();
-                        self.unnest();
 
                         clause.set_body(Body::SepLines(separated_lines));
 
@@ -794,9 +807,9 @@ impl Formatter {
                     if cursor.goto_first_child() {
                         // cursor -> WHERE
                         let where_node = cursor.node();
-                        let mut clause = Clause::new("WHERE".to_string(), where_node.range());
+                        let mut clause =
+                            Clause::new("WHERE".to_string(), where_node.range(), self.state.depth);
 
-                        self.nest();
                         let mut body: Body;
                         // let mut separated_lines = SeparatedLines::new(self.state.depth, "");
 
@@ -823,7 +836,6 @@ impl Formatter {
                             Expr::Boolean(boolean) => body = Body::BooleanExpr(*boolean),
                         }
 
-                        self.unnest();
                         cursor.goto_parent();
 
                         clause.set_body(body);
@@ -862,7 +874,7 @@ impl Formatter {
         */
         let mut cursor = node.walk(); // cursor -> select_clause
 
-        let mut clause = Clause::new("SELECT".to_string(), node.range());
+        let mut clause = Clause::new("SELECT".to_string(), node.range(), self.state.depth);
 
         if cursor.goto_first_child() {
             // cursor -> SELECT
@@ -890,13 +902,10 @@ impl Formatter {
 
         let expr_node = cursor.node();
 
-        self.nest();
-        let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
+        let mut sepapated_lines = SeparatedLines::new(self.state.depth, ",");
 
         let aligned = self.format_aliasable_expr(expr_node, src);
         separated_lines.add_expr(aligned);
-
-        self.unnest();
 
         // (',' _aliasable_expression)*
         // while self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
