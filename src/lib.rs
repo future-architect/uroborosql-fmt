@@ -461,6 +461,11 @@ impl AlignedExpr {
 
     pub fn render_align(&self, max_len_to_op: Option<usize>) -> Result<String, Error> {
         let mut result = String::new();
+        match self.lhs.render() {
+            Ok(formatted) => result.push_str(&formatted),
+            Err(e) => return Err(e),
+        };
+
         match (&self.op, max_len_to_op) {
             (Some(op), Some(max_len)) => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
@@ -469,6 +474,7 @@ impl AlignedExpr {
                 for _ in 0..tab_num {
                     result.push_str("\t");
                 }
+                result.push_str("\t");
                 result.push_str(&op);
                 result.push_str("\t");
 
@@ -482,7 +488,7 @@ impl AlignedExpr {
 
                 Ok(result)
             }
-            (_, _) => self.lhs.render(),
+            (_, _) => Ok(result),
         }
     }
 }
@@ -509,6 +515,8 @@ impl Expr for PrimaryExpr {
     }
 
     fn render(&self) -> Result<String, Error> {
+        // elem1 \t elem2 \t ... \t elemn
+
         let mut result = String::new();
         let mut is_first_elem = true;
         for elem in (&self.elements).into_iter() {
