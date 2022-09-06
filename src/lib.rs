@@ -20,7 +20,7 @@ pub fn format_sql(src: &str) -> String {
     let mut formatter = Formatter::new();
 
     // formatを行い、バッファに結果を格納
-    let mut res = formatter.format_sql(root_node, src.as_ref());
+    let res = formatter.format_sql(root_node, src.as_ref());
     eprintln!("{:#?}", res);
 
     match res.render() {
@@ -207,7 +207,7 @@ impl SeparatedLines {
                 result.push_str("\t");
             }
 
-            match aligned.render_align(self.max_len_to_op) {
+            match aligned.render(self.max_len_to_op) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
                     result.push_str("\n")
@@ -400,6 +400,19 @@ impl Expr {
             Expr::Boolean(sep_lines) => sep_lines.loc().unwrap(),
         }
     }
+
+    fn render(&self) -> Result<String, Error> {
+        eprintln!("{:#?}", self);
+
+        match self {
+            Expr::Aligned(aligned) => {
+                todo!();
+                // aligned.render();
+            }
+            Expr::Primary(primary) => primary.render(),
+            Expr::Boolean(sep_lines) => sep_lines.render(),
+        }
+    }
 }
 
 // 次を入れるとエラーになる
@@ -444,8 +457,10 @@ impl AlignedExpr {
         }
     }
 
-    pub fn render_align(&self, max_len_to_op: Option<usize>) -> Result<String, Error> {
+    pub fn render(&self, max_len_to_op: Option<usize>) -> Result<String, Error> {
         let mut result = String::new();
+
+        //左辺をrender
         match self.lhs.render() {
             Ok(formatted) => result.push_str(&formatted),
             Err(e) => return Err(e),
@@ -453,25 +468,32 @@ impl AlignedExpr {
 
         match (&self.op, max_len_to_op) {
             (Some(op), Some(max_len)) => {
-                let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
+                match &self.lhs {
+                    Expr::Aligned(_) => todo!(),
+                    Expr::Primary(lhs) => {
+                        let tab_num = (max_len - lhs.len()) / TAB_SIZE;
 
-                // ここもイテレータで書きたい
-                for _ in 0..tab_num {
-                    result.push_str("\t");
-                }
-                result.push_str("\t");
-                result.push_str(&op);
-                result.push_str("\t");
+                        // ここもイテレータで書きたい
+                        for _ in 0..tab_num {
+                            result.push_str("\t");
+                        }
+                        result.push_str("\t");
+                        result.push_str(&op);
+                        result.push_str("\t");
 
-                match &self.rhs {
-                    Some(rhs) => {
-                        let formatted = rhs.render().unwrap();
-                        result.push_str(&formatted);
+                        //右辺をrender
+                        match &self.rhs {
+                            Some(rhs) => {
+                                let formatted = rhs.render().unwrap();
+                                result.push_str(&formatted);
+                            }
+                            _ => (),
+                        }
+
+                        Ok(result)
                     }
-                    _ => (),
+                    Expr::Boolean(_) => todo!(),
                 }
-
-                Ok(result)
             }
             (_, _) => Ok(result),
         }
@@ -504,7 +526,7 @@ impl PrimaryExpr {
         self.len
     }
 
-    pub fn element(&self) -> &Vec<String> {
+    pub fn elements(&self) -> &Vec<String> {
         &self.elements
     }
 
@@ -525,9 +547,14 @@ impl PrimaryExpr {
         self.elements.push(element.to_ascii_uppercase());
     }
 
-    // lineの結合
+    // PrimaryExprの結合
     pub fn append(&mut self, primary: PrimaryExpr) {
         self.elements.append(&mut primary.elements().clone())
+    }
+
+    pub fn render(&self) -> Result<String, Error> {
+        let upper_elements: Vec<String> = self.elements.iter().map(|x| x.to_uppercase()).collect();
+        Ok(upper_elements.join("\t"))
     }
 }
 
