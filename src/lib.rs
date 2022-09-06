@@ -580,7 +580,7 @@ impl SelectSubExpr {
             Ok(formatted) => {
                 result.push_str(&formatted);
 
-                (0..(self.depth - 1))
+                (0..self.depth)
                     .into_iter()
                     .for_each(|_| result.push_str("\t"));
 
@@ -1017,13 +1017,12 @@ impl Formatter {
             }
             "select_subexpression" => {
                 self.nest();
-                self.nest();
                 let select_subexpr = self.format_select_subexpr(node, src);
-                self.unnest();
                 self.unnest();
                 Expr::SelectSub(Box::new(select_subexpr))
             }
             _ => {
+                eprintln!("format_expr(): unimplemented expression {}", node.kind());
                 todo!()
                 // let mut line = Line::new();
                 // line.add_element(self.format_straightforward(node, src).as_ref());
@@ -1091,8 +1090,10 @@ impl Formatter {
         cursor.goto_next_sibling();
         // cursor -> select_statement
 
+        self.nest();
         let select_stmt_node = cursor.node();
         let select_stmt = self.format_select_stmt(select_stmt_node, src);
+        self.unnest();
 
         cursor.goto_next_sibling();
         // cursor -> )
