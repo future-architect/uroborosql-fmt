@@ -7,11 +7,11 @@ SELECT
 			TAB2
 	)
 FROM
-	LONGLONGTABLE	AS	L
+	LONGLONGTABLE	L
 ,	(
 		SELECT
 			B
 		,	C
 		FROM
 			TAB1
-	)				AS	BC
+	)				BC
