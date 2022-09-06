@@ -138,6 +138,10 @@ impl Statement {
         }
     }
 
+    pub fn loc(&self) -> Option<Range> {
+        self.loc
+    }
+
     // 文に句を追加する
     pub fn add_clause(&mut self, clause: Clause) {
         match self.loc {
@@ -677,17 +681,22 @@ impl Formatter {
             let mut stmt = self.format_select_stmt(stmt_node, src);
 
             if cursor.goto_next_sibling() && cursor.node().kind() == "comment" {
-                stmt.add_comment_to_child(Comment::new(
-                    cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
-                    cursor.node().range(),
-                ));
+                let comment_loc = cursor.node().range();
+
+                //同じ行の場合
+                if comment_loc.start_point.row == stmt.loc().unwrap().end_point.row {
+                    stmt.add_comment_to_child(Comment::new(
+                        cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                        comment_loc,
+                    ));
+                } else {
+                    //違う行の場合
+                }
             }
-
-            return stmt;
+            stmt
+        } else {
+            todo!()
         }
-
-        // result
-        todo!()
     }
 
     // SELECT文
@@ -747,13 +756,22 @@ impl Formatter {
                                         continue;
                                     }
                                     "comment" => {
-                                        separated_lines.add_comment_to_child(Comment::new(
-                                            child_node
-                                                .utf8_text(src.as_bytes())
-                                                .unwrap()
-                                                .to_string(),
-                                            child_node.range(),
-                                        ));
+                                        let comment_loc = child_node.range();
+
+                                        //同じ行の場合
+                                        if comment_loc.start_point.row
+                                            == separated_lines.loc().unwrap().end_point.row
+                                        {
+                                            separated_lines.add_comment_to_child(Comment::new(
+                                                child_node
+                                                    .utf8_text(src.as_bytes())
+                                                    .unwrap()
+                                                    .to_string(),
+                                                comment_loc,
+                                            ));
+                                        } else {
+                                            //違う行の場合
+                                        }
                                     }
                                     _ => {
                                         separated_lines
@@ -814,10 +832,17 @@ impl Formatter {
                     }
                 }
                 "comment" => {
-                    statement.add_comment_to_child(Comment::new(
-                        clause_node.utf8_text(src.as_bytes()).unwrap().to_string(),
-                        clause_node.range(),
-                    ));
+                    let comment_loc = clause_node.range();
+
+                    //同じ行の場合
+                    if comment_loc.start_point.row == statement.loc().unwrap().end_point.row {
+                        statement.add_comment_to_child(Comment::new(
+                            clause_node.utf8_text(src.as_bytes()).unwrap().to_string(),
+                            clause_node.range(),
+                        ));
+                    } else {
+                        //違う行の場合
+                    }
                 }
                 _ => {
                     break;
