@@ -152,6 +152,11 @@ impl Statement {
         self.clauses.push(clause);
     }
 
+    pub fn add_comment_to_child(&mut self, comment: Comment) {
+        let last_idx = self.clauses.len() - 1;
+        self.clauses[last_idx].add_comment_to_child(comment);
+    }
+
     pub fn render(&self) -> Result<String, Error> {
         // clause1
         // ...
@@ -669,7 +674,15 @@ impl Formatter {
 
             // 現状はselect_statementのみ
             // 文が増えたらマッチ式で分岐させる
-            let stmt = self.format_select_stmt(stmt_node, src);
+            let mut stmt = self.format_select_stmt(stmt_node, src);
+
+            if cursor.goto_next_sibling() && cursor.node().kind() == "comment" {
+                stmt.add_comment_to_child(Comment::new(
+                    cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                    cursor.node().range(),
+                ));
+            }
+
             return stmt;
         }
 
@@ -799,6 +812,12 @@ impl Formatter {
 
                         statement.add_clause(clause);
                     }
+                }
+                "comment" => {
+                    statement.add_comment_to_child(Comment::new(
+                        clause_node.utf8_text(src.as_bytes()).unwrap().to_string(),
+                        clause_node.range(),
+                    ));
                 }
                 _ => {
                     break;

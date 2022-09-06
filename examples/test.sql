@@ -1,5 +1,7 @@
 select a, --test
-b
+b --test
 from tab1 --test
-, tab2
+, tab2 --test
 where tab1.num = 1
+
+--test
