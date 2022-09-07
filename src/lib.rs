@@ -445,7 +445,7 @@ pub struct PrimaryExpr {
     elements: Vec<String>,
     loc: Range,
     len: usize,
-    // head_comment: Option<String>,
+    head_comment: Option<String>,
 }
 
 impl PrimaryExpr {
@@ -455,6 +455,7 @@ impl PrimaryExpr {
             elements: vec![element],
             loc,
             len,
+            head_comment: None,
         }
     }
 
@@ -468,6 +469,13 @@ impl PrimaryExpr {
 
     pub fn elements(&self) -> &Vec<String> {
         &self.elements
+    }
+
+    pub fn set_head_comment(&mut self, comment: Comment) {
+        let Comment { comment, loc } = comment;
+
+        self.head_comment = Some(comment);
+        self.loc.start_point = loc.start_point;
     }
 
     /// elementsにelementを追加する
@@ -494,7 +502,13 @@ impl PrimaryExpr {
 
     pub fn render(&self) -> Result<String, Error> {
         let upper_elements: Vec<String> = self.elements.iter().map(|x| x.to_uppercase()).collect();
-        Ok(upper_elements.join("\t"))
+
+        let elements_str = upper_elements.join("\t");
+
+        match self.head_comment.as_ref() {
+            Some(comment) => Ok(format!("{}{}", comment, elements_str)),
+            None => Ok(elements_str),
+        }
     }
 }
 
@@ -734,14 +748,6 @@ impl Formatter {
 
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
-            //コメントノードであればbufに追記していく
-            // while cursor.node().kind() == "comment" {
-            //     let comment_node = cursor.node();
-            //     buf.push_str(comment_node.utf8_text(src.as_bytes()).unwrap());
-            //     buf.push_str("\n");
-            //     cursor.goto_next_sibling();
-            // }
-
             let stmt_node = cursor.node();
 
             // 現状はselect_statementのみ
@@ -1058,7 +1064,6 @@ impl Formatter {
     // 式
     fn format_expr(&mut self, node: Node, src: &str) -> Expr {
         let mut cursor = node.walk();
-        if cursor.node().kind() == "comment" {}
 
         match cursor.node().kind() {
             "dotted_name" => {
@@ -1069,23 +1074,24 @@ impl Formatter {
                 let range = node.range();
 
                 cursor.goto_first_child();
+
                 // cursor -> identifier
 
-                let mut result = String::new();
+                let mut dotted_name = String::new();
 
                 let id_node = cursor.node();
-                result.push_str(id_node.utf8_text(src.as_bytes()).unwrap());
+                dotted_name.push_str(id_node.utf8_text(src.as_bytes()).unwrap());
 
                 // while self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src) {
                 while cursor.goto_next_sibling() {
                     // cursor -> . または cursor -> identifier
                     match cursor.node().kind() {
-                        "." => result.push_str("."),
-                        _ => result.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
+                        "." => dotted_name.push_str("."),
+                        _ => dotted_name.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
                     };
                 }
 
-                let primary = PrimaryExpr::new(result, range);
+                let mut primary = PrimaryExpr::new(dotted_name, range);
 
                 Expr::Primary(Box::new(primary))
             }
@@ -1110,9 +1116,30 @@ impl Formatter {
                 cursor.goto_next_sibling();
                 // cursor -> _expression
 
+                let mut head_comment: Option<Comment> = None;
+                if cursor.node().kind() == "comment" {
+                    let comment_loc = cursor.node().range();
+                    head_comment = Some(Comment {
+                        comment: cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                        loc: comment_loc,
+                    });
+
+                    cursor.goto_next_sibling();
+                }
+
                 // 右辺
                 let rhs_node = cursor.node();
-                let rhs_expr = self.format_expr(rhs_node, src);
+                let mut rhs_expr = self.format_expr(rhs_node, src);
+
+                match head_comment {
+                    Some(comment) => match &mut rhs_expr {
+                        Expr::Aligned(_) => todo!(),
+                        Expr::Primary(primary) => primary.set_head_comment(comment),
+                        Expr::Boolean(_) => todo!(),
+                        Expr::SelectSub(_) => todo!(),
+                    },
+                    None => (),
+                }
 
                 if Self::is_comp_op(op_str) {
                     // 比較演算子 -> AlignedExpr
@@ -1146,10 +1173,11 @@ impl Formatter {
             "boolean_expression" => self.format_bool_expr(node, src),
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
-                let primary = PrimaryExpr::new(
+                let mut primary = PrimaryExpr::new(
                     node.utf8_text(src.as_bytes()).unwrap().to_string(),
                     node.range(),
                 );
+
                 Expr::Primary(Box::new(primary))
             }
             "select_subexpression" => {
@@ -1159,11 +1187,12 @@ impl Formatter {
                 Expr::SelectSub(Box::new(select_subexpr))
             }
             _ => {
-                eprintln!("format_expr(): unimplemented expression {}", node.kind());
+                eprintln!(
+                    "format_expr(): unimplemented expression {}, {:#?}",
+                    cursor.node().kind(),
+                    cursor.node().range()
+                );
                 todo!()
-                // let mut line = Line::new();
-                // line.add_element(self.format_straightforward(node, src).as_ref());
-                // res = Content::Line(line);
             }
         }
     }
@@ -1185,7 +1214,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         if cursor.node().kind() == "NOT" {
-            // 未対応
+            todo!();
         } else {
             let left = self.format_expr(cursor.node(), src);
             match left {
@@ -1196,6 +1225,15 @@ impl Formatter {
             }
 
             cursor.goto_next_sibling();
+
+            if cursor.node().kind() == "comment" {
+                let comment_loc = cursor.node().range();
+                boolean_expr.add_comment_to_child(Comment::new(
+                    cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                    comment_loc,
+                ));
+                cursor.goto_next_sibling();
+            }
 
             let sep = cursor.node().kind();
             boolean_expr.set_default_separator(sep.to_string());
