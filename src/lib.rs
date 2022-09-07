@@ -414,16 +414,13 @@ impl AlignedExpr {
 
     // 演算子から末尾コメントまでの長さを返す
     pub fn len_to_comment(&self, max_len_to_op: Option<usize>) -> Option<usize> {
-        match &self.tail_comment {
-            Some(_) => match (max_len_to_op, &self.rhs) {
-                // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
-                (Some(_), Some(rhs)) => Some(rhs.len()),
-                // コメント以外にそろえる対象があり、この式は右辺を持たない場合は0
-                (Some(_), None) => Some(0),
-                // そろえる対象がコメントだけであるとき、左辺の長さ
-                _ => Some(self.lhs.len()),
-            },
-            None => None,
+        match (max_len_to_op, &self.rhs) {
+            // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
+            (Some(_), Some(rhs)) => Some(rhs.len()),
+            // コメント以外にそろえる対象があり、この式は右辺を持たない場合は0
+            (Some(_), None) => Some(0),
+            // そろえる対象がコメントだけであるとき、左辺の長さ
+            _ => Some(self.lhs.len()),
         }
     }
 
@@ -540,8 +537,14 @@ impl PrimaryExpr {
     pub fn set_head_comment(&mut self, comment: Comment) {
         let Comment { comment, loc } = comment;
 
-        self.head_comment = Some(comment);
+        self.head_comment = Some(comment.clone());
         self.loc.start_point = loc.start_point;
+
+        let first_element_len = self.elements()[0].len() / TAB_SIZE + 1;
+        let head_comment_and_first_element_len =
+            (self.elements()[0].len() + comment.len()) / TAB_SIZE + 1;
+
+        self.len += TAB_SIZE * (head_comment_and_first_element_len - first_element_len);
     }
 
     /// elementsにelementを追加する
