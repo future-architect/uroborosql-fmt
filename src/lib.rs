@@ -1,4 +1,4 @@
-use tree_sitter::{Node, Range, TreeCursor};
+use tree_sitter::{Node, Range};
 
 const TAB_SIZE: usize = 4;
 
@@ -44,8 +44,6 @@ pub struct SeparatedLines {
     has_op: bool,     // 演算子があるかどうか
     is_omit_op: bool, // render時にopを省略
 }
-
-// BooleanExpr: Expr
 
 impl SeparatedLines {
     pub fn new(depth: usize, sep: &str, is_omit_op: bool) -> SeparatedLines {
@@ -152,15 +150,13 @@ impl SeparatedLines {
 pub struct Statement {
     clauses: Vec<Clause>,
     loc: Option<Range>,
-    depth: usize,
 }
 
 impl Statement {
-    pub fn new(depth: usize) -> Statement {
+    pub fn new() -> Statement {
         Statement {
             clauses: vec![] as Vec<Clause>,
             loc: None,
-            depth,
         }
     }
 
@@ -330,7 +326,7 @@ impl Expr {
 
     fn render(&self) -> Result<String, Error> {
         match self {
-            Expr::Aligned(aligned) => {
+            Expr::Aligned(_aligned) => {
                 todo!();
                 // aligned.render();
             }
@@ -352,7 +348,7 @@ impl Expr {
     pub fn add_comment_to_child(&mut self, comment: Comment) {
         match self {
             Expr::Aligned(aligned) => aligned.set_tail_comment(comment),
-            Expr::Primary(primary) => (),
+            Expr::Primary(_primary) => (),
             Expr::Boolean(boolean) => boolean.add_comment_to_child(comment),
             Expr::SelectSub(select_sub) => select_sub.add_comment_to_child(comment),
         }
@@ -385,10 +381,9 @@ impl AlignedExpr {
     }
 
     pub fn set_tail_comment(&mut self, comment: Comment) {
-        if let Comment { comment, loc } = comment {
-            self.tail_comment = Some(comment.clone());
-            self.loc.end_point = loc.end_point;
-        }
+        let Comment { comment, loc } = comment;
+        self.tail_comment = Some(comment.clone());
+        self.loc.end_point = loc.end_point;
     }
 
     // 演算子と右辺の式を追加する
@@ -687,7 +682,11 @@ impl BooleanExpr {
 
         // コメントまでの最長の長さを計算する
         let mut max_len_to_comment = None;
-        for ContentWithSep { separator, content } in (&self.contents).into_iter() {
+        for ContentWithSep {
+            separator: _,
+            content,
+        } in (&self.contents).into_iter()
+        {
             match (&max_len_to_comment, content.len_to_comment(max_len_to_op)) {
                 (Some(max_len), Some(len)) => {
                     max_len_to_comment = Some(std::cmp::max(*max_len, len));
@@ -864,7 +863,7 @@ impl Formatter {
                 where_clause?
         */
 
-        let mut statement = Statement::new(self.state.depth);
+        let mut statement = Statement::new();
 
         let mut cursor = node.walk(); // cursor -> select_statement
         if cursor.goto_first_child() {
@@ -950,16 +949,13 @@ impl Formatter {
                         let mut clause =
                             Clause::new("WHERE".to_string(), where_node.range(), self.state.depth);
 
-                        let mut body: Body;
-                        // let mut separated_lines = SeparatedLines::new(self.state.depth, "");
+                        let body: Body;
 
-                        // self.goto_not_comment_next_sibiling(buf, &mut cursor, src);
                         cursor.goto_next_sibling();
                         // cursor -> _expression
 
                         let expr_node = cursor.node();
                         let expr = self.format_expr(expr_node, src);
-                        let expr_loc = expr.loc();
 
                         match expr {
                             Expr::Aligned(aligned) => {
@@ -970,12 +966,9 @@ impl Formatter {
                             }
                             Expr::Primary(_) => {
                                 todo!();
-                                // let mut separated_lines = SeparatedLines::new(self.state.depth, "");
-                                // separated_lines.add_expr(AlignedExpr::new(expr, expr_loc));
-                                // body = Body::SepLines(separated_lines);
                             }
                             Expr::Boolean(boolean) => body = Body::BooleanExpr(*boolean),
-                            Expr::SelectSub(select_sub) => todo!(),
+                            Expr::SelectSub(_select_sub) => todo!(),
                         }
 
                         cursor.goto_parent();
@@ -1173,7 +1166,7 @@ impl Formatter {
                     };
                 }
 
-                let mut primary = PrimaryExpr::new(dotted_name, range);
+                let primary = PrimaryExpr::new(dotted_name, range);
 
                 Expr::Primary(Box::new(primary))
             }
@@ -1255,7 +1248,7 @@ impl Formatter {
             "boolean_expression" => self.format_bool_expr(node, src),
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
-                let mut primary = PrimaryExpr::new(
+                let primary = PrimaryExpr::new(
                     node.utf8_text(src.as_bytes()).unwrap().to_string(),
                     node.range(),
                 );
@@ -1356,36 +1349,6 @@ impl Formatter {
         // cursor -> )
 
         SelectSubExpr::new(select_stmt, loc, self.state.depth)
-    }
-
-    // 未対応の構文をそのまま表示する(dfs)
-    fn format_straightforward(&mut self, node: Node, src: &str) -> String {
-        let mut result = String::new();
-
-        // 葉である場合resultに追加
-        if node.child_count() <= 0 {
-            result.push_str(
-                node.utf8_text(src.as_bytes())
-                    .unwrap()
-                    .to_ascii_uppercase()
-                    .as_ref(),
-            );
-            result.push_str("\n");
-            return result;
-        }
-
-        // 葉でない場合
-        let mut cursor = node.walk();
-        if cursor.goto_first_child() {
-            loop {
-                result.push_str(self.format_straightforward(cursor.node(), src).as_ref());
-                if cursor.goto_next_sibling() {
-                    break;
-                }
-            }
-        }
-
-        result
     }
 }
 
