@@ -470,7 +470,7 @@ impl AlignedExpr {
                     // tail_commentがある場合、max_len_to_commentは必ずSome(_)
                     max_len_to_comment.unwrap() - rhs.len()
                 } else {
-                    max_lhs_len - &self.lhs.len() + max_len_to_comment.unwrap() + TAB_SIZE
+                    max_lhs_len + max_len_to_comment.unwrap() + TAB_SIZE - &self.lhs.len()
                 } / TAB_SIZE;
 
                 (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
@@ -652,7 +652,7 @@ impl BooleanExpr {
         }
     }
 
-    /// AS句で揃えたものを返す
+    /// 比較演算子で揃えたものを返す
     pub fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
 
@@ -1261,6 +1261,15 @@ impl Formatter {
             }
 
             cursor.goto_next_sibling();
+
+            if cursor.node().kind() == "comment" {
+                let comment_loc = cursor.node().range();
+                boolean_expr.add_comment_to_child(Comment::new(
+                    cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                    comment_loc,
+                ));
+                cursor.goto_next_sibling();
+            }
 
             let sep = cursor.node().kind();
             boolean_expr.set_default_separator(sep.to_string());
