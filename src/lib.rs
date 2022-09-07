@@ -382,37 +382,17 @@ impl AlignedExpr {
 
     pub fn set_tail_comment(&mut self, comment: Comment) {
         let Comment { comment, loc } = comment;
-        let mut tail_comment = String::new();
+        if comment.starts_with("/*") {
+            self.tail_comment = Some(comment);
+        } else {
+            // 1. 初めのハイフンを削除
+            // 2. 空白、スペースなどを削除
+            // 3. "--" を付与
+            let tail_comment = format!("-- {}", comment.trim_start_matches('-').trim_start());
 
-        let comment_vec: Vec<char> = comment.chars().collect();
-
-        let mut is_before_start = true;
-
-        for i in 0..comment_vec.len() {
-            if i == 0 || i == 1 {
-                if comment_vec[i] == '-' {
-                    continue;
-                } else {
-                    // /*comment*/はtail_commentにそのままいれる
-                    tail_comment = comment;
-                    break;
-                }
-            }
-
-            if is_before_start {
-                if comment_vec[i] == ' ' || comment_vec[i] == '\t' {
-                    // --直後のスペース、タブは読み飛ばす
-                    continue;
-                } else {
-                    is_before_start = false;
-                    tail_comment.push_str("-- ");
-                }
-            }
-
-            tail_comment.push(comment_vec[i]);
+            self.tail_comment = Some(tail_comment.to_string());
         }
 
-        self.tail_comment = Some(tail_comment);
         self.loc.end_point = loc.end_point;
     }
 
@@ -561,6 +541,18 @@ impl PrimaryExpr {
 
     pub fn set_head_comment(&mut self, comment: Comment) {
         let Comment { comment, loc } = comment;
+
+        // 1. /*を削除
+        // 2. *\を削除
+        // 3. 前後の空白文字を削除
+        // 4. /* */付与
+        let comment = format!(
+            "/*{}*/",
+            comment
+                .trim_start_matches("/*")
+                .trim_end_matches("*/")
+                .trim()
+        );
 
         self.head_comment = Some(comment.clone());
         self.loc.start_point = loc.start_point;
