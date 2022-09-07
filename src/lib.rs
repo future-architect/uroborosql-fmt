@@ -41,8 +41,8 @@ pub struct SeparatedLines {
     separator: String,          // セパレータ(e.g., ',', AND)
     contents: Vec<AlignedExpr>, // 各行の情報
     loc: Option<Range>,
-    max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
-    is_omit_op: bool,             // render時にopを省略
+    has_op: bool,     // 演算子があるかどうか
+    is_omit_op: bool, // render時にopを省略
 }
 
 // BooleanExpr: Expr
@@ -54,7 +54,7 @@ impl SeparatedLines {
             separator: sep.to_string(),
             contents: vec![] as Vec<AlignedExpr>,
             loc: None,
-            max_len_to_op: None,
+            has_op: false,
             is_omit_op,
         }
     }
@@ -63,20 +63,12 @@ impl SeparatedLines {
         self.loc
     }
 
-    pub fn max_len_to_op(&self) -> Option<usize> {
-        self.max_len_to_op
-    }
-
     // 式を追加する
     pub fn add_expr(&mut self, aligned: AlignedExpr) {
-        // len_to_opの更新
-        // 右辺があるかどうかをチェックする
+        // 演算子があるかどうかをチェック
         if aligned.has_rhs() {
-            self.max_len_to_op = match self.max_len_to_op {
-                Some(maxlen) => Some(std::cmp::max(aligned.len_to_op().unwrap(), maxlen)),
-                None => Some(aligned.len_to_op().unwrap()),
-            };
-        }
+            self.has_op = true;
+        };
 
         // locationの更新
         match self.loc {
@@ -99,13 +91,23 @@ impl SeparatedLines {
     pub fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
 
+        let max_len_to_op = if self.has_op {
+            // 左辺の最大値を計算
+            let max_len = (&self.contents)
+                .into_iter()
+                .fold(0, |max: usize, aligned: &AlignedExpr| {
+                    std::cmp::max(max, aligned.len_lhs())
+                });
+            Some(max_len)
+        } else {
+            // そろえる演算子がない場合はNone
+            None
+        };
+
         // コメントまでの最長の長さを計算する
         let mut max_len_to_comment = None;
         for aligned in (&self.contents).into_iter() {
-            match (
-                &max_len_to_comment,
-                aligned.len_to_comment(self.max_len_to_op),
-            ) {
+            match (&max_len_to_comment, aligned.len_to_comment(max_len_to_op)) {
                 (Some(max_len), Some(len)) => {
                     max_len_to_comment = Some(std::cmp::max(*max_len, len));
                 }
@@ -132,7 +134,7 @@ impl SeparatedLines {
             }
 
             // alignedに演算子までの最長の長さを与えてフォーマット済みの文字列をもらう
-            match aligned.render(self.max_len_to_op, max_len_to_comment, self.is_omit_op) {
+            match aligned.render(max_len_to_op, max_len_to_comment, self.is_omit_op) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
                     result.push_str("\n")
@@ -405,9 +407,9 @@ impl AlignedExpr {
     }
 
     // 演算子までの長さを返す
-    pub fn len_to_op(&self) -> Option<usize> {
+    pub fn len_lhs(&self) -> usize {
         // 左辺の長さを返せばよい
-        Some(self.lhs.len())
+        self.lhs.len()
     }
 
     // 演算子から末尾コメントまでの長さを返す
@@ -589,7 +591,7 @@ pub struct BooleanExpr {
     default_separator: String,     // デフォルトセパレータ(e.g., ',', AND)
     contents: Vec<ContentWithSep>, // {sep, contents}
     loc: Option<Range>,
-    max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
+    has_op: bool,
 }
 
 impl BooleanExpr {
@@ -599,16 +601,12 @@ impl BooleanExpr {
             default_separator: sep.to_string(),
             contents: vec![] as Vec<ContentWithSep>,
             loc: None,
-            max_len_to_op: None,
+            has_op: false,
         }
     }
 
     pub fn loc(&self) -> Option<Range> {
         self.loc
-    }
-
-    pub fn max_len_to_op(&self) -> Option<usize> {
-        self.max_len_to_op
     }
 
     pub fn set_default_separator(&mut self, sep: String) {
@@ -620,27 +618,23 @@ impl BooleanExpr {
         self.contents[last_idx].content.set_tail_comment(comment);
     }
 
-    pub fn add_expr_with_sep(&mut self, expr: AlignedExpr, sep: String) {
-        // len_to_opの更新
-        if let Some(len) = expr.len_to_op() {
-            self.max_len_to_op = match self.max_len_to_op {
-                Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                None => Some(len),
-            };
-        };
+    pub fn add_expr_with_sep(&mut self, aligned: AlignedExpr, sep: String) {
+        if aligned.has_rhs() {
+            self.has_op = true;
+        }
 
         // locationの更新
         match self.loc {
             Some(mut range) => {
-                range.end_point = expr.loc().end_point;
+                range.end_point = aligned.loc().end_point;
                 self.loc = Some(range);
             }
-            None => self.loc = Some(expr.loc()),
+            None => self.loc = Some(aligned.loc()),
         };
 
         self.contents.push(ContentWithSep {
             separator: sep,
-            content: expr,
+            content: aligned,
         });
     }
 
@@ -649,13 +643,8 @@ impl BooleanExpr {
     }
 
     pub fn merge(&mut self, other: BooleanExpr) {
-        // len_to_opの更新
-        if let Some(len) = other.max_len_to_op() {
-            self.max_len_to_op = match self.max_len_to_op {
-                Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                None => Some(len),
-            };
-        };
+        // そろえる演算子があるか
+        self.has_op = self.has_op || other.has_op;
 
         // separatorをマージする
         //
@@ -680,15 +669,23 @@ impl BooleanExpr {
     pub fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
 
-        // 再帰的に再構成した木を見る
+        let max_len_to_op = if self.has_op {
+            let max_len =
+                (&self.contents)
+                    .into_iter()
+                    .fold(0, |max: usize, pair: &ContentWithSep| {
+                        let aligned = &pair.content;
+                        std::cmp::max(max, aligned.len_lhs())
+                    });
+            Some(max_len)
+        } else {
+            None
+        };
 
         // コメントまでの最長の長さを計算する
         let mut max_len_to_comment = None;
         for ContentWithSep { separator, content } in (&self.contents).into_iter() {
-            match (
-                &max_len_to_comment,
-                content.len_to_comment(self.max_len_to_op),
-            ) {
+            match (&max_len_to_comment, content.len_to_comment(max_len_to_op)) {
                 (Some(max_len), Some(len)) => {
                     max_len_to_comment = Some(std::cmp::max(*max_len, len));
                 }
@@ -714,7 +711,7 @@ impl BooleanExpr {
                 result.push_str("\t");
             }
 
-            match content.render(self.max_len_to_op, max_len_to_comment, false) {
+            match content.render(max_len_to_op, max_len_to_comment, false) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
                     result.push_str("\n")
