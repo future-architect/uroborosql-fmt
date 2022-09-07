@@ -382,7 +382,17 @@ impl AlignedExpr {
 
     pub fn set_tail_comment(&mut self, comment: Comment) {
         let Comment { comment, loc } = comment;
-        self.tail_comment = Some(comment.clone());
+        if comment.starts_with("/*") {
+            self.tail_comment = Some(comment);
+        } else {
+            // 1. 初めのハイフンを削除
+            // 2. 空白、スペースなどを削除
+            // 3. "--" を付与
+            let tail_comment = format!("-- {}", comment.trim_start_matches('-').trim_start());
+
+            self.tail_comment = Some(tail_comment.to_string());
+        }
+
         self.loc.end_point = loc.end_point;
     }
 
@@ -531,6 +541,18 @@ impl PrimaryExpr {
 
     pub fn set_head_comment(&mut self, comment: Comment) {
         let Comment { comment, loc } = comment;
+
+        // 1. /*を削除
+        // 2. *\を削除
+        // 3. 前後の空白文字を削除
+        // 4. /* */付与
+        let comment = format!(
+            "/*{}*/",
+            comment
+                .trim_start_matches("/*")
+                .trim_end_matches("*/")
+                .trim()
+        );
 
         self.head_comment = Some(comment.clone());
         self.loc.start_point = loc.start_point;
