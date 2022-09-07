@@ -117,8 +117,6 @@ impl SeparatedLines {
         let mut is_first_line = true;
 
         for aligned in (&self.contents).into_iter() {
-            // ネストは後で
-
             (0..self.depth)
                 .into_iter()
                 .for_each(|_| result.push_str("\t"));
@@ -396,6 +394,7 @@ impl AlignedExpr {
         self.rhs = Some(rhs);
     }
 
+    // 右辺があるかどうかをboolで返す
     pub fn has_rhs(&self) -> bool {
         match self.rhs {
             Some(_) => true,
@@ -461,16 +460,19 @@ impl AlignedExpr {
             (_, _) => (),
         }
 
+        // 末尾コメントをrender
         match (&self.tail_comment, max_len_to_op) {
             // 末尾コメントが存在し、ほかのそろえる対象が存在する場合
-            (Some(comment), Some(max_lhs_len)) => {
+            (Some(comment), Some(max_len)) => {
                 let tab_num = if let Some(rhs) = &self.rhs {
                     // 右辺がある場合は、コメントまでの最長の長さ - 右辺の長さ
 
                     // tail_commentがある場合、max_len_to_commentは必ずSome(_)
                     max_len_to_comment.unwrap() - rhs.len()
                 } else {
-                    max_lhs_len + max_len_to_comment.unwrap() + TAB_SIZE - &self.lhs.len()
+                    // 右辺がない場合は
+                    // コメントまでの最長 + TAB_SIZE(演算子の分) + 左辺の最大長からの差分
+                    max_len_to_comment.unwrap() + TAB_SIZE + max_len - &self.lhs.len()
                 } / TAB_SIZE;
 
                 (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
