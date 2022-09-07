@@ -1,10 +1,10 @@
 SELECT
 	A
 FROM
-	LONGLONGTABLE	AS	L	-- so long
-,	TAB						-- no alias
-,	TABLE1			AS	T1	-- normal
-,	SOSOSOLONGLONGLONG		-- so long and no alias
+	LONGLONGTABLE	L	-- so long
+,	TAB					-- no alias
+,	TABLE1			T1	-- normal
+,	SOSOSOLONGLONGLONG	-- so long and no alias
 WHERE
 	L.A						=	L.B							-- normal
 AND	SOSOSOLONGLONGLONG.A	=	1							-- so long 

@@ -132,7 +132,7 @@ impl SeparatedLines {
             }
 
             // alignedに演算子までの最長の長さを与えてフォーマット済みの文字列をもらう
-            match aligned.render(self.max_len_to_op, max_len_to_comment) {
+            match aligned.render(self.max_len_to_op, max_len_to_comment, self.is_omit_op) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
                     result.push_str("\n")
@@ -430,6 +430,7 @@ impl AlignedExpr {
         &self,
         max_len_to_op: Option<usize>,
         max_len_to_comment: Option<usize>,
+        is_omit_op: bool,
     ) -> Result<String, Error> {
         let mut result = String::new();
 
@@ -478,7 +479,8 @@ impl AlignedExpr {
                 } else {
                     // 右辺がない場合は
                     // コメントまでの最長 + TAB_SIZE(演算子の分) + 左辺の最大長からの差分
-                    max_len_to_comment.unwrap() + TAB_SIZE + max_len - &self.lhs.len()
+                    max_len_to_comment.unwrap() + (if is_omit_op { 0 } else { TAB_SIZE }) + max_len
+                        - &self.lhs.len()
                 } / TAB_SIZE;
 
                 (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
@@ -712,7 +714,7 @@ impl BooleanExpr {
                 result.push_str("\t");
             }
 
-            match content.render(self.max_len_to_op, max_len_to_comment) {
+            match content.render(self.max_len_to_op, max_len_to_comment, false) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
                     result.push_str("\n")
