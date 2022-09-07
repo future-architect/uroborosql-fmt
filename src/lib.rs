@@ -2,6 +2,8 @@ use tree_sitter::{Node, Range};
 
 const TAB_SIZE: usize = 4;
 
+const COMPLEMENT_AS: bool = true; // AS句がない場合に自動的に補完する
+
 /// 引数のSQLをフォーマットして返す
 pub fn format_sql(src: &str) -> String {
     // tree-sitter-sqlの言語を取得
@@ -41,8 +43,8 @@ pub struct SeparatedLines {
     separator: String,          // セパレータ(e.g., ',', AND)
     contents: Vec<AlignedExpr>, // 各行の情報
     loc: Option<Range>,
-    has_op: bool,     // 演算子があるかどうか
-    is_omit_op: bool, // render時にopを省略
+    has_op: bool,       // 演算子があるかどうか
+    is_from_body: bool, // render時にopを省略
 }
 
 impl SeparatedLines {
@@ -53,7 +55,7 @@ impl SeparatedLines {
             contents: vec![] as Vec<AlignedExpr>,
             loc: None,
             has_op: false,
-            is_omit_op,
+            is_from_body: is_omit_op,
         }
     }
 
@@ -132,7 +134,7 @@ impl SeparatedLines {
             }
 
             // alignedに演算子までの最長の長さを与えてフォーマット済みの文字列をもらう
-            match aligned.render(max_len_to_op, max_len_to_comment, self.is_omit_op) {
+            match aligned.render(max_len_to_op, max_len_to_comment, self.is_from_body) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
                     result.push_str("\n")
@@ -376,6 +378,10 @@ impl AlignedExpr {
         }
     }
 
+    pub fn lhs(&self) -> Expr {
+        self.lhs.clone()
+    }
+
     fn loc(&self) -> Range {
         self.loc
     }
@@ -413,7 +419,13 @@ impl AlignedExpr {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.len()),
             // コメント以外にそろえる対象があり、この式は右辺を持たない場合は0
-            (Some(_), None) => Some(0),
+            (Some(_), None) => {
+                if COMPLEMENT_AS {
+                    Some(self.lhs.len())
+                } else {
+                    Some(0)
+                }
+            }
             // そろえる対象がコメントだけであるとき、左辺の長さ
             _ => Some(self.lhs.len()),
         }
@@ -424,7 +436,7 @@ impl AlignedExpr {
         &self,
         max_len_to_op: Option<usize>,
         max_len_to_comment: Option<usize>,
-        is_omit_op: bool,
+        is_from_body: bool,
     ) -> Result<String, Error> {
         let mut result = String::new();
 
@@ -441,7 +453,7 @@ impl AlignedExpr {
 
                 (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
 
-                if is_omit_op {
+                if is_from_body {
                     result.push_str("\t");
                 } else {
                     result.push_str("\t");
@@ -458,6 +470,15 @@ impl AlignedExpr {
                     _ => (),
                 }
             }
+            (None, Some(max_len)) if COMPLEMENT_AS && is_from_body => {
+                let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
+
+                (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
+
+                result.push_str("\t");
+                let formatted = self.lhs.render().unwrap();
+                result.push_str(&formatted);
+            }
             (_, _) => (),
         }
 
@@ -470,10 +491,14 @@ impl AlignedExpr {
 
                     // tail_commentがある場合、max_len_to_commentは必ずSome(_)
                     max_len_to_comment.unwrap() - rhs.len()
+                } else if COMPLEMENT_AS && is_from_body {
+                    max_len_to_comment.unwrap() - self.lhs.len()
                 } else {
                     // 右辺がない場合は
                     // コメントまでの最長 + TAB_SIZE(演算子の分) + 左辺の最大長からの差分
-                    max_len_to_comment.unwrap() + (if is_omit_op { 0 } else { TAB_SIZE }) + max_len
+                    max_len_to_comment.unwrap()
+                        + (if is_from_body { 0 } else { TAB_SIZE })
+                        + max_len
                         - &self.lhs.len()
                 } / TAB_SIZE;
 
@@ -927,8 +952,8 @@ impl Formatter {
                                         }
                                     }
                                     _ => {
-                                        separated_lines
-                                            .add_expr(self.format_aliasable_expr(child_node, src));
+                                        let alias = self.format_aliasable_expr(child_node, src);
+                                        separated_lines.add_expr(alias);
                                     }
                                 };
                             }
