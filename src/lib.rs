@@ -382,7 +382,37 @@ impl AlignedExpr {
 
     pub fn set_tail_comment(&mut self, comment: Comment) {
         let Comment { comment, loc } = comment;
-        self.tail_comment = Some(comment.clone());
+        let mut tail_comment = String::new();
+
+        let comment_vec: Vec<char> = comment.chars().collect();
+
+        let mut is_before_start = true;
+
+        for i in 0..comment_vec.len() {
+            if i == 0 || i == 1 {
+                if comment_vec[i] == '-' {
+                    continue;
+                } else {
+                    // /*comment*/はtail_commentにそのままいれる
+                    tail_comment = comment;
+                    break;
+                }
+            }
+
+            if is_before_start {
+                if comment_vec[i] == ' ' || comment_vec[i] == '\t' {
+                    // --直後のスペース、タブは読み飛ばす
+                    continue;
+                } else {
+                    is_before_start = false;
+                    tail_comment.push_str("-- ");
+                }
+            }
+
+            tail_comment.push(comment_vec[i]);
+        }
+
+        self.tail_comment = Some(tail_comment);
         self.loc.end_point = loc.end_point;
     }
 
