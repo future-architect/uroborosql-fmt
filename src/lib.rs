@@ -66,25 +66,26 @@ impl SeparatedLines {
     }
 
     // 式を追加する
-    pub fn add_expr(&mut self, expr: AlignedExpr) {
+    pub fn add_expr(&mut self, aligned: AlignedExpr) {
         // len_to_opの更新
-        if let Some(len) = expr.len_to_op() {
+        // 右辺があるかどうかをチェックする
+        if aligned.has_rhs() {
             self.max_len_to_op = match self.max_len_to_op {
-                Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                None => Some(len),
+                Some(maxlen) => Some(std::cmp::max(aligned.len_to_op().unwrap(), maxlen)),
+                None => Some(aligned.len_to_op().unwrap()),
             };
-        };
+        }
 
         // locationの更新
         match self.loc {
             Some(mut range) => {
-                range.end_point = expr.loc().end_point;
+                range.end_point = aligned.loc().end_point;
                 self.loc = Some(range);
             }
-            None => self.loc = Some(expr.loc()),
+            None => self.loc = Some(aligned.loc()),
         };
 
-        self.contents.push(expr);
+        self.contents.push(aligned);
     }
 
     pub fn add_comment_to_child(&mut self, comment: Comment) {
@@ -395,6 +396,13 @@ impl AlignedExpr {
         self.rhs = Some(rhs);
     }
 
+    pub fn has_rhs(&self) -> bool {
+        match self.rhs {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
     // 演算子までの長さを返す
     pub fn len_to_op(&self) -> Option<usize> {
         // 左辺の長さを返せばよい
@@ -430,7 +438,7 @@ impl AlignedExpr {
             Err(e) => return Err(e),
         };
 
-        // 演算子等辺をrender
+        // 演算子と右辺をrender
         match (&self.op, max_len_to_op) {
             (Some(op), Some(max_len)) => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
