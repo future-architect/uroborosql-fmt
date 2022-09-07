@@ -4,6 +4,8 @@ const TAB_SIZE: usize = 4;
 
 const COMPLEMENT_AS: bool = true; // AS句がない場合に自動的に補完する
 
+const TRIM_BIND_PARAM: bool = false; // バインド変数の中身をトリムする
+
 /// 引数のSQLをフォーマットして返す
 pub fn format_sql(src: &str) -> String {
     // tree-sitter-sqlの言語を取得
@@ -565,19 +567,21 @@ impl PrimaryExpr {
     }
 
     pub fn set_head_comment(&mut self, comment: Comment) {
-        let Comment { comment, loc } = comment;
+        let Comment { mut comment, loc } = comment;
 
-        // 1. /*を削除
-        // 2. *\を削除
-        // 3. 前後の空白文字を削除
-        // 4. /* */付与
-        let comment = format!(
-            "/*{}*/",
-            comment
-                .trim_start_matches("/*")
-                .trim_end_matches("*/")
-                .trim()
-        );
+        if TRIM_BIND_PARAM {
+            // 1. /*を削除
+            // 2. *\を削除
+            // 3. 前後の空白文字を削除
+            // 4. /* */付与
+            comment = format!(
+                "/*{}*/",
+                comment
+                    .trim_start_matches("/*")
+                    .trim_end_matches("*/")
+                    .trim()
+            );
+        }
 
         self.head_comment = Some(comment.clone());
         self.loc.start_point = loc.start_point;
