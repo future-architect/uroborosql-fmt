@@ -1,7 +1,5 @@
-SELECT A,
-(SELECT Z --test
-FROM TAB2 --tes
-) 
-FROM LONGLONGTABLE --test
-AS L,
-(SELECT B, C FROM TAB1) AS BC
+SELECT A 
+
+from tb
+WHERE 
+a = /*a*/1 

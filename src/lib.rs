@@ -42,18 +42,20 @@ pub struct SeparatedLines {
     contents: Vec<AlignedExpr>, // 各行の情報
     loc: Option<Range>,
     max_len_to_op: Option<usize>, // 演算子までの最長の長さ(1行に一つと仮定)
+    is_omit_op: bool,             // render時にopを省略
 }
 
 // BooleanExpr: Expr
 
 impl SeparatedLines {
-    pub fn new(depth: usize, sep: &str) -> SeparatedLines {
+    pub fn new(depth: usize, sep: &str, is_omit_op: bool) -> SeparatedLines {
         SeparatedLines {
             depth,
             separator: sep.to_string(),
             contents: vec![] as Vec<AlignedExpr>,
             loc: None,
             max_len_to_op: None,
+            is_omit_op,
         }
     }
 
@@ -444,9 +446,13 @@ impl AlignedExpr {
 
                 (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
 
-                result.push_str("\t");
-                result.push_str(&op);
-                result.push_str("\t");
+                if is_omit_op {
+                    result.push_str("\t");
+                } else {
+                    result.push_str("\t");
+                    result.push_str(&op);
+                    result.push_str("\t");
+                }
 
                 //右辺をrender
                 match &self.rhs {
@@ -501,7 +507,7 @@ pub struct PrimaryExpr {
     elements: Vec<String>,
     loc: Range,
     len: usize,
-    // head_comment: Option<String>,
+    head_comment: Option<String>,
 }
 
 impl PrimaryExpr {
@@ -511,6 +517,7 @@ impl PrimaryExpr {
             elements: vec![element],
             loc,
             len,
+            head_comment: None,
         }
     }
 
@@ -524,6 +531,13 @@ impl PrimaryExpr {
 
     pub fn elements(&self) -> &Vec<String> {
         &self.elements
+    }
+
+    pub fn set_head_comment(&mut self, comment: Comment) {
+        let Comment { comment, loc } = comment;
+
+        self.head_comment = Some(comment);
+        self.loc.start_point = loc.start_point;
     }
 
     /// elementsにelementを追加する
@@ -551,7 +565,13 @@ impl PrimaryExpr {
 
     pub fn render(&self) -> Result<String, Error> {
         let upper_elements: Vec<String> = self.elements.iter().map(|x| x.to_uppercase()).collect();
-        Ok(upper_elements.join("\t"))
+
+        let elements_str = upper_elements.join("\t");
+
+        match self.head_comment.as_ref() {
+            Some(comment) => Ok(format!("{}{}", comment, elements_str)),
+            None => Ok(elements_str),
+        }
     }
 }
 
@@ -808,14 +828,6 @@ impl Formatter {
 
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
-            //コメントノードであればbufに追記していく
-            // while cursor.node().kind() == "comment" {
-            //     let comment_node = cursor.node();
-            //     buf.push_str(comment_node.utf8_text(src.as_bytes()).unwrap());
-            //     buf.push_str("\n");
-            //     cursor.goto_next_sibling();
-            // }
-
             let stmt_node = cursor.node();
 
             // 現状はselect_statementのみ
@@ -878,7 +890,7 @@ impl Formatter {
                         let mut clause =
                             Clause::new("FROM".to_string(), from_node.range(), self.state.depth);
 
-                        let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
+                        let mut separated_lines = SeparatedLines::new(self.state.depth, ",", true);
 
                         // commaSep
                         if cursor.goto_next_sibling() {
@@ -949,7 +961,8 @@ impl Formatter {
 
                         match expr {
                             Expr::Aligned(aligned) => {
-                                let mut separated_lines = SeparatedLines::new(self.state.depth, "");
+                                let mut separated_lines =
+                                    SeparatedLines::new(self.state.depth, "", false);
                                 separated_lines.add_expr(*aligned);
                                 body = Body::SepLines(separated_lines);
                             }
@@ -1029,7 +1042,7 @@ impl Formatter {
 
         let expr_node = cursor.node();
 
-        let mut separated_lines = SeparatedLines::new(self.state.depth, ",");
+        let mut separated_lines = SeparatedLines::new(self.state.depth, ",", false);
 
         let aligned = self.format_aliasable_expr(expr_node, src);
         separated_lines.add_expr(aligned);
@@ -1086,10 +1099,15 @@ impl Formatter {
                 let mut aligned = AlignedExpr::new(lhs_expr, lhs_expr_loc);
 
                 // ("AS"? identifier)?
-                if cursor.goto_next_sibling() && cursor.node().kind() == "AS" {
-                    // cursor -> AS ("AS"が省略されることは現状考慮していない)
+                if cursor.goto_next_sibling() {
+                    // cursor -> "AS"?
 
-                    //左辺に移動
+                    // ASが存在する場合は読み飛ばす
+                    if cursor.node().kind() == "AS" {
+                        cursor.goto_next_sibling();
+                    }
+
+                    //右辺に移動
                     cursor.goto_next_sibling();
                     // cursor -> identifier
 
@@ -1125,38 +1143,39 @@ impl Formatter {
 
     // 式
     fn format_expr(&mut self, node: Node, src: &str) -> Expr {
-        match node.kind() {
+        let mut cursor = node.walk();
+
+        match cursor.node().kind() {
             "dotted_name" => {
                 // dotted_name -> identifier ("." identifier)*
 
-                let mut cursor = node.walk();
                 // cursor -> dotted_name
 
                 let range = node.range();
 
                 cursor.goto_first_child();
+
                 // cursor -> identifier
 
-                let mut result = String::new();
+                let mut dotted_name = String::new();
 
                 let id_node = cursor.node();
-                result.push_str(id_node.utf8_text(src.as_bytes()).unwrap());
+                dotted_name.push_str(id_node.utf8_text(src.as_bytes()).unwrap());
 
                 // while self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src) {
                 while cursor.goto_next_sibling() {
                     // cursor -> . または cursor -> identifier
                     match cursor.node().kind() {
-                        "." => result.push_str("."),
-                        _ => result.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
+                        "." => dotted_name.push_str("."),
+                        _ => dotted_name.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
                     };
                 }
 
-                let primary = PrimaryExpr::new(result, range);
+                let mut primary = PrimaryExpr::new(dotted_name, range);
 
                 Expr::Primary(Box::new(primary))
             }
             "binary_expression" => {
-                let mut cursor = node.walk();
                 // cursor -> binary_expression
 
                 cursor.goto_first_child();
@@ -1177,9 +1196,30 @@ impl Formatter {
                 cursor.goto_next_sibling();
                 // cursor -> _expression
 
+                let mut head_comment: Option<Comment> = None;
+                if cursor.node().kind() == "comment" {
+                    let comment_loc = cursor.node().range();
+                    head_comment = Some(Comment {
+                        comment: cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                        loc: comment_loc,
+                    });
+
+                    cursor.goto_next_sibling();
+                }
+
                 // 右辺
                 let rhs_node = cursor.node();
-                let rhs_expr = self.format_expr(rhs_node, src);
+                let mut rhs_expr = self.format_expr(rhs_node, src);
+
+                match head_comment {
+                    Some(comment) => match &mut rhs_expr {
+                        Expr::Aligned(_) => todo!(),
+                        Expr::Primary(primary) => primary.set_head_comment(comment),
+                        Expr::Boolean(_) => todo!(),
+                        Expr::SelectSub(_) => todo!(),
+                    },
+                    None => (),
+                }
 
                 if Self::is_comp_op(op_str) {
                     // 比較演算子 -> AlignedExpr
@@ -1213,10 +1253,11 @@ impl Formatter {
             "boolean_expression" => self.format_bool_expr(node, src),
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
-                let primary = PrimaryExpr::new(
+                let mut primary = PrimaryExpr::new(
                     node.utf8_text(src.as_bytes()).unwrap().to_string(),
                     node.range(),
                 );
+
                 Expr::Primary(Box::new(primary))
             }
             "select_subexpression" => {
@@ -1226,11 +1267,12 @@ impl Formatter {
                 Expr::SelectSub(Box::new(select_subexpr))
             }
             _ => {
-                eprintln!("format_expr(): unimplemented expression {}", node.kind());
+                eprintln!(
+                    "format_expr(): unimplemented expression {}, {:#?}",
+                    cursor.node().kind(),
+                    cursor.node().range()
+                );
                 todo!()
-                // let mut line = Line::new();
-                // line.add_element(self.format_straightforward(node, src).as_ref());
-                // res = Content::Line(line);
             }
         }
     }
@@ -1252,7 +1294,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         if cursor.node().kind() == "NOT" {
-            // 未対応
+            todo!();
         } else {
             let left = self.format_expr(cursor.node(), src);
             match left {
