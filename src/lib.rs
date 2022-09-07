@@ -68,25 +68,26 @@ impl SeparatedLines {
     }
 
     // 式を追加する
-    pub fn add_expr(&mut self, expr: AlignedExpr) {
+    pub fn add_expr(&mut self, aligned: AlignedExpr) {
         // len_to_opの更新
-        if let Some(len) = expr.len_to_op() {
+        // 右辺があるかどうかをチェックする
+        if aligned.has_rhs() {
             self.max_len_to_op = match self.max_len_to_op {
-                Some(maxlen) => Some(std::cmp::max(len, maxlen)),
-                None => Some(len),
+                Some(maxlen) => Some(std::cmp::max(aligned.len_to_op().unwrap(), maxlen)),
+                None => Some(aligned.len_to_op().unwrap()),
             };
-        };
+        }
 
         // locationの更新
         match self.loc {
             Some(mut range) => {
-                range.end_point = expr.loc().end_point;
+                range.end_point = aligned.loc().end_point;
                 self.loc = Some(range);
             }
-            None => self.loc = Some(expr.loc()),
+            None => self.loc = Some(aligned.loc()),
         };
 
-        self.contents.push(expr);
+        self.contents.push(aligned);
     }
 
     pub fn add_comment_to_child(&mut self, comment: Comment) {
@@ -98,11 +99,26 @@ impl SeparatedLines {
     pub fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
 
+        // コメントまでの最長の長さを計算する
+        let mut max_len_to_comment = None;
+        for aligned in (&self.contents).into_iter() {
+            match (
+                &max_len_to_comment,
+                aligned.len_to_comment(self.max_len_to_op),
+            ) {
+                (Some(max_len), Some(len)) => {
+                    max_len_to_comment = Some(std::cmp::max(*max_len, len));
+                }
+                (None, Some(len)) => {
+                    max_len_to_comment = Some(len);
+                }
+                _ => (),
+            }
+        }
+
         let mut is_first_line = true;
 
         for aligned in (&self.contents).into_iter() {
-            // ネストは後で
-
             (0..self.depth)
                 .into_iter()
                 .for_each(|_| result.push_str("\t"));
@@ -116,7 +132,7 @@ impl SeparatedLines {
             }
 
             // alignedに演算子までの最長の長さを与えてフォーマット済みの文字列をもらう
-            match aligned.render(self.max_len_to_op, self.is_omit_op) {
+            match aligned.render(self.max_len_to_op, max_len_to_comment) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
                     result.push_str("\n")
@@ -380,17 +396,41 @@ impl AlignedExpr {
         self.rhs = Some(rhs);
     }
 
+    // 右辺があるかどうかをboolで返す
+    pub fn has_rhs(&self) -> bool {
+        match self.rhs {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
     // 演算子までの長さを返す
     pub fn len_to_op(&self) -> Option<usize> {
         // 左辺の長さを返せばよい
-        match self.op {
-            Some(_) => Some(self.lhs.len()),
+        Some(self.lhs.len())
+    }
+
+    // 演算子から末尾コメントまでの長さを返す
+    pub fn len_to_comment(&self, max_len_to_op: Option<usize>) -> Option<usize> {
+        match &self.tail_comment {
+            Some(_) => match (max_len_to_op, &self.rhs) {
+                // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
+                (Some(_), Some(rhs)) => Some(rhs.len()),
+                // コメント以外にそろえる対象があり、この式は右辺を持たない場合は0
+                (Some(_), None) => Some(0),
+                // そろえる対象がコメントだけであるとき、左辺の長さ
+                _ => Some(self.lhs.len()),
+            },
             None => None,
         }
     }
 
     // 演算子までの長さを与え、演算子の前にtab文字を挿入した文字列を返す
-    pub fn render(&self, max_len_to_op: Option<usize>, is_omit_op: bool) -> Result<String, Error> {
+    pub fn render(
+        &self,
+        max_len_to_op: Option<usize>,
+        max_len_to_comment: Option<usize>,
+    ) -> Result<String, Error> {
         let mut result = String::new();
 
         //左辺をrender
@@ -399,7 +439,7 @@ impl AlignedExpr {
             Err(e) => return Err(e),
         };
 
-        // 演算子等辺をrender
+        // 演算子と右辺をrender
         match (&self.op, max_len_to_op) {
             (Some(op), Some(max_len)) => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
@@ -426,14 +466,36 @@ impl AlignedExpr {
             (_, _) => (),
         }
 
-        //とりあえずコメントそのまま出力
-        match &self.tail_comment {
-            Some(comment) => {
+        // 末尾コメントをrender
+        match (&self.tail_comment, max_len_to_op) {
+            // 末尾コメントが存在し、ほかのそろえる対象が存在する場合
+            (Some(comment), Some(max_len)) => {
+                let tab_num = if let Some(rhs) = &self.rhs {
+                    // 右辺がある場合は、コメントまでの最長の長さ - 右辺の長さ
+
+                    // tail_commentがある場合、max_len_to_commentは必ずSome(_)
+                    max_len_to_comment.unwrap() - rhs.len()
+                } else {
+                    // 右辺がない場合は
+                    // コメントまでの最長 + TAB_SIZE(演算子の分) + 左辺の最大長からの差分
+                    max_len_to_comment.unwrap() + TAB_SIZE + max_len - &self.lhs.len()
+                } / TAB_SIZE;
+
+                (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
+
                 result.push_str("\t");
                 result.push_str(comment);
-                eprintln!("{:#?}", comment);
             }
-            None => (),
+            // 末尾コメントが存在し、ほかにはそろえる対象が存在しない場合
+            (Some(comment), None) => {
+                let tab_num = max_len_to_comment.unwrap() - &self.lhs.len();
+
+                (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
+
+                result.push_str("\t");
+                result.push_str(comment);
+            }
+            _ => (),
         }
 
         Ok(result)
@@ -497,6 +559,7 @@ impl PrimaryExpr {
 
     // PrimaryExprの結合
     pub fn append(&mut self, primary: PrimaryExpr) {
+        self.len += primary.len();
         self.elements.append(&mut primary.elements().clone())
     }
 
@@ -611,11 +674,28 @@ impl BooleanExpr {
         }
     }
 
-    /// AS句で揃えたものを返す
+    /// 比較演算子で揃えたものを返す
     pub fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
 
         // 再帰的に再構成した木を見る
+
+        // コメントまでの最長の長さを計算する
+        let mut max_len_to_comment = None;
+        for ContentWithSep { separator, content } in (&self.contents).into_iter() {
+            match (
+                &max_len_to_comment,
+                content.len_to_comment(self.max_len_to_op),
+            ) {
+                (Some(max_len), Some(len)) => {
+                    max_len_to_comment = Some(std::cmp::max(*max_len, len));
+                }
+                (None, Some(len)) => {
+                    max_len_to_comment = Some(len);
+                }
+                _ => (),
+            }
+        }
 
         let mut is_first_line = true;
 
@@ -632,7 +712,7 @@ impl BooleanExpr {
                 result.push_str("\t");
             }
 
-            match content.render(self.max_len_to_op, false) {
+            match content.render(self.max_len_to_op, max_len_to_comment) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
                     result.push_str("\n")
