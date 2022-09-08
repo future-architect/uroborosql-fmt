@@ -147,7 +147,10 @@ impl SeparatedLines {
         // コメントまでの最長の長さを計算する
         let mut max_len_to_comment = None;
         for aligned in (&self.contents).iter() {
-            match (&max_len_to_comment, aligned.len_to_comment(max_len_to_op)) {
+            match (
+                &max_len_to_comment,
+                aligned.len_to_comment(max_len_to_op, self.is_from_body),
+            ) {
                 (Some(max_len), Some(len)) => {
                     max_len_to_comment = Some(std::cmp::max(*max_len, len));
                 }
@@ -395,6 +398,14 @@ impl Expr {
             Expr::SelectSub(select_sub) => select_sub.add_comment_to_child(comment),
         }
     }
+
+    fn is_multi_line(&self) -> bool {
+        match self {
+            Expr::Boolean(_) | Expr::SelectSub(_) => true,
+            Expr::Primary(_) => false,
+            _ => todo!(),
+        }
+    }
 }
 
 // 次を入れるとエラーになる
@@ -461,13 +472,17 @@ impl AlignedExpr {
     }
 
     // 演算子から末尾コメントまでの長さを返す
-    pub fn len_to_comment(&self, max_len_to_op: Option<usize>) -> Option<usize> {
+    pub fn len_to_comment(
+        &self,
+        max_len_to_op: Option<usize>,
+        is_from_body: bool,
+    ) -> Option<usize> {
         match (max_len_to_op, &self.rhs) {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.len()),
             // コメント以外にそろえる対象があり、この式は右辺を持たない場合は0
             (Some(_), None) => {
-                if COMPLEMENT_AS {
+                if COMPLEMENT_AS && is_from_body {
                     Some(self.lhs.len())
                 } else {
                     Some(0)
@@ -535,6 +550,11 @@ impl AlignedExpr {
 
                     // tail_commentがある場合、max_len_to_commentは必ずSome(_)
                     max_len_to_comment.unwrap() - rhs.len()
+                        + if rhs.is_multi_line() {
+                            max_len + TAB_SIZE
+                        } else {
+                            0
+                        }
                 } else if COMPLEMENT_AS && is_from_body {
                     max_len_to_comment.unwrap() - self.lhs.len()
                 } else {
@@ -774,7 +794,10 @@ impl BooleanExpr {
             content,
         } in (&self.contents).iter()
         {
-            match (&max_len_to_comment, content.len_to_comment(max_len_to_op)) {
+            match (
+                &max_len_to_comment,
+                content.len_to_comment(max_len_to_op, false),
+            ) {
                 (Some(max_len), Some(len)) => {
                     max_len_to_comment = Some(std::cmp::max(*max_len, len));
                 }

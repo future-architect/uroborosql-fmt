@@ -1,18 +1,19 @@
 SELECT
-	ID		AS	DATA_ID	-- ID
-,	CODE	AS	    DATA_CODE	-- コード
-,	NAME	            AS	DATA_NAME	-- 名称
-,	VALUE1	AS	VALUE1		-- 値1
-,	VALUE2					                            -- 値2
-,	(
-SELECT
-VALUE3
+      Identifier as id, --ID 
+student_name          --              学生名
 FROM
-TABLE2)						-- サブクエリ
-FROM
-	TABLE1
+  japanese_student_table 
+AS JPN_STD --日本人学生
+,       SUBJECT_TABLE AS SBJ  --科目
 WHERE
-	ID		    =	'DUMMY'	-- IDが'DUMMY'
-AND	VAL1	    =	1	-- VAL1が1
-AND	CODE =	42	-- CODEが42
-OR	VALUE2	=	/* COMMENT */42
+  JPN_STD.sportId = (SELECT  
+         sportId   FROM
+    Sport
+                         WHERE              
+             Sport.sportname 
+    = 'baseball'
+                    )   -- 野球をしている生徒
+    AND 
+JPN_STD.ID  = SBJ.ID            
+AND SBJ.grade   > 
+            /*grade*/50     --成績が50点以上    
