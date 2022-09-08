@@ -21,7 +21,7 @@ pub fn format_sql(src: &str) -> String {
     let root_node = tree.root_node();
 
     // フォーマッタオブジェクトを生成
-    let mut formatter = Formatter::new();
+    let mut formatter = Formatter::default();
 
     // formatを行い、バッファに結果を格納
     let res = formatter.format_sql(root_node, src.as_ref());
@@ -927,7 +927,7 @@ impl Formatter {
                 where_clause?
         */
 
-        let mut statement = Statement::new();
+        let mut statement = Statement::default();
 
         let mut cursor = node.walk(); // cursor -> select_statement
         if cursor.goto_first_child() {
