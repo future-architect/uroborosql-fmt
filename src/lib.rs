@@ -558,7 +558,7 @@ impl AlignedExpr {
             }
             // 末尾コメントが存在し、ほかにはそろえる対象が存在しない場合
             (Some(comment), None) => {
-                let tab_num = max_len_to_comment.unwrap() - &self.lhs.len();
+                let tab_num = (max_len_to_comment.unwrap() - &self.lhs.len()) / TAB_SIZE;
 
                 (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
 
