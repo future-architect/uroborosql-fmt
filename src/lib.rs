@@ -134,7 +134,7 @@ impl SeparatedLines {
         let max_len_to_op = if self.has_op {
             // 左辺の最大値を計算
             let max_len = (&self.contents)
-                .into_iter()
+                .iter()
                 .fold(0, |max: usize, aligned: &AlignedExpr| {
                     std::cmp::max(max, aligned.len_lhs())
                 });
@@ -146,7 +146,7 @@ impl SeparatedLines {
 
         // コメントまでの最長の長さを計算する
         let mut max_len_to_comment = None;
-        for aligned in (&self.contents).into_iter() {
+        for aligned in (&self.contents).iter() {
             match (&max_len_to_comment, aligned.len_to_comment(max_len_to_op)) {
                 (Some(max_len), Some(len)) => {
                     max_len_to_comment = Some(std::cmp::max(*max_len, len));
@@ -160,24 +160,22 @@ impl SeparatedLines {
 
         let mut is_first_line = true;
 
-        for aligned in (&self.contents).into_iter() {
-            (0..self.depth)
-                .into_iter()
-                .for_each(|_| result.push_str("\t"));
+        for aligned in (&self.contents).iter() {
+            (0..self.depth).into_iter().for_each(|_| result.push('\t'));
 
             if is_first_line {
                 is_first_line = false;
-                result.push_str("\t")
+                result.push('\t')
             } else {
                 result.push_str(&self.separator);
-                result.push_str("\t");
+                result.push('\t')
             }
 
             // alignedに演算子までの最長の長さを与えてフォーマット済みの文字列をもらう
             match aligned.render(max_len_to_op, max_len_to_comment, self.is_from_body) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
-                    result.push_str("\n")
+                    result.push('\n')
                 }
                 Err(e) => return Err(e),
             };
@@ -192,6 +190,12 @@ impl SeparatedLines {
 pub struct Statement {
     clauses: Vec<Clause>,
     loc: Option<Location>,
+}
+
+impl Default for Statement {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Statement {
@@ -314,9 +318,8 @@ impl Clause {
     }
 
     pub fn add_comment_to_child(&mut self, comment: Comment) {
-        match &mut self.body {
-            Some(body) => body.add_comment_to_child(comment),
-            _ => (),
+        if let Some(body) = &mut self.body {
+            body.add_comment_to_child(comment);
         }
     }
 
@@ -325,16 +328,14 @@ impl Clause {
         // body...
         let mut result = String::new();
 
-        (0..self.depth)
-            .into_iter()
-            .for_each(|_| result.push_str("\t"));
+        (0..self.depth).into_iter().for_each(|_| result.push('\t'));
 
         result.push_str(&self.keyword);
 
         match &self.body {
             Some(sl) => match sl.render() {
                 Ok(formatted_body) => {
-                    result.push_str("\n");
+                    result.push('\n');
                     result.push_str(&formatted_body);
                 }
                 Err(e) => return Err(e),
@@ -435,7 +436,7 @@ impl AlignedExpr {
             // 3. "--" を付与
             let tail_comment = format!("-- {}", comment.trim_start_matches('-').trim_start());
 
-            self.tail_comment = Some(tail_comment.to_string());
+            self.tail_comment = Some(tail_comment);
         }
 
         self.loc.append(loc);
@@ -450,10 +451,7 @@ impl AlignedExpr {
 
     // 右辺があるかどうかをboolで返す
     pub fn has_rhs(&self) -> bool {
-        match self.rhs {
-            Some(_) => true,
-            None => false,
-        }
+        self.rhs.is_some()
     }
 
     // 演算子までの長さを返す
@@ -500,31 +498,28 @@ impl AlignedExpr {
             (Some(op), Some(max_len)) => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
 
-                (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
+                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
 
                 if is_from_body {
-                    result.push_str("\t");
+                    result.push('\t');
                 } else {
-                    result.push_str("\t");
-                    result.push_str(&op);
-                    result.push_str("\t");
+                    result.push('\t');
+                    result.push_str(op);
+                    result.push('\t');
                 }
 
                 //右辺をrender
-                match &self.rhs {
-                    Some(rhs) => {
-                        let formatted = rhs.render().unwrap();
-                        result.push_str(&formatted);
-                    }
-                    _ => (),
+                if let Some(rhs) = &self.rhs {
+                    let formatted = rhs.render().unwrap();
+                    result.push_str(&formatted);
                 }
             }
             (None, Some(max_len)) if COMPLEMENT_AS && is_from_body => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
 
-                (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
+                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
 
-                result.push_str("\t");
+                result.push('\t');
                 let formatted = self.lhs.render().unwrap();
                 result.push_str(&formatted);
             }
@@ -548,21 +543,21 @@ impl AlignedExpr {
                     max_len_to_comment.unwrap()
                         + (if is_from_body { 0 } else { TAB_SIZE })
                         + max_len
-                        - &self.lhs.len()
+                        - self.lhs.len()
                 } / TAB_SIZE;
 
-                (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
+                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
 
-                result.push_str("\t");
+                result.push('\t');
                 result.push_str(comment);
             }
             // 末尾コメントが存在し、ほかにはそろえる対象が存在しない場合
             (Some(comment), None) => {
-                let tab_num = (max_len_to_comment.unwrap() - &self.lhs.len()) / TAB_SIZE;
+                let tab_num = (max_len_to_comment.unwrap() - self.lhs.len()) / TAB_SIZE;
 
-                (0..tab_num).into_iter().for_each(|_| result.push_str("\t"));
+                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
 
-                result.push_str("\t");
+                result.push('\t');
                 result.push_str(comment);
             }
             _ => (),
@@ -597,6 +592,10 @@ impl PrimaryExpr {
 
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.elements.len() == 0
     }
 
     pub fn elements(&self) -> &Vec<String> {
@@ -757,13 +756,12 @@ impl BooleanExpr {
         let mut result = String::new();
 
         let max_len_to_op = if self.has_op {
-            let max_len =
-                (&self.contents)
-                    .into_iter()
-                    .fold(0, |max: usize, pair: &ContentWithSep| {
-                        let aligned = &pair.content;
-                        std::cmp::max(max, aligned.len_lhs())
-                    });
+            let max_len = (&self.contents)
+                .iter()
+                .fold(0, |max: usize, pair: &ContentWithSep| {
+                    let aligned = &pair.content;
+                    std::cmp::max(max, aligned.len_lhs())
+                });
             Some(max_len)
         } else {
             None
@@ -774,7 +772,7 @@ impl BooleanExpr {
         for ContentWithSep {
             separator: _,
             content,
-        } in (&self.contents).into_iter()
+        } in (&self.contents).iter()
         {
             match (&max_len_to_comment, content.len_to_comment(max_len_to_op)) {
                 (Some(max_len), Some(len)) => {
@@ -789,23 +787,21 @@ impl BooleanExpr {
 
         let mut is_first_line = true;
 
-        for ContentWithSep { separator, content } in (&self.contents).into_iter() {
-            (0..self.depth)
-                .into_iter()
-                .for_each(|_| result.push_str("\t"));
+        for ContentWithSep { separator, content } in (&self.contents).iter() {
+            (0..self.depth).into_iter().for_each(|_| result.push('\t'));
 
             if is_first_line {
                 is_first_line = false;
-                result.push_str("\t")
+                result.push('\t')
             } else {
-                result.push_str(&separator);
-                result.push_str("\t");
+                result.push_str(separator);
+                result.push('\t');
             }
 
             match content.render(max_len_to_op, max_len_to_comment, false) {
                 Ok(formatted) => {
                     result.push_str(&formatted);
-                    result.push_str("\n")
+                    result.push('\n')
                 }
                 Err(e) => return Err(e),
             };
@@ -845,11 +841,9 @@ impl SelectSubExpr {
             Ok(formatted) => {
                 result.push_str(&formatted);
 
-                (0..self.depth)
-                    .into_iter()
-                    .for_each(|_| result.push_str("\t"));
+                (0..self.depth).into_iter().for_each(|_| result.push('\t'));
 
-                result.push_str(")");
+                result.push(')');
                 Ok(result)
             }
             Err(e) => Err(e),
@@ -864,6 +858,12 @@ struct FormatterState {
 
 pub struct Formatter {
     state: FormatterState,
+}
+
+impl Default for Formatter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Formatter {
@@ -887,31 +887,6 @@ impl Formatter {
     fn unnest(&mut self) {
         self.state.depth -= 1;
     }
-
-    // goto_next_sibiling()をコメントの処理を行うように拡張したもの
-    // fn goto_not_comment_next_sibiling_for_line(
-    //     &mut self,
-    //     line: &mut Line,
-    //     cursor: &mut TreeCursor,
-    //     src: &str,
-    // ) -> bool {
-    //     //兄弟ノードがない場合
-    //     if !cursor.goto_next_sibling() {
-    //         return false;
-    //     }
-
-    //     //コメントノードであればbufに追記していく
-    //     while cursor.node().kind() == "comment" {
-    //         let comment_node = cursor.node();
-    //         line.add_element(comment_node.utf8_text(src.as_bytes()).unwrap());
-
-    //         if !cursor.goto_next_sibling() {
-    //             return false;
-    //         }
-    //     }
-
-    //     return true;
-    // }
 
     fn format_source(&mut self, node: Node, src: &str) -> Statement {
         // source_file -> _statement*
@@ -1220,19 +1195,17 @@ impl Formatter {
                 let expr = self.format_expr(expr_node, src);
                 let expr_loc = expr.loc();
 
-                let aligned = AlignedExpr::new(expr, expr_loc);
-
-                aligned
+                AlignedExpr::new(expr, expr_loc)
             }
         }
     }
 
     // 引数の文字列が比較演算子かどうかを判定する
     fn is_comp_op(op_str: &str) -> bool {
-        match op_str {
-            "<" | "<=" | "<>" | "!=" | "=" | ">" | ">=" | "~" | "!~" | "~*" | "!~*" => true,
-            _ => false,
-        }
+        matches!(
+            op_str,
+            "<" | "<=" | "<>" | "!=" | "=" | ">" | ">=" | "~" | "!~" | "~*" | "!~*"
+        )
     }
 
     // 式
@@ -1260,7 +1233,7 @@ impl Formatter {
                 while cursor.goto_next_sibling() {
                     // cursor -> . または cursor -> identifier
                     match cursor.node().kind() {
-                        "." => dotted_name.push_str("."),
+                        "." => dotted_name.push('.'),
                         _ => dotted_name.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
                     };
                 }
@@ -1466,7 +1439,7 @@ pub fn print_cst(src: &str) {
     let root_node = tree.root_node();
 
     dfs(root_node, 0);
-    eprintln!("");
+    eprintln!();
 }
 
 fn dfs(node: Node, depth: usize) {
