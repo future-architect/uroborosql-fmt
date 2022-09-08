@@ -398,6 +398,14 @@ impl Expr {
             Expr::SelectSub(select_sub) => select_sub.add_comment_to_child(comment),
         }
     }
+
+    fn is_multi_line(&self) -> bool {
+        match self {
+            Expr::Boolean(_) | Expr::SelectSub(_) => true,
+            Expr::Primary(_) => false,
+            _ => todo!(),
+        }
+    }
 }
 
 // 次を入れるとエラーになる
@@ -542,6 +550,11 @@ impl AlignedExpr {
 
                     // tail_commentがある場合、max_len_to_commentは必ずSome(_)
                     max_len_to_comment.unwrap() - rhs.len()
+                        + if rhs.is_multi_line() {
+                            max_len + TAB_SIZE
+                        } else {
+                            0
+                        }
                 } else if COMPLEMENT_AS && is_from_body {
                     max_len_to_comment.unwrap() - self.lhs.len()
                 } else {
