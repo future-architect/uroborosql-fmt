@@ -1,4 +1,4 @@
-use tree_sitter::{Node, Range};
+use tree_sitter::{Node, Point, Range};
 
 const TAB_SIZE: usize = 4;
 
@@ -38,13 +38,54 @@ pub enum Error {
     ParseError,
 }
 
+#[derive(Debug, Clone)]
+pub struct Position {
+    pub row: usize,
+    pub col: usize,
+}
+
+impl Position {
+    pub fn new(point: Point) -> Position {
+        Position {
+            row: point.row,
+            col: point.column,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Location {
+    pub start_position: Position,
+    pub end_position: Position,
+}
+
+impl Location {
+    pub fn new(range: Range) -> Location {
+        Location {
+            start_position: Position::new(range.start_point),
+            end_position: Position::new(range.end_point),
+        }
+    }
+    // 隣り合っているか？
+    // 同じ行か？
+    pub fn is_same_line(&self, loc: &Location) -> bool {
+        self.end_position.row == loc.start_position.row
+            || self.start_position.row == loc.end_position.row
+    }
+
+    // Locationのappend
+    pub fn append(&mut self, loc: Location) {
+        self.end_position = loc.end_position;
+    }
+}
+
 // 句の本体にあたる部分である、あるseparatorで区切られた式の集まり
 #[derive(Debug, Clone)]
 pub struct SeparatedLines {
     depth: usize,               // インデントの深さ
     separator: String,          // セパレータ(e.g., ',', AND)
     contents: Vec<AlignedExpr>, // 各行の情報
-    loc: Option<Range>,
+    loc: Option<Location>,
     has_op: bool,       // 演算子があるかどうか
     is_from_body: bool, // render時にopを省略
 }
@@ -61,8 +102,8 @@ impl SeparatedLines {
         }
     }
 
-    pub fn loc(&self) -> Option<Range> {
-        self.loc
+    pub fn loc(&self) -> Option<Location> {
+        self.loc.clone()
     }
 
     // 式を追加する
@@ -73,11 +114,8 @@ impl SeparatedLines {
         };
 
         // locationの更新
-        match self.loc {
-            Some(mut range) => {
-                range.end_point = aligned.loc().end_point;
-                self.loc = Some(range);
-            }
+        match &mut self.loc {
+            Some(loc) => loc.append(aligned.loc()),
             None => self.loc = Some(aligned.loc()),
         };
 
@@ -153,7 +191,7 @@ impl SeparatedLines {
 #[derive(Debug, Clone)]
 pub struct Statement {
     clauses: Vec<Clause>,
-    loc: Option<Range>,
+    loc: Option<Location>,
 }
 
 impl Statement {
@@ -164,16 +202,15 @@ impl Statement {
         }
     }
 
-    pub fn loc(&self) -> Option<Range> {
-        self.loc
+    pub fn loc(&self) -> Option<Location> {
+        self.loc.clone()
     }
 
     // 文に句を追加する
     pub fn add_clause(&mut self, clause: Clause) {
-        match self.loc {
-            Some(mut loc) => {
-                loc.end_point = clause.loc().end_point;
-                self.loc = Some(loc)
+        match &mut self.loc {
+            Some(loc) => {
+                loc.append(clause.loc());
             }
             None => {
                 self.loc = Some(clause.loc());
@@ -209,11 +246,11 @@ impl Statement {
 #[derive(Debug, Clone)]
 pub struct Comment {
     comment: String,
-    loc: Range,
+    loc: Location,
 }
 
 impl Comment {
-    pub fn new(comment: String, loc: Range) -> Comment {
+    pub fn new(comment: String, loc: Location) -> Comment {
         Comment { comment, loc }
     }
 }
@@ -225,7 +262,7 @@ pub enum Body {
 }
 
 impl Body {
-    pub fn loc(&self) -> Option<Range> {
+    pub fn loc(&self) -> Option<Location> {
         match self {
             Body::SepLines(sep_lines) => sep_lines.loc(),
             Body::BooleanExpr(bool_expr) => bool_expr.loc(),
@@ -252,12 +289,12 @@ impl Body {
 pub struct Clause {
     keyword: String, // e.g., SELECT, FROM
     body: Option<Body>,
-    loc: Range,
+    loc: Location,
     depth: usize,
 }
 
 impl Clause {
-    pub fn new(keyword: String, loc: Range, depth: usize) -> Clause {
+    pub fn new(keyword: String, loc: Location, depth: usize) -> Clause {
         Clause {
             keyword,
             body: None,
@@ -266,13 +303,13 @@ impl Clause {
         }
     }
 
-    pub fn loc(&self) -> Range {
-        self.loc
+    pub fn loc(&self) -> Location {
+        self.loc.clone()
     }
 
     // bodyをセットする
     pub fn set_body(&mut self, body: Body) {
-        self.loc.end_point = body.loc().unwrap().end_point;
+        self.loc.append(body.loc().unwrap());
         self.body = Some(body);
     }
 
@@ -319,7 +356,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    fn loc(&self) -> Range {
+    fn loc(&self) -> Location {
         match self {
             Expr::Aligned(aligned) => aligned.loc(),
             Expr::Primary(primary) => primary.loc(),
@@ -365,12 +402,12 @@ pub struct AlignedExpr {
     lhs: Expr,
     rhs: Option<Expr>,
     op: Option<String>,
-    loc: Range,
+    loc: Location,
     tail_comment: Option<String>, // 行末コメント
 }
 
 impl AlignedExpr {
-    pub fn new(lhs: Expr, loc: Range) -> AlignedExpr {
+    pub fn new(lhs: Expr, loc: Location) -> AlignedExpr {
         AlignedExpr {
             lhs,
             rhs: None,
@@ -384,8 +421,8 @@ impl AlignedExpr {
         self.lhs.clone()
     }
 
-    fn loc(&self) -> Range {
-        self.loc
+    fn loc(&self) -> Location {
+        self.loc.clone()
     }
 
     pub fn set_tail_comment(&mut self, comment: Comment) {
@@ -401,12 +438,12 @@ impl AlignedExpr {
             self.tail_comment = Some(tail_comment.to_string());
         }
 
-        self.loc.end_point = loc.end_point;
+        self.loc.append(loc);
     }
 
     // 演算子と右辺の式を追加する
     pub fn add_rhs(&mut self, op: String, rhs: Expr) {
-        self.loc.end_point = rhs.loc().end_point;
+        self.loc.append(rhs.loc());
         self.op = Some(op);
         self.rhs = Some(rhs);
     }
@@ -538,13 +575,13 @@ impl AlignedExpr {
 #[derive(Clone, Debug)]
 pub struct PrimaryExpr {
     elements: Vec<String>,
-    loc: Range,
+    loc: Location,
     len: usize,
     head_comment: Option<String>,
 }
 
 impl PrimaryExpr {
-    pub fn new(element: String, loc: Range) -> PrimaryExpr {
+    pub fn new(element: String, loc: Location) -> PrimaryExpr {
         let len = TAB_SIZE * (element.len() / TAB_SIZE + 1);
         PrimaryExpr {
             elements: vec![element],
@@ -554,8 +591,8 @@ impl PrimaryExpr {
         }
     }
 
-    fn loc(&self) -> Range {
-        self.loc
+    fn loc(&self) -> Location {
+        self.loc.clone()
     }
 
     pub fn len(&self) -> usize {
@@ -584,7 +621,7 @@ impl PrimaryExpr {
         }
 
         self.head_comment = Some(comment.clone());
-        self.loc.start_point = loc.start_point;
+        self.loc.append(loc);
 
         let first_element_len = self.elements()[0].len() / TAB_SIZE + 1;
         let head_comment_and_first_element_len =
@@ -639,7 +676,7 @@ pub struct BooleanExpr {
     depth: usize,                  // インデントの深さ
     default_separator: String,     // デフォルトセパレータ(e.g., ',', AND)
     contents: Vec<ContentWithSep>, // {sep, contents}
-    loc: Option<Range>,
+    loc: Option<Location>,
     has_op: bool,
 }
 
@@ -654,8 +691,8 @@ impl BooleanExpr {
         }
     }
 
-    pub fn loc(&self) -> Option<Range> {
-        self.loc
+    pub fn loc(&self) -> Option<Location> {
+        self.loc.clone()
     }
 
     pub fn set_default_separator(&mut self, sep: String) {
@@ -673,11 +710,8 @@ impl BooleanExpr {
         }
 
         // locationの更新
-        match self.loc {
-            Some(mut range) => {
-                range.end_point = aligned.loc().end_point;
-                self.loc = Some(range);
-            }
+        match &mut self.loc {
+            Some(loc) => loc.append(aligned.loc()),
             None => self.loc = Some(aligned.loc()),
         };
 
@@ -782,16 +816,16 @@ impl BooleanExpr {
 pub struct SelectSubExpr {
     depth: usize,
     stmt: Statement,
-    loc: Range,
+    loc: Location,
 }
 
 impl SelectSubExpr {
-    pub fn new(stmt: Statement, loc: Range, depth: usize) -> SelectSubExpr {
+    pub fn new(stmt: Statement, loc: Location, depth: usize) -> SelectSubExpr {
         SelectSubExpr { depth, stmt, loc }
     }
 
-    pub fn loc(&self) -> Range {
-        self.loc
+    pub fn loc(&self) -> Location {
+        self.loc.clone()
     }
 
     pub fn add_comment_to_child(&mut self, comment: Comment) {
@@ -887,10 +921,10 @@ impl Formatter {
             let mut stmt = self.format_select_stmt(stmt_node, src);
 
             if cursor.goto_next_sibling() && cursor.node().kind() == "comment" {
-                let comment_loc = cursor.node().range();
+                let comment_loc = Location::new(cursor.node().range());
 
                 //同じ行の場合
-                if comment_loc.start_point.row == stmt.loc().unwrap().end_point.row {
+                if comment_loc.is_same_line(&stmt.loc().unwrap()) {
                     stmt.add_comment_to_child(Comment::new(
                         cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
                         comment_loc,
@@ -939,8 +973,11 @@ impl Formatter {
                     if cursor.goto_first_child() {
                         // cursor -> FROM
                         let from_node = cursor.node();
-                        let mut clause =
-                            Clause::new("FROM".to_string(), from_node.range(), self.state.depth);
+                        let mut clause = Clause::new(
+                            "FROM".to_string(),
+                            Location::new(from_node.range()),
+                            self.state.depth,
+                        );
 
                         let mut separated_lines = SeparatedLines::new(self.state.depth, ",", true);
 
@@ -960,11 +997,10 @@ impl Formatter {
                                         continue;
                                     }
                                     "comment" => {
-                                        let comment_loc = child_node.range();
+                                        let comment_loc = Location::new(child_node.range());
 
                                         //同じ行の場合
-                                        if comment_loc.start_point.row
-                                            == separated_lines.loc().unwrap().end_point.row
+                                        if comment_loc.is_same_line(&separated_lines.loc().unwrap())
                                         {
                                             separated_lines.add_comment_to_child(Comment::new(
                                                 child_node
@@ -997,8 +1033,11 @@ impl Formatter {
                     if cursor.goto_first_child() {
                         // cursor -> WHERE
                         let where_node = cursor.node();
-                        let mut clause =
-                            Clause::new("WHERE".to_string(), where_node.range(), self.state.depth);
+                        let mut clause = Clause::new(
+                            "WHERE".to_string(),
+                            Location::new(where_node.range()),
+                            self.state.depth,
+                        );
 
                         let body: Body;
 
@@ -1030,13 +1069,13 @@ impl Formatter {
                     }
                 }
                 "comment" => {
-                    let comment_loc = clause_node.range();
+                    let comment_loc = Location::new(clause_node.range());
 
                     //同じ行の場合
-                    if comment_loc.start_point.row == statement.loc().unwrap().end_point.row {
+                    if comment_loc.is_same_line(&statement.loc().unwrap()) {
                         statement.add_comment_to_child(Comment::new(
                             clause_node.utf8_text(src.as_bytes()).unwrap().to_string(),
-                            clause_node.range(),
+                            comment_loc,
                         ));
                     } else {
                         //違う行の場合
@@ -1060,7 +1099,11 @@ impl Formatter {
         */
         let mut cursor = node.walk(); // cursor -> select_clause
 
-        let mut clause = Clause::new("SELECT".to_string(), node.range(), self.state.depth);
+        let mut clause = Clause::new(
+            "SELECT".to_string(),
+            Location::new(node.range()),
+            self.state.depth,
+        );
 
         if cursor.goto_first_child() {
             // cursor -> SELECT
@@ -1105,7 +1148,7 @@ impl Formatter {
                 "comment" => {
                     separated_lines.add_comment_to_child(Comment::new(
                         child_node.utf8_text(src.as_bytes()).unwrap().to_string(),
-                        child_node.range(),
+                        Location::new(child_node.range()),
                     ));
                 }
                 _ => {
@@ -1160,7 +1203,8 @@ impl Formatter {
                     // identifier
                     if cursor.node().kind() == "identifier" {
                         let rhs = cursor.node().utf8_text(src.as_bytes()).unwrap();
-                        let rhs_expr = PrimaryExpr::new(rhs.to_string(), cursor.node().range());
+                        let rhs_expr =
+                            PrimaryExpr::new(rhs.to_string(), Location::new(cursor.node().range()));
                         aligned.add_rhs("AS".to_string(), Expr::Primary(Box::new(rhs_expr)));
                     }
                 }
@@ -1217,7 +1261,7 @@ impl Formatter {
                     };
                 }
 
-                let primary = PrimaryExpr::new(dotted_name, range);
+                let primary = PrimaryExpr::new(dotted_name, Location::new(range));
 
                 Expr::Primary(Box::new(primary))
             }
@@ -1244,7 +1288,7 @@ impl Formatter {
 
                 let mut head_comment: Option<Comment> = None;
                 if cursor.node().kind() == "comment" {
-                    let comment_loc = cursor.node().range();
+                    let comment_loc = Location::new(cursor.node().range());
                     head_comment = Some(Comment {
                         comment: cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
                         loc: comment_loc,
@@ -1301,7 +1345,7 @@ impl Formatter {
             "identifier" | "number" | "string" => {
                 let primary = PrimaryExpr::new(
                     node.utf8_text(src.as_bytes()).unwrap().to_string(),
-                    node.range(),
+                    Location::new(node.range()),
                 );
 
                 Expr::Primary(Box::new(primary))
@@ -1353,7 +1397,7 @@ impl Formatter {
             cursor.goto_next_sibling();
 
             if cursor.node().kind() == "comment" {
-                let comment_loc = cursor.node().range();
+                let comment_loc = Location::new(cursor.node().range());
                 boolean_expr.add_comment_to_child(Comment::new(
                     cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
                     comment_loc,
@@ -1380,7 +1424,7 @@ impl Formatter {
     fn format_select_subexpr(&mut self, node: Node, src: &str) -> SelectSubExpr {
         // select_subexpression -> "(" select_statement ")"
 
-        let loc = node.range();
+        let loc = Location::new(node.range());
 
         let mut cursor = node.walk(); // cursor -> select_subexpression
 
