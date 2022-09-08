@@ -604,7 +604,10 @@ impl PrimaryExpr {
     }
 
     pub fn set_head_comment(&mut self, comment: Comment) {
-        let Comment { mut comment, loc } = comment;
+        let Comment {
+            mut comment,
+            mut loc,
+        } = comment;
 
         if TRIM_BIND_PARAM {
             // 1. /*を削除
@@ -621,7 +624,8 @@ impl PrimaryExpr {
         }
 
         self.head_comment = Some(comment.clone());
-        self.loc.append(loc);
+        loc.append(self.loc.clone());
+        self.loc = loc;
 
         let first_element_len = self.elements()[0].len() / TAB_SIZE + 1;
         let head_comment_and_first_element_len =
