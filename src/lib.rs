@@ -147,10 +147,7 @@ impl SeparatedLines {
         // コメントまでの最長の長さを計算する
         let mut max_len_to_comment = None;
         for aligned in (&self.contents).iter() {
-            match (
-                &max_len_to_comment,
-                aligned.len_to_comment(max_len_to_op, self.is_from_body),
-            ) {
+            match (&max_len_to_comment, aligned.len_to_comment(max_len_to_op)) {
                 (Some(max_len), Some(len)) => {
                     max_len_to_comment = Some(std::cmp::max(*max_len, len));
                 }
@@ -416,16 +413,18 @@ pub struct AlignedExpr {
     op: Option<String>,
     loc: Location,
     tail_comment: Option<String>, // 行末コメント
+    is_alias: bool,
 }
 
 impl AlignedExpr {
-    pub fn new(lhs: Expr, loc: Location) -> AlignedExpr {
+    pub fn new(lhs: Expr, loc: Location, is_alias: bool) -> AlignedExpr {
         AlignedExpr {
             lhs,
             rhs: None,
             op: None,
             loc,
             tail_comment: None,
+            is_alias,
         }
     }
 
@@ -472,17 +471,13 @@ impl AlignedExpr {
     }
 
     // 演算子から末尾コメントまでの長さを返す
-    pub fn len_to_comment(
-        &self,
-        max_len_to_op: Option<usize>,
-        is_from_body: bool,
-    ) -> Option<usize> {
+    pub fn len_to_comment(&self, max_len_to_op: Option<usize>) -> Option<usize> {
         match (max_len_to_op, &self.rhs) {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.len()),
             // コメント以外にそろえる対象があり、この式は右辺を持たない場合は0
             (Some(_), None) => {
-                if COMPLEMENT_AS && is_from_body {
+                if COMPLEMENT_AS && self.is_alias {
                     Some(self.lhs.len())
                 } else {
                     Some(0)
@@ -529,10 +524,16 @@ impl AlignedExpr {
                     result.push_str(&formatted);
                 }
             }
-            (None, Some(max_len)) if COMPLEMENT_AS && is_from_body => {
+            // AS補完する場合
+            (None, Some(max_len)) if COMPLEMENT_AS && self.is_alias => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
 
                 (0..tab_num).into_iter().for_each(|_| result.push('\t'));
+
+                if !is_from_body {
+                    result.push('\t');
+                    result.push_str("AS");
+                }
 
                 result.push('\t');
                 let formatted = self.lhs.render().unwrap();
@@ -555,7 +556,8 @@ impl AlignedExpr {
                         } else {
                             0
                         }
-                } else if COMPLEMENT_AS && is_from_body {
+                } else if COMPLEMENT_AS && self.is_alias {
+                    // AS補完する場合には、右辺に左辺と同じ式を挿入する
                     max_len_to_comment.unwrap() - self.lhs.len()
                 } else {
                     // 右辺がない場合は
@@ -794,10 +796,7 @@ impl BooleanExpr {
             content,
         } in (&self.contents).iter()
         {
-            match (
-                &max_len_to_comment,
-                content.len_to_comment(max_len_to_op, false),
-            ) {
+            match (&max_len_to_comment, content.len_to_comment(max_len_to_op)) {
                 (Some(max_len), Some(len)) => {
                     max_len_to_comment = Some(std::cmp::max(*max_len, len));
                 }
@@ -1187,7 +1186,7 @@ impl Formatter {
                 let lhs_expr = self.format_expr(cursor.node(), src);
                 let lhs_expr_loc = lhs_expr.loc();
 
-                let mut aligned = AlignedExpr::new(lhs_expr, lhs_expr_loc);
+                let mut aligned = AlignedExpr::new(lhs_expr, lhs_expr_loc, true);
 
                 // ("AS"? identifier)?
                 if cursor.goto_next_sibling() {
@@ -1218,7 +1217,7 @@ impl Formatter {
                 let expr = self.format_expr(expr_node, src);
                 let expr_loc = expr.loc();
 
-                AlignedExpr::new(expr, expr_loc)
+                AlignedExpr::new(expr, expr_loc, true)
             }
         }
     }
@@ -1314,7 +1313,7 @@ impl Formatter {
                 if Self::is_comp_op(op_str) {
                     // 比較演算子 -> AlignedExpr
                     let lhs_loc = lhs_expr.loc();
-                    let mut aligned = AlignedExpr::new(lhs_expr, lhs_loc);
+                    let mut aligned = AlignedExpr::new(lhs_expr, lhs_loc, false);
                     aligned.add_rhs(op_str.to_string(), rhs_expr);
 
                     Expr::Aligned(Box::new(aligned))
