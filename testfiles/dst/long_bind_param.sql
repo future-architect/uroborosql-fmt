@@ -3,13 +3,18 @@ SELECT
 ,	CODE	AS	DATA_CODE				-- コード
 ,	NAME	AS	DATA_NAME				-- 名称
 ,	VALUE1	AS	VALUEAAAAAAAAAAAAAAAA
-,	VALUE2								-- 値2
+,	VALUE2	AS	VALUE2					-- 値2
 ,	(
 		SELECT
 			VALUE3
 		FROM
 			TABLE2
-	)									-- サブクエリ
+	)		AS	(
+		SELECT
+			VALUE3
+		FROM
+			TABLE2
+	)						-- サブクエリ
 FROM
 	TABLE1
 WHERE
