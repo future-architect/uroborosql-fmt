@@ -9,4 +9,4 @@ edition = "2021"
 tree-sitter = "0.19.5"
 
 # git config --global core.longpaths true を管理者権限で実行しないといけない
-tree-sitter-sql = {git = "https://gitlab.nasa.future.co.jp/oss-incubate/rust-sql-formatter/tree-sitter-sql", rev="8583b9925f6a4f29b5d66cb3f86bd178b47fea2d"}
+tree-sitter-sql = {git = "https://gitlab.nasa.future.co.jp/oss-incubate/rust-sql-formatter/tree-sitter-sql"}
