@@ -2,4 +2,4 @@ SELECT A
 
 from tb
 WHERE 
-a = /*a*/1 
+a = (A + 1) 
