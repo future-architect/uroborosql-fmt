@@ -1,11 +1,13 @@
 use itertools::{repeat_n, Itertools};
 use tree_sitter::{Node, Point, Range};
 
-const TAB_SIZE: usize = 4;
+const TAB_SIZE: usize = 4; // タブ幅
 
 const COMPLEMENT_AS: bool = true; // AS句がない場合に自動的に補完する
 
 const TRIM_BIND_PARAM: bool = false; // バインド変数の中身をトリムする
+
+pub const DEBUG_MODE: bool = false; // デバッグモード
 
 pub const COMMENT: &str = "comment";
 
@@ -17,7 +19,6 @@ pub fn format_sql(src: &str) -> String {
     let mut parser = tree_sitter::Parser::new();
     // tree-sitter-sqlの言語をパーサにセットする
     parser.set_language(language).unwrap();
-
     // srcをパースし、結果のTreeを取得
     let tree = parser.parse(&src, None).unwrap();
     // Treeのルートノードを取得
@@ -28,7 +29,10 @@ pub fn format_sql(src: &str) -> String {
 
     // formatを行い、バッファに結果を格納
     let res = formatter.format_sql(root_node, src.as_ref());
-    eprintln!("{:#?}", res);
+
+    if DEBUG_MODE {
+        eprintln!("{:#?}", res);
+    }
 
     match res.render() {
         Ok(res) => res,
@@ -153,11 +157,10 @@ impl SeparatedLines {
 
             if is_first_line {
                 is_first_line = false;
-                result.push('\t')
             } else {
                 result.push_str(&self.separator);
-                result.push('\t')
             }
+            result.push('\t');
 
             // alignedに演算子までの最長の長さを与えてフォーマット済みの文字列をもらう
             let formatted = aligned.render(max_len_to_op, max_len_to_comment, self.is_from_body)?;
@@ -343,10 +346,7 @@ impl Expr {
 
     fn render(&self) -> Result<String, Error> {
         match self {
-            Expr::Aligned(_aligned) => {
-                todo!();
-                // aligned.render();
-            }
+            Expr::Aligned(_aligned) => todo!(),
             Expr::Primary(primary) => primary.render(),
             Expr::Boolean(boolean) => boolean.render(),
             Expr::SelectSub(select_sub) => select_sub.render(),
@@ -359,7 +359,7 @@ impl Expr {
         match self {
             Expr::Primary(primary) => primary.len(),
             Expr::SelectSub(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
-            Expr::ParenExpr(_) => TAB_SIZE,
+            Expr::ParenExpr(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
             _ => todo!(),
         }
     }
@@ -481,10 +481,10 @@ impl AlignedExpr {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
                 result.extend(repeat_n('\t', tab_num));
 
-                if is_from_body {
-                    result.push('\t');
-                } else {
-                    result.push('\t');
+                result.push('\t');
+
+                // from句以外はopを挿入
+                if !is_from_body {
                     result.push_str(op);
                     result.push('\t');
                 }
@@ -768,11 +768,10 @@ impl BooleanExpr {
 
             if is_first_line {
                 is_first_line = false;
-                result.push('\t')
             } else {
                 result.push_str(separator);
-                result.push('\t');
             }
+            result.push('\t');
 
             let formatted = content.render(max_len_to_op, max_len_to_comment, false)?;
             result.push_str(&formatted);
@@ -1488,8 +1487,10 @@ pub fn print_cst(src: &str) {
     // Treeのルートノードを取得
     let root_node = tree.root_node();
 
-    dfs(root_node, 0);
-    eprintln!();
+    if DEBUG_MODE {
+        dfs(root_node, 0);
+        eprintln!();
+    }
 }
 
 fn dfs(node: Node, depth: usize) {
