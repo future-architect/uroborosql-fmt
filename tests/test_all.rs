@@ -1,5 +1,3 @@
-extern crate uroborosql_fmt;
-
 use std::{
     fs::{read_to_string, File},
     io::Write,
