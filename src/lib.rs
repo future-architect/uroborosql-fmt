@@ -149,7 +149,7 @@ impl SeparatedLines {
         let mut is_first_line = true;
 
         for aligned in (&self.contents).iter() {
-            (0..self.depth).for_each(|_| result.push('\t'));
+            result.extend(repeat_n('\t', self.depth));
 
             if is_first_line {
                 is_first_line = false;
@@ -306,7 +306,7 @@ impl Clause {
         // body...
         let mut result = String::new();
 
-        (0..self.depth).into_iter().for_each(|_| result.push('\t'));
+        result.extend(repeat_n('\t', self.depth));
 
         result.push_str(&self.keyword);
 
@@ -479,8 +479,7 @@ impl AlignedExpr {
         match (&self.op, max_len_to_op) {
             (Some(op), Some(max_len)) => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
-
-                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
+                result.extend(repeat_n('\t', tab_num));
 
                 if is_from_body {
                     result.push('\t');
@@ -499,8 +498,7 @@ impl AlignedExpr {
             // AS補完する場合
             (None, Some(max_len)) if COMPLEMENT_AS && self.is_alias => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
-
-                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
+                result.extend(repeat_n('\t', tab_num));
 
                 if !is_from_body {
                     result.push('\t');
@@ -540,7 +538,7 @@ impl AlignedExpr {
                         - self.lhs.len()
                 } / TAB_SIZE;
 
-                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
+                result.extend(repeat_n('\t', tab_num));
 
                 result.push('\t');
                 result.push_str(comment);
@@ -549,7 +547,7 @@ impl AlignedExpr {
             (Some(comment), None) => {
                 let tab_num = (max_len_to_comment.unwrap() - self.lhs.len()) / TAB_SIZE;
 
-                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
+                result.extend(repeat_n('\t', tab_num));
 
                 result.push('\t');
                 result.push_str(comment);
@@ -814,7 +812,8 @@ impl SelectSubExpr {
         let formatted = self.stmt.render()?;
 
         result.push_str(&formatted);
-        (0..self.depth).for_each(|_| result.push('\t'));
+
+        result.extend(repeat_n('\t', self.depth));
         result.push(')');
 
         Ok(result)
@@ -845,17 +844,14 @@ impl ParenExpr {
 
         result.push_str("(\n");
 
-        match self.expr.render() {
-            Ok(formatted) => {
-                result.push_str(&formatted);
+        let formatted = self.expr.render()?;
 
-                (0..self.depth).for_each(|_| result.push('\t'));
+        result.push_str(&formatted);
 
-                result.push(')');
-                Ok(result)
-            }
-            Err(e) => Err(e),
-        }
+        result.extend(repeat_n('\t', self.depth));
+
+        result.push(')');
+        Ok(result)
     }
 }
 
