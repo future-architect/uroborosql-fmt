@@ -263,6 +263,7 @@ impl Comment {
 pub enum Body {
     SepLines(SeparatedLines),
     BooleanExpr(BooleanExpr),
+    ParenExpr(ParenExpr),
 }
 
 impl Body {
@@ -270,6 +271,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.loc(),
             Body::BooleanExpr(bool_expr) => bool_expr.loc(),
+            Body::ParenExpr(paren_expr) => Some(paren_expr.loc()),
         }
     }
 
@@ -277,6 +279,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.render(),
             Body::BooleanExpr(bool_expr) => bool_expr.render(),
+            Body::ParenExpr(paren_expr) => paren_expr.render(),
         }
     }
 
@@ -284,6 +287,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.add_comment_to_child(comment),
             Body::BooleanExpr(bool_expr) => bool_expr.add_comment_to_child(comment),
+            Body::ParenExpr(paren_expr) => paren_expr.add_comment_to_child(comment),
         }
     }
 }
@@ -354,6 +358,7 @@ pub enum Expr {
     Primary(Box<PrimaryExpr>), // 識別子、文字列、数値など
     Boolean(Box<BooleanExpr>), // boolean式
     SelectSub(Box<SelectSubExpr>),
+    ParenExpr(Box<ParenExpr>),
 }
 
 impl Expr {
@@ -363,6 +368,7 @@ impl Expr {
             Expr::Primary(primary) => primary.loc(),
             Expr::Boolean(sep_lines) => sep_lines.loc().unwrap(),
             Expr::SelectSub(select_sub) => select_sub.loc(),
+            Expr::ParenExpr(paren_expr) => paren_expr.loc(),
         }
     }
 
@@ -375,6 +381,7 @@ impl Expr {
             Expr::Primary(primary) => primary.render(),
             Expr::Boolean(boolean) => boolean.render(),
             Expr::SelectSub(select_sub) => select_sub.render(),
+            Expr::ParenExpr(paren_expr) => paren_expr.render(),
         }
     }
 
@@ -383,6 +390,7 @@ impl Expr {
         match self {
             Expr::Primary(primary) => primary.len(),
             Expr::SelectSub(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
+            Expr::ParenExpr(_) => TAB_SIZE,
             _ => todo!(),
         }
     }
@@ -393,6 +401,7 @@ impl Expr {
             Expr::Primary(_primary) => (),
             Expr::Boolean(boolean) => boolean.add_comment_to_child(comment),
             Expr::SelectSub(select_sub) => select_sub.add_comment_to_child(comment),
+            Expr::ParenExpr(paren_expr) => paren_expr.add_comment_to_child(comment),
         }
     }
 
@@ -872,6 +881,44 @@ impl SelectSubExpr {
         }
     }
 }
+#[derive(Debug, Clone)]
+pub struct ParenExpr {
+    depth: usize,
+    expr: Expr,
+    loc: Location,
+}
+
+impl ParenExpr {
+    pub fn new(expr: Expr, loc: Location, depth: usize) -> ParenExpr {
+        ParenExpr { depth, expr, loc }
+    }
+
+    pub fn loc(&self) -> Location {
+        self.loc.clone()
+    }
+
+    pub fn add_comment_to_child(&mut self, comment: Comment) {
+        self.expr.add_comment_to_child(comment);
+    }
+
+    pub fn render(&self) -> Result<String, Error> {
+        let mut result = String::new();
+
+        result.push_str("(\n");
+
+        match self.expr.render() {
+            Ok(formatted) => {
+                result.push_str(&formatted);
+
+                (0..self.depth).for_each(|_| result.push('\t'));
+
+                result.push(')');
+                Ok(result)
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
 
 /// インデントの深さや位置をそろえるための情報を保持する構造体
 struct FormatterState {
@@ -1060,6 +1107,7 @@ impl Formatter {
                             }
                             Expr::Boolean(boolean) => body = Body::BooleanExpr(*boolean),
                             Expr::SelectSub(_select_sub) => todo!(),
+                            Expr::ParenExpr(paren_expr) => body = Body::ParenExpr(*paren_expr),
                         }
 
                         cursor.goto_parent();
@@ -1306,6 +1354,7 @@ impl Formatter {
                         Expr::Primary(primary) => primary.set_head_comment(comment),
                         Expr::Boolean(_) => todo!(),
                         Expr::SelectSub(_) => todo!(),
+                        Expr::ParenExpr(_) => todo!(),
                     },
                     None => (),
                 }
@@ -1355,6 +1404,11 @@ impl Formatter {
                 self.unnest();
                 Expr::SelectSub(Box::new(select_subexpr))
             }
+            "parenthesized_expression" => {
+                let paren_expr = self.format_paren_expr(node, src);
+                Expr::ParenExpr(Box::new(paren_expr))
+            }
+
             _ => {
                 eprintln!(
                     "format_expr(): unimplemented expression {}, {:#?}",
@@ -1391,6 +1445,11 @@ impl Formatter {
                 Expr::Primary(_) => todo!(),
                 Expr::Boolean(boolean) => boolean_expr.merge(*boolean),
                 Expr::SelectSub(_) => todo!(),
+                Expr::ParenExpr(paren_expr) => {
+                    let loc = paren_expr.loc();
+                    let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), loc, false);
+                    boolean_expr.add_expr(aligned);
+                }
             }
 
             cursor.goto_next_sibling();
@@ -1415,6 +1474,11 @@ impl Formatter {
                 Expr::Primary(_) => todo!(),
                 Expr::Boolean(boolean) => boolean_expr.merge(*boolean),
                 Expr::SelectSub(_) => todo!(),
+                Expr::ParenExpr(paren_expr) => {
+                    let loc = paren_expr.loc();
+                    let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), loc, false);
+                    boolean_expr.add_expr(aligned);
+                }
             }
         }
         Expr::Boolean(Box::new(boolean_expr))
@@ -1443,6 +1507,41 @@ impl Formatter {
         // cursor -> )
 
         SelectSubExpr::new(select_stmt, loc, self.state.depth)
+    }
+
+    fn format_paren_expr(&mut self, node: Node, src: &str) -> ParenExpr {
+        let mut cursor = node.walk();
+
+        cursor.goto_first_child();
+        //cursor -> "("
+
+        cursor.goto_next_sibling();
+        //cursor -> expr
+
+        let mut is_nest = false;
+        match cursor.node().kind() {
+            "parenthesized_expression" => (),
+            _ => is_nest = true,
+        }
+
+        if is_nest {
+            self.nest();
+        }
+
+        let expr = self.format_expr(cursor.node(), src);
+
+        cursor.goto_next_sibling();
+        //cursor -> ")"
+
+        match expr {
+            Expr::ParenExpr(paren_expr) => *paren_expr,
+            _ => {
+                let loc = expr.loc();
+                let paren_expr = ParenExpr::new(expr, loc, self.state.depth);
+                self.unnest();
+                paren_expr
+            }
+        }
     }
 }
 
