@@ -1445,6 +1445,15 @@ impl Formatter {
             boolean_expr.set_default_separator(sep.to_string());
 
             cursor.goto_next_sibling();
+            if cursor.node().kind() == COMMENT {
+                let comment_loc = Location::new(cursor.node().range());
+                boolean_expr.add_comment_to_child(Comment::new(
+                    cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                    comment_loc,
+                ));
+                cursor.goto_next_sibling();
+            }
+
             let right = self.format_expr(cursor.node(), src);
 
             match right {
@@ -1489,7 +1498,12 @@ impl Formatter {
     }
 
     fn format_paren_expr(&mut self, node: Node, src: &str) -> ParenExpr {
+        // parenthesized_expression: $ => PREC.unary "(" expression ")"
         let mut cursor = node.walk();
+
+        let loc = Location::new(cursor.node().range());
+
+        // 括弧の前の演算子には未対応
 
         cursor.goto_first_child();
         //cursor -> "("
@@ -1497,11 +1511,11 @@ impl Formatter {
         cursor.goto_next_sibling();
         //cursor -> expr
 
-        let mut is_nest = false;
-        match cursor.node().kind() {
-            "parenthesized_expression" => (),
-            _ => is_nest = true,
-        }
+        // exprがparen_exprならネストしない
+        let is_nest = match cursor.node().kind() {
+            "parenthesized_expression" => false,
+            _ => true,
+        };
 
         if is_nest {
             self.nest();
@@ -1509,18 +1523,28 @@ impl Formatter {
 
         let expr = self.format_expr(cursor.node(), src);
 
-        cursor.goto_next_sibling();
-        //cursor -> ")"
-
-        match expr {
+        let mut paren_expr = match expr {
             Expr::ParenExpr(paren_expr) => *paren_expr,
             _ => {
-                let loc = expr.loc();
                 let paren_expr = ParenExpr::new(expr, loc, self.state.depth);
                 self.unnest();
                 paren_expr
             }
+        };
+
+        cursor.goto_next_sibling();
+        //cursor -> ")"
+
+        if cursor.node().kind() == COMMENT {
+            let comment_loc = Location::new(cursor.node().range());
+            paren_expr.add_comment_to_child(Comment::new(
+                cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                comment_loc,
+            ));
+            cursor.goto_next_sibling();
         }
+
+        paren_expr
     }
 }
 
