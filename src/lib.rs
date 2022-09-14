@@ -855,6 +855,10 @@ impl ParenExpr {
         self.expr.add_comment_to_child(comment);
     }
 
+    pub fn set_loc(&mut self, loc: Location) {
+        self.loc = loc;
+    }
+
     pub fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
 
@@ -1444,6 +1448,7 @@ impl Formatter {
             let sep = cursor.node().kind();
             boolean_expr.set_default_separator(sep.to_string());
 
+            cursor.goto_next_sibling();
             let right = self.format_expr(cursor.node(), src);
 
             match right {
@@ -1514,7 +1519,10 @@ impl Formatter {
         let expr = self.format_expr(cursor.node(), src);
 
         let mut paren_expr = match expr {
-            Expr::ParenExpr(paren_expr) => *paren_expr,
+            Expr::ParenExpr(mut paren_expr) => {
+                paren_expr.set_loc(loc);
+                *paren_expr
+            }
             _ => {
                 let paren_expr = ParenExpr::new(expr, loc, self.state.depth);
                 self.unnest();
