@@ -331,6 +331,7 @@ pub enum Expr {
     Boolean(Box<BooleanExpr>), // boolean式
     SelectSub(Box<SelectSubExpr>),
     ParenExpr(Box<ParenExpr>),
+    Asterisk(Box<AsteriskExpr>),
 }
 
 impl Expr {
@@ -341,6 +342,7 @@ impl Expr {
             Expr::Boolean(sep_lines) => sep_lines.loc().unwrap(),
             Expr::SelectSub(select_sub) => select_sub.loc(),
             Expr::ParenExpr(paren_expr) => paren_expr.loc(),
+            Expr::Asterisk(asterisk) => asterisk.loc(),
         }
     }
 
@@ -351,6 +353,7 @@ impl Expr {
             Expr::Boolean(boolean) => boolean.render(),
             Expr::SelectSub(select_sub) => select_sub.render(),
             Expr::ParenExpr(paren_expr) => paren_expr.render(),
+            Expr::Asterisk(asterisk) => asterisk.render(),
         }
     }
 
@@ -360,6 +363,7 @@ impl Expr {
             Expr::Primary(primary) => primary.len(),
             Expr::SelectSub(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
             Expr::ParenExpr(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
+            Expr::Asterisk(asterisk) => asterisk.len(),
             _ => todo!(),
         }
     }
@@ -371,6 +375,7 @@ impl Expr {
             Expr::Boolean(boolean) => boolean.add_comment_to_child(comment),
             Expr::SelectSub(select_sub) => select_sub.add_comment_to_child(comment),
             Expr::ParenExpr(paren_expr) => paren_expr.add_comment_to_child(comment),
+            _ => todo!(),
         }
     }
 
@@ -450,11 +455,16 @@ impl AlignedExpr {
 
     // 演算子から末尾コメントまでの長さを返す
     pub fn len_to_comment(&self, max_len_to_op: Option<usize>) -> Option<usize> {
+        let is_asterisk = match self.lhs {
+            Expr::Asterisk(_) => true,
+            _ => false,
+        };
+
         match (max_len_to_op, &self.rhs) {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.len()),
             // コメント以外に揃える対象があり、右辺を左辺で補完する場合、左辺の長さ
-            (Some(_), None) if COMPLEMENT_AS && self.is_alias => Some(self.lhs.len()),
+            (Some(_), None) if COMPLEMENT_AS && self.is_alias && !is_asterisk => Some(self.lhs.len()),
             // コメント以外に揃える対象があり、右辺を左辺を保管しない場合、0
             (Some(_), None) => Some(0),
             // そろえる対象がコメントだけであるとき、左辺の長さ
@@ -474,6 +484,11 @@ impl AlignedExpr {
         //左辺をrender
         let formatted = self.lhs.render()?;
         result.push_str(&formatted);
+
+        let is_asterisk = match self.lhs {
+            Expr::Asterisk(_) => true,
+            _ => false,
+        };
 
         // 演算子と右辺をrender
         match (&self.op, max_len_to_op) {
@@ -496,7 +511,7 @@ impl AlignedExpr {
                 }
             }
             // AS補完する場合
-            (None, Some(max_len)) if COMPLEMENT_AS && self.is_alias => {
+            (None, Some(max_len)) if COMPLEMENT_AS && self.is_alias && !is_asterisk => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
                 result.extend(repeat_n('\t', tab_num));
 
@@ -526,7 +541,7 @@ impl AlignedExpr {
                         } else {
                             0
                         }
-                } else if COMPLEMENT_AS && self.is_alias {
+                } else if COMPLEMENT_AS && self.is_alias && !is_asterisk {
                     // AS補完する場合には、右辺に左辺と同じ式を挿入する
                     max_len_to_comment.unwrap() - self.lhs.len()
                 } else {
@@ -854,6 +869,30 @@ impl ParenExpr {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct AsteriskExpr {
+    content: String,
+    loc: Location,
+}
+
+impl AsteriskExpr {
+    pub fn new(content: String, loc: Location) -> AsteriskExpr {
+        AsteriskExpr { content, loc }
+    }
+
+    fn loc(&self) -> Location {
+        self.loc.clone()
+    }
+
+    fn len(&self) -> usize {
+        TAB_SIZE * (self.content.len() / TAB_SIZE + 1)
+    }
+
+    pub fn render(&self) -> Result<String, Error> {
+        Ok(self.content.clone())
+    }
+}
+
 /// インデントの深さや位置をそろえるための情報を保持する構造体
 struct FormatterState {
     pub depth: usize,
@@ -1038,7 +1077,8 @@ impl Formatter {
                             Expr::Boolean(boolean) => Body::BooleanExpr(*boolean),
                             Expr::SelectSub(_select_sub) => todo!(),
                             Expr::ParenExpr(paren_expr) => Body::ParenExpr(*paren_expr),
-                        };
+                            Expr::Asterisk(asterisk) => todo!(),
+                        }
 
                         cursor.goto_parent();
 
@@ -1283,6 +1323,7 @@ impl Formatter {
                         Expr::Boolean(_) => todo!(),
                         Expr::SelectSub(_) => todo!(),
                         Expr::ParenExpr(_) => todo!(),
+                        Expr::Asterisk(_) => todo!(),
                     },
                     None => (),
                 }
@@ -1336,7 +1377,13 @@ impl Formatter {
                 let paren_expr = self.format_paren_expr(node, src);
                 Expr::ParenExpr(Box::new(paren_expr))
             }
-
+            "asterisk_expression" => {
+                let asterisk = AsteriskExpr::new(
+                    node.utf8_text(src.as_bytes()).unwrap().to_string(),
+                    Location::new(node.range()),
+                );
+                Expr::Asterisk(Box::new(asterisk))
+            }
             _ => {
                 eprintln!(
                     "format_expr(): unimplemented expression {}, {:#?}",
@@ -1378,6 +1425,7 @@ impl Formatter {
                     let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), loc, false);
                     boolean_expr.add_expr(aligned);
                 }
+                Expr::Asterisk(_) => todo!(),
             }
 
             cursor.goto_next_sibling();
@@ -1407,6 +1455,7 @@ impl Formatter {
                     let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), loc, false);
                     boolean_expr.add_expr(aligned);
                 }
+                Expr::Asterisk(_) => todo!(),
             }
         }
         Expr::Boolean(Box::new(boolean_expr))
