@@ -2,10 +2,8 @@ SELECT A
 
 from tb
 WHERE
-1=2 
+1=22222222222222
 OR
-((((2=3 or 3=4))))
-and 
-((((((3 =4 or 4=5))))))
-or 
-(6 =10 and (10 = 10 or 10 = 10))
+(test = test and 
+test = test and test = test --comment
+) --test
