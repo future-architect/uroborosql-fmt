@@ -464,7 +464,9 @@ impl AlignedExpr {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.len()),
             // コメント以外に揃える対象があり、右辺を左辺で補完する場合、左辺の長さ
-            (Some(_), None) if COMPLEMENT_AS && self.is_alias && !is_asterisk => Some(self.lhs.len()),
+            (Some(_), None) if COMPLEMENT_AS && self.is_alias && !is_asterisk => {
+                Some(self.lhs.len())
+            }
             // コメント以外に揃える対象があり、右辺を左辺を保管しない場合、0
             (Some(_), None) => Some(0),
             // そろえる対象がコメントだけであるとき、左辺の長さ
@@ -1077,8 +1079,8 @@ impl Formatter {
                             Expr::Boolean(boolean) => Body::BooleanExpr(*boolean),
                             Expr::SelectSub(_select_sub) => todo!(),
                             Expr::ParenExpr(paren_expr) => Body::ParenExpr(*paren_expr),
-                            Expr::Asterisk(asterisk) => todo!(),
-                        }
+                            Expr::Asterisk(_asterisk) => todo!(),
+                        };
 
                         cursor.goto_parent();
 
