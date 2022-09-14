@@ -1444,16 +1444,6 @@ impl Formatter {
             let sep = cursor.node().kind();
             boolean_expr.set_default_separator(sep.to_string());
 
-            cursor.goto_next_sibling();
-            if cursor.node().kind() == COMMENT {
-                let comment_loc = Location::new(cursor.node().range());
-                boolean_expr.add_comment_to_child(Comment::new(
-                    cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
-                    comment_loc,
-                ));
-                cursor.goto_next_sibling();
-            }
-
             let right = self.format_expr(cursor.node(), src);
 
             match right {
