@@ -1,10 +1,15 @@
+use itertools::{repeat_n, Itertools};
 use tree_sitter::{Node, Point, Range};
 
-const TAB_SIZE: usize = 4;
+const TAB_SIZE: usize = 4; // タブ幅
 
 const COMPLEMENT_AS: bool = true; // AS句がない場合に自動的に補完する
 
 const TRIM_BIND_PARAM: bool = false; // バインド変数の中身をトリムする
+
+pub const DEBUG_MODE: bool = false; // デバッグモード
+
+pub const COMMENT: &str = "comment";
 
 /// 引数のSQLをフォーマットして返す
 pub fn format_sql(src: &str) -> String {
@@ -14,7 +19,6 @@ pub fn format_sql(src: &str) -> String {
     let mut parser = tree_sitter::Parser::new();
     // tree-sitter-sqlの言語をパーサにセットする
     parser.set_language(language).unwrap();
-
     // srcをパースし、結果のTreeを取得
     let tree = parser.parse(&src, None).unwrap();
     // Treeのルートノードを取得
@@ -25,7 +29,10 @@ pub fn format_sql(src: &str) -> String {
 
     // formatを行い、バッファに結果を格納
     let res = formatter.format_sql(root_node, src.as_ref());
-    eprintln!("{:#?}", res);
+
+    if DEBUG_MODE {
+        eprintln!("{:#?}", res);
+    }
 
     match res.render() {
         Ok(res) => res,
@@ -111,7 +118,7 @@ impl SeparatedLines {
         // 演算子があるかどうかをチェック
         if aligned.has_rhs() {
             self.has_op = true;
-        };
+        }
 
         // locationの更新
         match &mut self.loc {
@@ -123,8 +130,7 @@ impl SeparatedLines {
     }
 
     pub fn add_comment_to_child(&mut self, comment: Comment) {
-        let last_idx = self.contents.len() - 1;
-        self.contents[last_idx].set_tail_comment(comment);
+        self.contents.last_mut().unwrap().set_tail_comment(comment);
     }
 
     /// AS句で揃えたものを返す
@@ -132,53 +138,34 @@ impl SeparatedLines {
         let mut result = String::new();
 
         let max_len_to_op = if self.has_op {
-            // 左辺の最大値を計算
-            let max_len = (&self.contents)
-                .iter()
-                .fold(0, |max: usize, aligned: &AlignedExpr| {
-                    std::cmp::max(max, aligned.len_lhs())
-                });
-            Some(max_len)
+            self.contents.iter().map(AlignedExpr::len_lhs).max()
         } else {
             // そろえる演算子がない場合はNone
             None
         };
 
-        // コメントまでの最長の長さを計算する
-        let mut max_len_to_comment = None;
-        for aligned in (&self.contents).iter() {
-            match (&max_len_to_comment, aligned.len_to_comment(max_len_to_op)) {
-                (Some(max_len), Some(len)) => {
-                    max_len_to_comment = Some(std::cmp::max(*max_len, len));
-                }
-                (None, Some(len)) => {
-                    max_len_to_comment = Some(len);
-                }
-                _ => (),
-            }
-        }
+        let max_len_to_comment = self
+            .contents
+            .iter()
+            .flat_map(|aligned| aligned.len_to_comment(max_len_to_op))
+            .max();
 
         let mut is_first_line = true;
 
         for aligned in (&self.contents).iter() {
-            (0..self.depth).into_iter().for_each(|_| result.push('\t'));
+            result.extend(repeat_n('\t', self.depth));
 
             if is_first_line {
                 is_first_line = false;
-                result.push('\t')
             } else {
                 result.push_str(&self.separator);
-                result.push('\t')
             }
+            result.push('\t');
 
             // alignedに演算子までの最長の長さを与えてフォーマット済みの文字列をもらう
-            match aligned.render(max_len_to_op, max_len_to_comment, self.is_from_body) {
-                Ok(formatted) => {
-                    result.push_str(&formatted);
-                    result.push('\n')
-                }
-                Err(e) => return Err(e),
-            };
+            let formatted = aligned.render(max_len_to_op, max_len_to_comment, self.is_from_body)?;
+            result.push_str(&formatted);
+            result.push('\n')
         }
 
         Ok(result)
@@ -213,12 +200,8 @@ impl Statement {
     // 文に句を追加する
     pub fn add_clause(&mut self, clause: Clause) {
         match &mut self.loc {
-            Some(loc) => {
-                loc.append(clause.loc());
-            }
-            None => {
-                self.loc = Some(clause.loc());
-            }
+            Some(loc) => loc.append(clause.loc()),
+            None => self.loc = Some(clause.loc()),
         }
         self.clauses.push(clause);
     }
@@ -233,17 +216,11 @@ impl Statement {
         // ...
         // clausen
 
-        let mut result = String::new();
-        for i in 0..self.clauses.len() {
-            // 後でイテレータで書き直す
-            let clause = self.clauses.get(i).unwrap();
-            match clause.render() {
-                Ok(formatted_clause) => result.push_str(&formatted_clause),
-                Err(_) => return Err(Error::ParseError),
-            }
-        }
-
-        Ok(result)
+        // 1つでもエラーの場合は全体もエラー
+        self.clauses
+            .iter()
+            .map(Clause::render)
+            .collect::<Result<String, Error>>()
     }
 }
 
@@ -332,19 +309,14 @@ impl Clause {
         // body...
         let mut result = String::new();
 
-        (0..self.depth).into_iter().for_each(|_| result.push('\t'));
+        result.extend(repeat_n('\t', self.depth));
 
         result.push_str(&self.keyword);
 
-        match &self.body {
-            Some(sl) => match sl.render() {
-                Ok(formatted_body) => {
-                    result.push('\n');
-                    result.push_str(&formatted_body);
-                }
-                Err(e) => return Err(e),
-            },
-            None => (),
+        if let Some(sl) = &self.body {
+            let formatted_body = sl.render()?;
+            result.push('\n');
+            result.push_str(&formatted_body);
         };
 
         Ok(result)
@@ -376,10 +348,7 @@ impl Expr {
 
     fn render(&self) -> Result<String, Error> {
         match self {
-            Expr::Aligned(_aligned) => {
-                todo!();
-                // aligned.render();
-            }
+            Expr::Aligned(_aligned) => todo!(),
             Expr::Primary(primary) => primary.render(),
             Expr::Boolean(boolean) => boolean.render(),
             Expr::SelectSub(select_sub) => select_sub.render(),
@@ -393,7 +362,7 @@ impl Expr {
         match self {
             Expr::Primary(primary) => primary.len(),
             Expr::SelectSub(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
-            Expr::ParenExpr(_) => TAB_SIZE,
+            Expr::ParenExpr(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
             Expr::Asterisk(asterisk) => asterisk.len(),
             _ => todo!(),
         }
@@ -494,14 +463,12 @@ impl AlignedExpr {
         match (max_len_to_op, &self.rhs) {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.len()),
-            // コメント以外にそろえる対象があり、この式は右辺を持たない場合は0
-            (Some(_), None) => {
-                if COMPLEMENT_AS && self.is_alias && !is_asterisk {
-                    Some(self.lhs.len())
-                } else {
-                    Some(0)
-                }
+            // コメント以外に揃える対象があり、右辺を左辺で補完する場合、左辺の長さ
+            (Some(_), None) if COMPLEMENT_AS && self.is_alias && !is_asterisk => {
+                Some(self.lhs.len())
             }
+            // コメント以外に揃える対象があり、右辺を左辺を保管しない場合、0
+            (Some(_), None) => Some(0),
             // そろえる対象がコメントだけであるとき、左辺の長さ
             _ => Some(self.lhs.len()),
         }
@@ -517,10 +484,8 @@ impl AlignedExpr {
         let mut result = String::new();
 
         //左辺をrender
-        match self.lhs.render() {
-            Ok(formatted) => result.push_str(&formatted),
-            Err(e) => return Err(e),
-        };
+        let formatted = self.lhs.render()?;
+        result.push_str(&formatted);
 
         let is_asterisk = match self.lhs {
             Expr::Asterisk(_) => true,
@@ -531,28 +496,26 @@ impl AlignedExpr {
         match (&self.op, max_len_to_op) {
             (Some(op), Some(max_len)) => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
+                result.extend(repeat_n('\t', tab_num));
 
-                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
+                result.push('\t');
 
-                if is_from_body {
-                    result.push('\t');
-                } else {
-                    result.push('\t');
+                // from句以外はopを挿入
+                if !is_from_body {
                     result.push_str(op);
                     result.push('\t');
                 }
 
                 //右辺をrender
                 if let Some(rhs) = &self.rhs {
-                    let formatted = rhs.render().unwrap();
+                    let formatted = rhs.render()?;
                     result.push_str(&formatted);
                 }
             }
             // AS補完する場合
             (None, Some(max_len)) if COMPLEMENT_AS && self.is_alias && !is_asterisk => {
                 let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
-
-                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
+                result.extend(repeat_n('\t', tab_num));
 
                 if !is_from_body {
                     result.push('\t');
@@ -592,7 +555,7 @@ impl AlignedExpr {
                         - self.lhs.len()
                 } / TAB_SIZE;
 
-                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
+                result.extend(repeat_n('\t', tab_num));
 
                 result.push('\t');
                 result.push_str(comment);
@@ -601,7 +564,7 @@ impl AlignedExpr {
             (Some(comment), None) => {
                 let tab_num = (max_len_to_comment.unwrap() - self.lhs.len()) / TAB_SIZE;
 
-                (0..tab_num).into_iter().for_each(|_| result.push('\t'));
+                result.extend(repeat_n('\t', tab_num));
 
                 result.push('\t');
                 result.push_str(comment);
@@ -703,9 +666,7 @@ impl PrimaryExpr {
     }
 
     pub fn render(&self) -> Result<String, Error> {
-        let upper_elements: Vec<String> = self.elements.iter().map(|x| x.to_uppercase()).collect();
-
-        let elements_str = upper_elements.join("\t");
+        let elements_str = self.elements.iter().map(|x| x.to_uppercase()).join("\t");
 
         match self.head_comment.as_ref() {
             Some(comment) => Ok(format!("{}{}", comment, elements_str)),
@@ -802,55 +763,36 @@ impl BooleanExpr {
         let mut result = String::new();
 
         let max_len_to_op = if self.has_op {
-            let max_len = (&self.contents)
+            self.contents
                 .iter()
-                .fold(0, |max: usize, pair: &ContentWithSep| {
-                    let aligned = &pair.content;
-                    std::cmp::max(max, aligned.len_lhs())
-                });
-            Some(max_len)
+                .map(|pair| pair.content.len_lhs())
+                .max()
         } else {
             None
         };
 
         // コメントまでの最長の長さを計算する
-        let mut max_len_to_comment = None;
-        for ContentWithSep {
-            separator: _,
-            content,
-        } in (&self.contents).iter()
-        {
-            match (&max_len_to_comment, content.len_to_comment(max_len_to_op)) {
-                (Some(max_len), Some(len)) => {
-                    max_len_to_comment = Some(std::cmp::max(*max_len, len));
-                }
-                (None, Some(len)) => {
-                    max_len_to_comment = Some(len);
-                }
-                _ => (),
-            }
-        }
+        let max_len_to_comment = self
+            .contents
+            .iter()
+            .flat_map(|pair| pair.content.len_to_comment(max_len_to_op))
+            .max();
 
         let mut is_first_line = true;
 
         for ContentWithSep { separator, content } in (&self.contents).iter() {
-            (0..self.depth).into_iter().for_each(|_| result.push('\t'));
+            result.extend(repeat_n('\t', self.depth));
 
             if is_first_line {
                 is_first_line = false;
-                result.push('\t')
             } else {
                 result.push_str(separator);
-                result.push('\t');
             }
+            result.push('\t');
 
-            match content.render(max_len_to_op, max_len_to_comment, false) {
-                Ok(formatted) => {
-                    result.push_str(&formatted);
-                    result.push('\n')
-                }
-                Err(e) => return Err(e),
-            };
+            let formatted = content.render(max_len_to_op, max_len_to_comment, false)?;
+            result.push_str(&formatted);
+            result.push('\n')
         }
 
         Ok(result)
@@ -883,17 +825,14 @@ impl SelectSubExpr {
 
         result.push_str("(\n");
 
-        match self.stmt.render() {
-            Ok(formatted) => {
-                result.push_str(&formatted);
+        let formatted = self.stmt.render()?;
 
-                (0..self.depth).into_iter().for_each(|_| result.push('\t'));
+        result.push_str(&formatted);
 
-                result.push(')');
-                Ok(result)
-            }
-            Err(e) => Err(e),
-        }
+        result.extend(repeat_n('\t', self.depth));
+        result.push(')');
+
+        Ok(result)
     }
 }
 #[derive(Debug, Clone)]
@@ -921,17 +860,14 @@ impl ParenExpr {
 
         result.push_str("(\n");
 
-        match self.expr.render() {
-            Ok(formatted) => {
-                result.push_str(&formatted);
+        let formatted = self.expr.render()?;
 
-                (0..self.depth).for_each(|_| result.push('\t'));
+        result.push_str(&formatted);
 
-                result.push(')');
-                Ok(result)
-            }
-            Err(e) => Err(e),
-        }
+        result.extend(repeat_n('\t', self.depth));
+
+        result.push(')');
+        Ok(result)
     }
 }
 
@@ -1007,7 +943,7 @@ impl Formatter {
             // 文が増えたらマッチ式で分岐させる
             let mut stmt = self.format_select_stmt(stmt_node, src);
 
-            if cursor.goto_next_sibling() && cursor.node().kind() == "comment" {
+            if cursor.goto_next_sibling() && cursor.node().kind() == COMMENT {
                 let comment_loc = Location::new(cursor.node().range());
 
                 //同じ行の場合
@@ -1080,10 +1016,8 @@ impl Formatter {
                                 let child_node = cursor.node();
 
                                 match child_node.kind() {
-                                    "," => {
-                                        continue;
-                                    }
-                                    "comment" => {
+                                    "," => continue,
+                                    COMMENT => {
                                         let comment_loc = Location::new(child_node.range());
 
                                         //同じ行の場合
@@ -1126,29 +1060,27 @@ impl Formatter {
                             self.state.depth,
                         );
 
-                        let body: Body;
-
                         cursor.goto_next_sibling();
                         // cursor -> _expression
 
                         let expr_node = cursor.node();
                         let expr = self.format_expr(expr_node, src);
 
-                        match expr {
+                        let body = match expr {
                             Expr::Aligned(aligned) => {
                                 let mut separated_lines =
                                     SeparatedLines::new(self.state.depth, "", false);
                                 separated_lines.add_expr(*aligned);
-                                body = Body::SepLines(separated_lines);
+                                Body::SepLines(separated_lines)
                             }
                             Expr::Primary(_) => {
                                 todo!();
                             }
-                            Expr::Boolean(boolean) => body = Body::BooleanExpr(*boolean),
+                            Expr::Boolean(boolean) => Body::BooleanExpr(*boolean),
                             Expr::SelectSub(_select_sub) => todo!(),
-                            Expr::ParenExpr(paren_expr) => body = Body::ParenExpr(*paren_expr),
-                            Expr::Asterisk(asterisk) => todo!(),
-                        }
+                            Expr::ParenExpr(paren_expr) => Body::ParenExpr(*paren_expr),
+                            Expr::Asterisk(_asterisk) => todo!(),
+                        };
 
                         cursor.goto_parent();
 
@@ -1157,7 +1089,7 @@ impl Formatter {
                         statement.add_clause(clause);
                     }
                 }
-                "comment" => {
+                COMMENT => {
                     let comment_loc = Location::new(clause_node.range());
 
                     //同じ行の場合
@@ -1231,10 +1163,8 @@ impl Formatter {
             // cursor -> , または cursor -> _aliasable_expression
             let child_node = cursor.node();
             match child_node.kind() {
-                "," => {
-                    continue;
-                }
-                "comment" => {
+                "," => continue,
+                COMMENT => {
                     separated_lines.add_comment_to_child(Comment::new(
                         child_node.utf8_text(src.as_bytes()).unwrap().to_string(),
                         Location::new(child_node.range()),
@@ -1374,7 +1304,7 @@ impl Formatter {
                 // cursor -> _expression
 
                 let mut head_comment: Option<Comment> = None;
-                if cursor.node().kind() == "comment" {
+                if cursor.node().kind() == COMMENT {
                     let comment_loc = Location::new(cursor.node().range());
                     head_comment = Some(Comment {
                         comment: cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
@@ -1502,7 +1432,7 @@ impl Formatter {
 
             cursor.goto_next_sibling();
 
-            if cursor.node().kind() == "comment" {
+            if cursor.node().kind() == COMMENT {
                 let comment_loc = Location::new(cursor.node().range());
                 boolean_expr.add_comment_to_child(Comment::new(
                     cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
@@ -1608,8 +1538,10 @@ pub fn print_cst(src: &str) {
     // Treeのルートノードを取得
     let root_node = tree.root_node();
 
-    dfs(root_node, 0);
-    eprintln!();
+    if DEBUG_MODE {
+        dfs(root_node, 0);
+        eprintln!();
+    }
 }
 
 fn dfs(node: Node, depth: usize) {
