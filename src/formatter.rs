@@ -1,13 +1,4 @@
-use itertools::{repeat_n, Itertools};
-use tree_sitter::{Node, Point, Range};
-
-const TAB_SIZE: usize = 4; // タブ幅
-
-const COMPLEMENT_AS: bool = true; // AS句がない場合に自動的に補完する
-
-const TRIM_BIND_PARAM: bool = false; // バインド変数の中身をトリムする
-
-pub const DEBUG_MODE: bool = false; // デバッグモード
+use tree_sitter::Node;
 
 pub const COMMENT: &str = "comment";
 
@@ -621,10 +612,7 @@ impl Formatter {
         //cursor -> expr
 
         // exprがparen_exprならネストしない
-        let is_nest = match cursor.node().kind() {
-            "parenthesized_expression" => false,
-            _ => true,
-        };
+        let is_nest = !matches!(cursor.node().kind(), "parenthesized_expression");
 
         if is_nest {
             self.nest();

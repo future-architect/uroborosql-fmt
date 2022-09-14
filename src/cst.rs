@@ -7,10 +7,6 @@ const COMPLEMENT_AS: bool = true; // AS句がない場合に自動的に補完�
 
 const TRIM_BIND_PARAM: bool = false; // バインド変数の中身をトリムする
 
-pub const DEBUG_MODE: bool = false; // デバッグモード
-
-pub const COMMENT: &str = "comment";
-
 #[derive(Debug)]
 pub enum Error {
     ParseError,
@@ -382,10 +378,6 @@ impl AlignedExpr {
         }
     }
 
-    pub fn lhs(&self) -> Expr {
-        self.lhs.clone()
-    }
-
     fn loc(&self) -> Location {
         self.loc.clone()
     }
@@ -426,10 +418,7 @@ impl AlignedExpr {
 
     // 演算子から末尾コメントまでの長さを返す
     pub fn len_to_comment(&self, max_len_to_op: Option<usize>) -> Option<usize> {
-        let is_asterisk = match self.lhs {
-            Expr::Asterisk(_) => true,
-            _ => false,
-        };
+        let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
 
         match (max_len_to_op, &self.rhs) {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
@@ -458,10 +447,7 @@ impl AlignedExpr {
         let formatted = self.lhs.render()?;
         result.push_str(&formatted);
 
-        let is_asterisk = match self.lhs {
-            Expr::Asterisk(_) => true,
-            _ => false,
-        };
+        let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
 
         // 演算子と右辺をrender
         match (&self.op, max_len_to_op) {
@@ -572,10 +558,6 @@ impl PrimaryExpr {
 
     pub fn len(&self) -> usize {
         self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.elements.len() == 0
     }
 
     pub fn elements(&self) -> &Vec<String> {

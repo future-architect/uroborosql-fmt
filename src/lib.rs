@@ -1,12 +1,12 @@
-use itertools::{repeat_n, Itertools};
+mod cst;
+mod formatter;
+
+use formatter::Formatter;
 use tree_sitter::Node;
 
 pub const DEBUG_MODE: bool = false; // デバッグモード
 
 pub const COMMENT: &str = "comment";
-
-mod cst;
-mod formatter;
 
 /// 引数のSQLをフォーマットして返す
 pub fn format_sql(src: &str) -> String {
@@ -22,7 +22,7 @@ pub fn format_sql(src: &str) -> String {
     let root_node = tree.root_node();
 
     // フォーマッタオブジェクトを生成
-    let mut formatter = formatter::Formatter::default();
+    let mut formatter = Formatter::default();
 
     // formatを行い、バッファに結果を格納
     let res = formatter.format_sql(root_node, src.as_ref());
