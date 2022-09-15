@@ -176,8 +176,10 @@ impl Statement {
     }
 
     pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
-        let last_idx = self.clauses.len() - 1;
-        self.clauses[last_idx].add_comment_to_child(comment);
+        self.clauses
+            .last_mut()
+            .unwrap()
+            .add_comment_to_child(comment);
     }
 
     pub(crate) fn render(&self) -> Result<String, Error> {
@@ -665,8 +667,11 @@ impl BooleanExpr {
     }
 
     pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
-        let last_idx = self.contents.len() - 1;
-        self.contents[last_idx].content.set_tail_comment(comment);
+        self.contents
+            .last_mut()
+            .unwrap()
+            .content
+            .set_tail_comment(comment);
     }
 
     pub(crate) fn add_expr_with_sep(&mut self, aligned: AlignedExpr, sep: String) {
