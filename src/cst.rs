@@ -2,6 +2,8 @@ use itertools::{repeat_n, Itertools};
 use tree_sitter::{Point, Range};
 
 const TAB_SIZE: usize = 4; // タブ幅
+const OPERATOR_TAB_NUM: usize = 1; // 演算子のタブ長
+const PAR_TAB_NUM: usize = 1; // 閉じ括弧のタブ長
 
 const COMPLEMENT_AS: bool = true; // AS句がない場合に自動的に補完する
 
@@ -328,8 +330,8 @@ impl Expr {
     fn len(&self) -> usize {
         match self {
             Expr::Primary(primary) => primary.len(),
-            Expr::SelectSub(_) => 1, // 必ずかっこなので、TAB_SIZE
-            Expr::ParenExpr(_) => 1, // 必ずかっこなので、TAB_SIZE
+            Expr::SelectSub(_) => PAR_TAB_NUM, // 必ずかっこ
+            Expr::ParenExpr(_) => PAR_TAB_NUM, // 必ずかっこ
             Expr::Asterisk(asterisk) => asterisk.len(),
             _ => todo!(),
         }
@@ -495,14 +497,20 @@ impl AlignedExpr {
 
                     // tail_commentがある場合、max_len_to_commentは必ずSome(_)
                     max_len_to_comment.unwrap() - rhs.len()
-                        + if rhs.is_multi_line() { max_len + 1 } else { 0 }
+                        + if rhs.is_multi_line() {
+                            max_len + OPERATOR_TAB_NUM
+                        } else {
+                            0
+                        }
                 } else if COMPLEMENT_AS && self.is_alias && !is_asterisk {
                     // AS補完する場合には、右辺に左辺と同じ式を挿入する
                     max_len_to_comment.unwrap() - self.lhs.len()
                 } else {
                     // 右辺がない場合は
                     // コメントまでの最長 + TAB_SIZE(演算子の分) + 左辺の最大長からの差分
-                    max_len_to_comment.unwrap() + (if is_from_body { 0 } else { 1 }) + max_len
+                    max_len_to_comment.unwrap()
+                        + (if is_from_body { 0 } else { OPERATOR_TAB_NUM })
+                        + max_len
                         - self.lhs.len()
                 };
 
