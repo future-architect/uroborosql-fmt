@@ -328,8 +328,8 @@ impl Expr {
     fn len(&self) -> usize {
         match self {
             Expr::Primary(primary) => primary.len(),
-            Expr::SelectSub(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
-            Expr::ParenExpr(_) => TAB_SIZE, // 必ずかっこなので、TAB_SIZE
+            Expr::SelectSub(_) => 1, // 必ずかっこなので、TAB_SIZE
+            Expr::ParenExpr(_) => 1, // 必ずかっこなので、TAB_SIZE
             Expr::Asterisk(asterisk) => asterisk.len(),
             _ => todo!(),
         }
@@ -452,7 +452,7 @@ impl AlignedExpr {
         // 演算子と右辺をrender
         match (&self.op, max_len_to_op) {
             (Some(op), Some(max_len)) => {
-                let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
+                let tab_num = (max_len - self.lhs.len());
                 result.extend(repeat_n('\t', tab_num));
 
                 result.push('\t');
@@ -471,7 +471,7 @@ impl AlignedExpr {
             }
             // AS補完する場合
             (None, Some(max_len)) if COMPLEMENT_AS && self.is_alias && !is_asterisk => {
-                let tab_num = (max_len - self.lhs.len()) / TAB_SIZE;
+                let tab_num = (max_len - self.lhs.len());
                 result.extend(repeat_n('\t', tab_num));
 
                 if !is_from_body {
@@ -495,22 +495,16 @@ impl AlignedExpr {
 
                     // tail_commentがある場合、max_len_to_commentは必ずSome(_)
                     max_len_to_comment.unwrap() - rhs.len()
-                        + if rhs.is_multi_line() {
-                            max_len + TAB_SIZE
-                        } else {
-                            0
-                        }
+                        + if rhs.is_multi_line() { max_len + 1 } else { 0 }
                 } else if COMPLEMENT_AS && self.is_alias && !is_asterisk {
                     // AS補完する場合には、右辺に左辺と同じ式を挿入する
                     max_len_to_comment.unwrap() - self.lhs.len()
                 } else {
                     // 右辺がない場合は
                     // コメントまでの最長 + TAB_SIZE(演算子の分) + 左辺の最大長からの差分
-                    max_len_to_comment.unwrap()
-                        + (if is_from_body { 0 } else { TAB_SIZE })
-                        + max_len
+                    max_len_to_comment.unwrap() + (if is_from_body { 0 } else { 1 }) + max_len
                         - self.lhs.len()
-                } / TAB_SIZE;
+                };
 
                 result.extend(repeat_n('\t', tab_num));
 
@@ -543,7 +537,7 @@ pub(crate) struct PrimaryExpr {
 
 impl PrimaryExpr {
     pub(crate) fn new(element: String, loc: Location) -> PrimaryExpr {
-        let len = TAB_SIZE * (element.len() / TAB_SIZE + 1);
+        let len = (element.len() / TAB_SIZE + 1);
         PrimaryExpr {
             elements: vec![element],
             loc,
@@ -592,7 +586,7 @@ impl PrimaryExpr {
         let head_comment_and_first_element_len =
             (self.elements()[0].len() + comment.len()) / TAB_SIZE + 1;
 
-        self.len += TAB_SIZE * (head_comment_and_first_element_len - first_element_len);
+        self.len += (head_comment_and_first_element_len - first_element_len);
     }
 
     /// elementsにelementを追加する
@@ -608,7 +602,7 @@ impl PrimaryExpr {
         // -- 例外 --
         // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
         //
-        self.len += TAB_SIZE * (element.len() / TAB_SIZE + 1);
+        self.len += (element.len() / TAB_SIZE + 1);
         self.elements.push(element.to_ascii_uppercase());
     }
 
@@ -844,7 +838,7 @@ impl AsteriskExpr {
     }
 
     fn len(&self) -> usize {
-        TAB_SIZE * (self.content.len() / TAB_SIZE + 1)
+        (self.content.len() / TAB_SIZE + 1)
     }
 
     pub(crate) fn render(&self) -> Result<String, Error> {
