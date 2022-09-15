@@ -452,7 +452,7 @@ impl AlignedExpr {
         // 演算子と右辺をrender
         match (&self.op, max_len_to_op) {
             (Some(op), Some(max_len)) => {
-                let tab_num = (max_len - self.lhs.len());
+                let tab_num = max_len - self.lhs.len();
                 result.extend(repeat_n('\t', tab_num));
 
                 result.push('\t');
@@ -471,7 +471,7 @@ impl AlignedExpr {
             }
             // AS補完する場合
             (None, Some(max_len)) if COMPLEMENT_AS && self.is_alias && !is_asterisk => {
-                let tab_num = (max_len - self.lhs.len());
+                let tab_num = max_len - self.lhs.len();
                 result.extend(repeat_n('\t', tab_num));
 
                 if !is_from_body {
@@ -537,7 +537,7 @@ pub(crate) struct PrimaryExpr {
 
 impl PrimaryExpr {
     pub(crate) fn new(element: String, loc: Location) -> PrimaryExpr {
-        let len = (element.len() / TAB_SIZE + 1);
+        let len = element.len() / TAB_SIZE + 1;
         PrimaryExpr {
             elements: vec![element],
             loc,
@@ -586,7 +586,7 @@ impl PrimaryExpr {
         let head_comment_and_first_element_len =
             (self.elements()[0].len() + comment.len()) / TAB_SIZE + 1;
 
-        self.len += (head_comment_and_first_element_len - first_element_len);
+        self.len += head_comment_and_first_element_len - first_element_len;
     }
 
     /// elementsにelementを追加する
@@ -602,7 +602,7 @@ impl PrimaryExpr {
         // -- 例外 --
         // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
         //
-        self.len += (element.len() / TAB_SIZE + 1);
+        self.len += element.len() / TAB_SIZE + 1;
         self.elements.push(element.to_ascii_uppercase());
     }
 
@@ -838,7 +838,7 @@ impl AsteriskExpr {
     }
 
     fn len(&self) -> usize {
-        (self.content.len() / TAB_SIZE + 1)
+        self.content.len() / TAB_SIZE + 1
     }
 
     pub(crate) fn render(&self) -> Result<String, Error> {
