@@ -8,18 +8,18 @@ const COMPLEMENT_AS: bool = true; // AS句がない場合に自動的に補完�
 const TRIM_BIND_PARAM: bool = false; // バインド変数の中身をトリムする
 
 #[derive(Debug)]
-pub enum Error {
+pub(crate) enum Error {
     ParseError,
 }
 
 #[derive(Debug, Clone)]
-pub struct Position {
-    pub row: usize,
-    pub col: usize,
+pub(crate) struct Position {
+    pub(crate) row: usize,
+    pub(crate) col: usize,
 }
 
 impl Position {
-    pub fn new(point: Point) -> Position {
+    pub(crate) fn new(point: Point) -> Position {
         Position {
             row: point.row,
             col: point.column,
@@ -28,13 +28,13 @@ impl Position {
 }
 
 #[derive(Debug, Clone)]
-pub struct Location {
-    pub start_position: Position,
-    pub end_position: Position,
+pub(crate) struct Location {
+    pub(crate) start_position: Position,
+    pub(crate) end_position: Position,
 }
 
 impl Location {
-    pub fn new(range: Range) -> Location {
+    pub(crate) fn new(range: Range) -> Location {
         Location {
             start_position: Position::new(range.start_point),
             end_position: Position::new(range.end_point),
@@ -42,20 +42,20 @@ impl Location {
     }
     // 隣り合っているか？
     // 同じ行か？
-    pub fn is_same_line(&self, loc: &Location) -> bool {
+    pub(crate) fn is_same_line(&self, loc: &Location) -> bool {
         self.end_position.row == loc.start_position.row
             || self.start_position.row == loc.end_position.row
     }
 
     // Locationのappend
-    pub fn append(&mut self, loc: Location) {
+    pub(crate) fn append(&mut self, loc: Location) {
         self.end_position = loc.end_position;
     }
 }
 
 // 句の本体にあたる部分である、あるseparatorで区切られた式の集まり
 #[derive(Debug, Clone)]
-pub struct SeparatedLines {
+pub(crate) struct SeparatedLines {
     depth: usize,               // インデントの深さ
     separator: String,          // セパレータ(e.g., ',', AND)
     contents: Vec<AlignedExpr>, // 各行の情報
@@ -65,7 +65,7 @@ pub struct SeparatedLines {
 }
 
 impl SeparatedLines {
-    pub fn new(depth: usize, sep: &str, is_omit_op: bool) -> SeparatedLines {
+    pub(crate) fn new(depth: usize, sep: &str, is_omit_op: bool) -> SeparatedLines {
         SeparatedLines {
             depth,
             separator: sep.to_string(),
@@ -76,12 +76,12 @@ impl SeparatedLines {
         }
     }
 
-    pub fn loc(&self) -> Option<Location> {
+    pub(crate) fn loc(&self) -> Option<Location> {
         self.loc.clone()
     }
 
     // 式を追加する
-    pub fn add_expr(&mut self, aligned: AlignedExpr) {
+    pub(crate) fn add_expr(&mut self, aligned: AlignedExpr) {
         // 演算子があるかどうかをチェック
         if aligned.has_rhs() {
             self.has_op = true;
@@ -96,12 +96,12 @@ impl SeparatedLines {
         self.contents.push(aligned);
     }
 
-    pub fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         self.contents.last_mut().unwrap().set_tail_comment(comment);
     }
 
     /// AS句で揃えたものを返す
-    pub fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
 
         let max_len_to_op = if self.has_op {
@@ -141,7 +141,7 @@ impl SeparatedLines {
 
 // *_statementに対応した構造体
 #[derive(Debug, Clone)]
-pub struct Statement {
+pub(crate) struct Statement {
     clauses: Vec<Clause>,
     loc: Option<Location>,
 }
@@ -153,19 +153,19 @@ impl Default for Statement {
 }
 
 impl Statement {
-    pub fn new() -> Statement {
+    pub(crate) fn new() -> Statement {
         Statement {
             clauses: vec![] as Vec<Clause>,
             loc: None,
         }
     }
 
-    pub fn loc(&self) -> Option<Location> {
+    pub(crate) fn loc(&self) -> Option<Location> {
         self.loc.clone()
     }
 
     // 文に句を追加する
-    pub fn add_clause(&mut self, clause: Clause) {
+    pub(crate) fn add_clause(&mut self, clause: Clause) {
         match &mut self.loc {
             Some(loc) => loc.append(clause.loc()),
             None => self.loc = Some(clause.loc()),
@@ -173,12 +173,12 @@ impl Statement {
         self.clauses.push(clause);
     }
 
-    pub fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         let last_idx = self.clauses.len() - 1;
         self.clauses[last_idx].add_comment_to_child(comment);
     }
 
-    pub fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, Error> {
         // clause1
         // ...
         // clausen
@@ -192,26 +192,26 @@ impl Statement {
 }
 
 #[derive(Debug, Clone)]
-pub struct Comment {
+pub(crate) struct Comment {
     comment: String,
     loc: Location,
 }
 
 impl Comment {
-    pub fn new(comment: String, loc: Location) -> Comment {
+    pub(crate) fn new(comment: String, loc: Location) -> Comment {
         Comment { comment, loc }
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Body {
+pub(crate) enum Body {
     SepLines(SeparatedLines),
     BooleanExpr(BooleanExpr),
     ParenExpr(ParenExpr),
 }
 
 impl Body {
-    pub fn loc(&self) -> Option<Location> {
+    pub(crate) fn loc(&self) -> Option<Location> {
         match self {
             Body::SepLines(sep_lines) => sep_lines.loc(),
             Body::BooleanExpr(bool_expr) => bool_expr.loc(),
@@ -219,7 +219,7 @@ impl Body {
         }
     }
 
-    pub fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, Error> {
         match self {
             Body::SepLines(sep_lines) => sep_lines.render(),
             Body::BooleanExpr(bool_expr) => bool_expr.render(),
@@ -227,7 +227,7 @@ impl Body {
         }
     }
 
-    pub fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         match self {
             Body::SepLines(sep_lines) => sep_lines.add_comment_to_child(comment),
             Body::BooleanExpr(bool_expr) => bool_expr.add_comment_to_child(comment),
@@ -238,7 +238,7 @@ impl Body {
 
 // 句に対応した構造体
 #[derive(Debug, Clone)]
-pub struct Clause {
+pub(crate) struct Clause {
     keyword: String, // e.g., SELECT, FROM
     body: Option<Body>,
     loc: Location,
@@ -246,7 +246,7 @@ pub struct Clause {
 }
 
 impl Clause {
-    pub fn new(keyword: String, loc: Location, depth: usize) -> Clause {
+    pub(crate) fn new(keyword: String, loc: Location, depth: usize) -> Clause {
         Clause {
             keyword,
             body: None,
@@ -255,23 +255,23 @@ impl Clause {
         }
     }
 
-    pub fn loc(&self) -> Location {
+    pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }
 
     // bodyをセットする
-    pub fn set_body(&mut self, body: Body) {
+    pub(crate) fn set_body(&mut self, body: Body) {
         self.loc.append(body.loc().unwrap());
         self.body = Some(body);
     }
 
-    pub fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         if let Some(body) = &mut self.body {
             body.add_comment_to_child(comment);
         }
     }
 
-    pub fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, Error> {
         // kw
         // body...
         let mut result = String::new();
@@ -292,7 +292,7 @@ impl Clause {
 
 // 式に対応した列挙体
 #[derive(Debug, Clone)]
-pub enum Expr {
+pub(crate) enum Expr {
     Aligned(Box<AlignedExpr>), // AS句、二項比較演算
     Primary(Box<PrimaryExpr>), // 識別子、文字列、数値など
     Boolean(Box<BooleanExpr>), // boolean式
@@ -302,7 +302,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn loc(&self) -> Location {
+    pub(crate) fn loc(&self) -> Location {
         match self {
             Expr::Aligned(aligned) => aligned.loc(),
             Expr::Primary(primary) => primary.loc(),
@@ -335,7 +335,7 @@ impl Expr {
         }
     }
 
-    pub fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         match self {
             Expr::Aligned(aligned) => aligned.set_tail_comment(comment),
             Expr::Primary(_primary) => (),
@@ -357,7 +357,7 @@ impl Expr {
 
 // 次を入れるとエラーになる
 #[derive(Debug, Clone)]
-pub struct AlignedExpr {
+pub(crate) struct AlignedExpr {
     lhs: Expr,
     rhs: Option<Expr>,
     op: Option<String>,
@@ -367,7 +367,7 @@ pub struct AlignedExpr {
 }
 
 impl AlignedExpr {
-    pub fn new(lhs: Expr, loc: Location, is_alias: bool) -> AlignedExpr {
+    pub(crate) fn new(lhs: Expr, loc: Location, is_alias: bool) -> AlignedExpr {
         AlignedExpr {
             lhs,
             rhs: None,
@@ -382,7 +382,7 @@ impl AlignedExpr {
         self.loc.clone()
     }
 
-    pub fn set_tail_comment(&mut self, comment: Comment) {
+    pub(crate) fn set_tail_comment(&mut self, comment: Comment) {
         let Comment { comment, loc } = comment;
         if comment.starts_with("/*") {
             self.tail_comment = Some(comment);
@@ -399,25 +399,25 @@ impl AlignedExpr {
     }
 
     // 演算子と右辺の式を追加する
-    pub fn add_rhs(&mut self, op: String, rhs: Expr) {
+    pub(crate) fn add_rhs(&mut self, op: String, rhs: Expr) {
         self.loc.append(rhs.loc());
         self.op = Some(op);
         self.rhs = Some(rhs);
     }
 
     // 右辺があるかどうかをboolで返す
-    pub fn has_rhs(&self) -> bool {
+    pub(crate) fn has_rhs(&self) -> bool {
         self.rhs.is_some()
     }
 
     // 演算子までの長さを返す
-    pub fn len_lhs(&self) -> usize {
+    pub(crate) fn len_lhs(&self) -> usize {
         // 左辺の長さを返せばよい
         self.lhs.len()
     }
 
     // 演算子から末尾コメントまでの長さを返す
-    pub fn len_to_comment(&self, max_len_to_op: Option<usize>) -> Option<usize> {
+    pub(crate) fn len_to_comment(&self, max_len_to_op: Option<usize>) -> Option<usize> {
         let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
 
         match (max_len_to_op, &self.rhs) {
@@ -435,7 +435,7 @@ impl AlignedExpr {
     }
 
     // 演算子までの長さを与え、演算子の前にtab文字を挿入した文字列を返す
-    pub fn render(
+    pub(crate) fn render(
         &self,
         max_len_to_op: Option<usize>,
         max_len_to_comment: Option<usize>,
@@ -534,7 +534,7 @@ impl AlignedExpr {
 }
 
 #[derive(Clone, Debug)]
-pub struct PrimaryExpr {
+pub(crate) struct PrimaryExpr {
     elements: Vec<String>,
     loc: Location,
     len: usize,
@@ -542,7 +542,7 @@ pub struct PrimaryExpr {
 }
 
 impl PrimaryExpr {
-    pub fn new(element: String, loc: Location) -> PrimaryExpr {
+    pub(crate) fn new(element: String, loc: Location) -> PrimaryExpr {
         let len = TAB_SIZE * (element.len() / TAB_SIZE + 1);
         PrimaryExpr {
             elements: vec![element],
@@ -556,15 +556,15 @@ impl PrimaryExpr {
         self.loc.clone()
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.len
     }
 
-    pub fn elements(&self) -> &Vec<String> {
+    pub(crate) fn elements(&self) -> &Vec<String> {
         &self.elements
     }
 
-    pub fn set_head_comment(&mut self, comment: Comment) {
+    pub(crate) fn set_head_comment(&mut self, comment: Comment) {
         let Comment {
             mut comment,
             mut loc,
@@ -596,7 +596,7 @@ impl PrimaryExpr {
     }
 
     /// elementsにelementを追加する
-    pub fn add_element(&mut self, element: &str) {
+    pub(crate) fn add_element(&mut self, element: &str) {
         // TAB_SIZEを1単位として長さを記録する
         //
         // contentを文字列にするとき、必ずその前に一つ'\t'が入る
@@ -613,12 +613,12 @@ impl PrimaryExpr {
     }
 
     // PrimaryExprの結合
-    pub fn append(&mut self, primary: PrimaryExpr) {
+    pub(crate) fn append(&mut self, primary: PrimaryExpr) {
         self.len += primary.len();
         self.elements.append(&mut primary.elements().clone())
     }
 
-    pub fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, Error> {
         let elements_str = self.elements.iter().map(|x| x.to_uppercase()).join("\t");
 
         match self.head_comment.as_ref() {
@@ -629,13 +629,13 @@ impl PrimaryExpr {
 }
 
 #[derive(Debug, Clone)]
-pub struct ContentWithSep {
+pub(crate) struct ContentWithSep {
     separator: String,
     content: AlignedExpr,
 }
 
 #[derive(Debug, Clone)]
-pub struct BooleanExpr {
+pub(crate) struct BooleanExpr {
     depth: usize,                  // インデントの深さ
     default_separator: String,     // デフォルトセパレータ(e.g., ',', AND)
     contents: Vec<ContentWithSep>, // {sep, contents}
@@ -644,7 +644,7 @@ pub struct BooleanExpr {
 }
 
 impl BooleanExpr {
-    pub fn new(depth: usize, sep: &str) -> BooleanExpr {
+    pub(crate) fn new(depth: usize, sep: &str) -> BooleanExpr {
         BooleanExpr {
             depth,
             default_separator: sep.to_string(),
@@ -654,20 +654,20 @@ impl BooleanExpr {
         }
     }
 
-    pub fn loc(&self) -> Option<Location> {
+    pub(crate) fn loc(&self) -> Option<Location> {
         self.loc.clone()
     }
 
-    pub fn set_default_separator(&mut self, sep: String) {
+    pub(crate) fn set_default_separator(&mut self, sep: String) {
         self.default_separator = sep;
     }
 
-    pub fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         let last_idx = self.contents.len() - 1;
         self.contents[last_idx].content.set_tail_comment(comment);
     }
 
-    pub fn add_expr_with_sep(&mut self, aligned: AlignedExpr, sep: String) {
+    pub(crate) fn add_expr_with_sep(&mut self, aligned: AlignedExpr, sep: String) {
         if aligned.has_rhs() {
             self.has_op = true;
         }
@@ -684,11 +684,11 @@ impl BooleanExpr {
         });
     }
 
-    pub fn add_expr(&mut self, expr: AlignedExpr) {
+    pub(crate) fn add_expr(&mut self, expr: AlignedExpr) {
         self.add_expr_with_sep(expr, self.default_separator.clone());
     }
 
-    pub fn merge(&mut self, other: BooleanExpr) {
+    pub(crate) fn merge(&mut self, other: BooleanExpr) {
         // そろえる演算子があるか
         self.has_op = self.has_op || other.has_op;
 
@@ -712,7 +712,7 @@ impl BooleanExpr {
     }
 
     /// 比較演算子で揃えたものを返す
-    pub fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
 
         let max_len_to_op = if self.has_op {
@@ -754,26 +754,26 @@ impl BooleanExpr {
 
 // SELECTサブクエリに対応する構造体
 #[derive(Debug, Clone)]
-pub struct SelectSubExpr {
+pub(crate) struct SelectSubExpr {
     depth: usize,
     stmt: Statement,
     loc: Location,
 }
 
 impl SelectSubExpr {
-    pub fn new(stmt: Statement, loc: Location, depth: usize) -> SelectSubExpr {
+    pub(crate) fn new(stmt: Statement, loc: Location, depth: usize) -> SelectSubExpr {
         SelectSubExpr { depth, stmt, loc }
     }
 
-    pub fn loc(&self) -> Location {
+    pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }
 
-    pub fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         self.stmt.add_comment_to_child(comment);
     }
 
-    pub fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
 
         result.push_str("(\n");
@@ -789,30 +789,30 @@ impl SelectSubExpr {
     }
 }
 #[derive(Debug, Clone)]
-pub struct ParenExpr {
+pub(crate) struct ParenExpr {
     depth: usize,
     expr: Expr,
     loc: Location,
 }
 
 impl ParenExpr {
-    pub fn new(expr: Expr, loc: Location, depth: usize) -> ParenExpr {
+    pub(crate) fn new(expr: Expr, loc: Location, depth: usize) -> ParenExpr {
         ParenExpr { depth, expr, loc }
     }
 
-    pub fn loc(&self) -> Location {
+    pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }
 
-    pub fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         self.expr.add_comment_to_child(comment);
     }
 
-    pub fn set_loc(&mut self, loc: Location) {
+    pub(crate) fn set_loc(&mut self, loc: Location) {
         self.loc = loc;
     }
 
-    pub fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, Error> {
         let mut result = String::new();
 
         result.push_str("(\n");
@@ -829,13 +829,13 @@ impl ParenExpr {
 }
 
 #[derive(Debug, Clone)]
-pub struct AsteriskExpr {
+pub(crate) struct AsteriskExpr {
     content: String,
     loc: Location,
 }
 
 impl AsteriskExpr {
-    pub fn new(content: String, loc: Location) -> AsteriskExpr {
+    pub(crate) fn new(content: String, loc: Location) -> AsteriskExpr {
         AsteriskExpr { content, loc }
     }
 
@@ -847,7 +847,7 @@ impl AsteriskExpr {
         TAB_SIZE * (self.content.len() / TAB_SIZE + 1)
     }
 
-    pub fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, Error> {
         Ok(self.content.clone())
     }
 }

@@ -1,15 +1,15 @@
 use tree_sitter::Node;
 
-pub const COMMENT: &str = "comment";
+pub(crate) const COMMENT: &str = "comment";
 
 use crate::cst::*;
 
 /// インデントの深さや位置をそろえるための情報を保持する構造体
 struct FormatterState {
-    pub depth: usize,
+    pub(crate) depth: usize,
 }
 
-pub struct Formatter {
+pub(crate) struct Formatter {
     state: FormatterState,
 }
 
@@ -20,14 +20,14 @@ impl Default for Formatter {
 }
 
 impl Formatter {
-    pub fn new() -> Formatter {
+    pub(crate) fn new() -> Formatter {
         Formatter {
             state: FormatterState { depth: 0 },
         }
     }
 
     /// sqlソースファイルをフォーマットし、bufに入れる
-    pub fn format_sql(&mut self, node: Node, src: &str) -> Statement {
+    pub(crate) fn format_sql(&mut self, node: Node, src: &str) -> Statement {
         self.format_source(node, src)
     }
 
