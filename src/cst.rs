@@ -99,7 +99,10 @@ impl SeparatedLines {
     }
 
     pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
-        self.contents.last_mut().unwrap().set_tail_comment(comment);
+        self.contents
+            .last_mut()
+            .unwrap()
+            .set_trailing_comment(comment);
     }
 
     /// AS句で揃えたものを返す
@@ -341,7 +344,7 @@ impl Expr {
 
     pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         match self {
-            Expr::Aligned(aligned) => aligned.set_tail_comment(comment),
+            Expr::Aligned(aligned) => aligned.set_trailing_comment(comment),
             Expr::Primary(_primary) => (),
             Expr::Boolean(boolean) => boolean.add_comment_to_child(comment),
             Expr::SelectSub(select_sub) => select_sub.add_comment_to_child(comment),
@@ -366,7 +369,7 @@ pub(crate) struct AlignedExpr {
     rhs: Option<Expr>,
     op: Option<String>,
     loc: Location,
-    tail_comment: Option<String>, // 行末コメント
+    trailing_comment: Option<String>, // 行末コメント
     is_alias: bool,
 }
 
@@ -377,7 +380,7 @@ impl AlignedExpr {
             rhs: None,
             op: None,
             loc,
-            tail_comment: None,
+            trailing_comment: None,
             is_alias,
         }
     }
@@ -386,17 +389,17 @@ impl AlignedExpr {
         self.loc.clone()
     }
 
-    pub(crate) fn set_tail_comment(&mut self, comment: Comment) {
+    pub(crate) fn set_trailing_comment(&mut self, comment: Comment) {
         let Comment { comment, loc } = comment;
         if comment.starts_with("/*") {
-            self.tail_comment = Some(comment);
+            self.trailing_comment = Some(comment);
         } else {
             // 1. 初めのハイフンを削除
             // 2. 空白、スペースなどを削除
             // 3. "--" を付与
-            let tail_comment = format!("-- {}", comment.trim_start_matches('-').trim_start());
+            let trailing_comment = format!("-- {}", comment.trim_start_matches('-').trim_start());
 
-            self.tail_comment = Some(tail_comment);
+            self.trailing_comment = Some(trailing_comment);
         }
 
         self.loc.append(loc);
@@ -491,13 +494,13 @@ impl AlignedExpr {
         }
 
         // 末尾コメントをrender
-        match (&self.tail_comment, max_len_to_op) {
+        match (&self.trailing_comment, max_len_to_op) {
             // 末尾コメントが存在し、ほかのそろえる対象が存在する場合
             (Some(comment), Some(max_len)) => {
                 let tab_num = if let Some(rhs) = &self.rhs {
                     // 右辺がある場合は、コメントまでの最長の長さ - 右辺の長さ
 
-                    // tail_commentがある場合、max_len_to_commentは必ずSome(_)
+                    // trailing_commentがある場合、max_len_to_commentは必ずSome(_)
                     max_len_to_comment.unwrap() - rhs.len()
                         + if rhs.is_multi_line() {
                             max_len + OPERATOR_TAB_NUM
@@ -671,7 +674,7 @@ impl BooleanExpr {
             .last_mut()
             .unwrap()
             .content
-            .set_tail_comment(comment);
+            .set_trailing_comment(comment);
     }
 
     pub(crate) fn add_expr_with_sep(&mut self, aligned: AlignedExpr, sep: String) {
