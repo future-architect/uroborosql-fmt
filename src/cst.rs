@@ -498,9 +498,7 @@ impl AlignedExpr {
                     let strs: Vec<&str> = str.split('.').collect();
                     let right = strs.last().unwrap();
                     let new_prim = PrimaryExpr::new(right.to_string(), primary.loc());
-                    let res = new_prim.render().unwrap();
-                    eprintln!("{}", res);
-                    res
+                    new_prim.render().unwrap()
                 } else {
                     eprintln!("hoge");
                     self.lhs.render().unwrap()
@@ -767,11 +765,6 @@ impl BooleanExpr {
             .iter()
             .flat_map(|pair| pair.content.len_to_comment(max_len_to_op))
             .max();
-
-        // let max_len_to_comment = match max_len_to_comment {
-        //     Some(v) => Some(*v),
-        //     None => None,
-        // };
 
         let mut is_first_line = true;
 
