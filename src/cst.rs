@@ -432,7 +432,15 @@ impl AlignedExpr {
             (Some(_), Some(rhs)) => Some(rhs.len()),
             // コメント以外に揃える対象があり、右辺を左辺で補完する場合、左辺の長さ
             (Some(_), None) if COMPLEMENT_AS && self.is_alias && !is_asterisk => {
-                Some(self.lhs.len())
+                if let Expr::Primary(primary) = &self.lhs {
+                    let str = primary.elements().first().unwrap();
+                    let strs: Vec<&str> = str.split('.').collect();
+                    let right = strs.last().unwrap();
+                    let new_prim = PrimaryExpr::new(right.to_string(), primary.loc());
+                    Some(new_prim.len())
+                } else {
+                    Some(self.lhs.len())
+                }
             }
             // コメント以外に揃える対象があり、右辺を左辺を保管しない場合、0
             (Some(_), None) => Some(0),
@@ -487,7 +495,17 @@ impl AlignedExpr {
                 }
 
                 result.push('\t');
-                let formatted = self.lhs.render().unwrap();
+
+                let formatted = if let Expr::Primary(primary) = &self.lhs {
+                    let str = primary.elements().first().unwrap();
+                    let strs: Vec<&str> = str.split('.').collect();
+                    let right = strs.last().unwrap();
+                    let new_prim = PrimaryExpr::new(right.to_string(), primary.loc());
+                    new_prim.render().unwrap()
+                } else {
+                    self.lhs.render().unwrap()
+                };
+
                 result.push_str(&formatted);
             }
             (_, _) => (),
@@ -508,8 +526,17 @@ impl AlignedExpr {
                             0
                         }
                 } else if COMPLEMENT_AS && self.is_alias && !is_asterisk {
+                    let lhs_len = if let Expr::Primary(primary) = &self.lhs {
+                        let str = primary.elements().first().unwrap();
+                        let strs: Vec<&str> = str.split('.').collect();
+                        let right = strs.last().unwrap();
+                        let new_prim = PrimaryExpr::new(right.to_string(), primary.loc());
+                        new_prim.len()
+                    } else {
+                        self.lhs.len()
+                    };
                     // AS補完する場合には、右辺に左辺と同じ式を挿入する
-                    max_len_to_comment.unwrap() - self.lhs.len()
+                    max_len_to_comment.unwrap() - lhs_len
                 } else {
                     // 右辺がない場合は
                     // コメントまでの最長 + TAB_SIZE(演算子の分) + 左辺の最大長からの差分
