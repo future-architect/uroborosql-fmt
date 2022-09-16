@@ -500,7 +500,6 @@ impl AlignedExpr {
                     let new_prim = PrimaryExpr::new(right.to_string(), primary.loc());
                     new_prim.render().unwrap()
                 } else {
-                    eprintln!("hoge");
                     self.lhs.render().unwrap()
                 };
 
