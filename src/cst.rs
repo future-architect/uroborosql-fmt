@@ -250,6 +250,7 @@ pub(crate) struct Clause {
     body: Option<Body>,
     loc: Location,
     depth: usize,
+    sql_id: Option<Comment>, // DML(, DDL)に付与できるsql_id
 }
 
 impl Clause {
@@ -259,6 +260,7 @@ impl Clause {
             body: None,
             loc,
             depth,
+            sql_id: None,
         }
     }
 
@@ -278,14 +280,22 @@ impl Clause {
         }
     }
 
+    pub(crate) fn add_sql_id(&mut self, comment: Comment) {
+        self.sql_id = Some(comment);
+    }
+
     pub(crate) fn render(&self) -> Result<String, Error> {
         // kw
         // body...
         let mut result = String::new();
 
         result.extend(repeat_n('\t', self.depth));
-
         result.push_str(&self.keyword);
+
+        if let Some(sql_id) = &self.sql_id {
+            result.push(' ');
+            result.push_str(&sql_id.comment);
+        }
 
         if let Some(sl) = &self.body {
             let formatted_body = sl.render()?;
