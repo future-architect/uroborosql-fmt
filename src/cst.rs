@@ -250,7 +250,7 @@ pub(crate) struct Clause {
     body: Option<Body>,
     loc: Location,
     depth: usize,
-    sql_id: Option<Comment>, // select句に付与できるsql_id
+    sql_id: Option<Comment>, // DML(, DDL)に付与できるsql_id
 }
 
 impl Clause {
