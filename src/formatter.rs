@@ -238,9 +238,25 @@ impl Formatter {
         if cursor.goto_first_child() {
             // cursor -> SELECT
             // SELECTを読み飛ばす(コメントを考える際に変更予定)
+            // let select_kw = cursor.node();
 
             // if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
             cursor.goto_next_sibling();
+            // cursor -> /* _SQL_ID_ */ | select_clause_body
+
+            if cursor.node().kind() == "comment" {
+                let comment_node = cursor.node();
+
+                // とりあえず、SELECTの直後のコメントを_SQL_ID_とする
+                // 今後、"SELECT"の直後であるかのチェックを追加予定
+                let comment = Comment::new(
+                    comment_node.utf8_text(src.as_bytes()).unwrap().to_string(),
+                    Location::new((comment_node.range())),
+                );
+                clause.add_sql_id(comment);
+
+                cursor.goto_next_sibling();
+            }
             // cursor -> select_caluse_body
 
             let body = self.format_select_clause_body(cursor.node(), src);
