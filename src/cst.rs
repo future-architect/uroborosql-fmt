@@ -280,7 +280,7 @@ impl Clause {
         }
     }
 
-    pub(crate) fn add_sql_id(&mut self, comment: Comment) {
+    pub(crate) fn set_sql_id(&mut self, comment: Comment) {
         self.sql_id = Some(comment);
     }
 
