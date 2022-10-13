@@ -238,9 +238,7 @@ impl Formatter {
         if cursor.goto_first_child() {
             // cursor -> SELECT
             // SELECTを読み飛ばす(コメントを考える際に変更予定)
-            let select_kw_node = cursor.node();
 
-            // if self.goto_not_comment_next_sibiling(buf, &mut cursor, src) {
             cursor.goto_next_sibling();
             // cursor -> /* _SQL_ID_ */ | select_clause_body
 
@@ -248,17 +246,25 @@ impl Formatter {
                 let comment_node = cursor.node();
                 let comment_string = comment_node.utf8_text(src.as_bytes()).unwrap();
 
-                // SELECTキーワードと同じ行、直後の複数行コメントをSQL_IDとみなす
-                if comment_string.starts_with("/*")
-                    && select_kw_node.start_position().row == comment_node.start_position().row
-                {
+                // 複数行コメント
+                if comment_string.starts_with("/*") {
                     let comment = Comment::new(
-                        comment_node.utf8_text(src.as_bytes()).unwrap().to_string(),
+                        comment_string.to_string(),
                         Location::new(comment_node.range()),
                     );
-                    clause.add_sql_id(comment);
+
+                    let comment_content = comment_string
+                        .trim_start_matches("/*")
+                        .trim_end_matches("*/")
+                        .trim();
+
+                    if comment_content == "_SQL_ID_" || comment_content == "_SQL_IDENTIFIER_" {
+                        // _SQL_ID_
+                        clause.set_sql_id(comment);
+                    }
+                    // TODO: _SQL_ID_以外の複数行コメント
                 }
-                // TODO: ほかのコメント(行末コメント、別の行のコメント)の処理
+                // TODO: 行末コメント
 
                 cursor.goto_next_sibling();
             }
