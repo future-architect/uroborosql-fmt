@@ -187,8 +187,22 @@ impl Formatter {
                             }
                             Expr::Boolean(boolean) => Body::BooleanExpr(*boolean),
                             Expr::SelectSub(_select_sub) => todo!(),
-                            Expr::ParenExpr(paren_expr) => Body::ParenExpr(*paren_expr),
+                            Expr::ParenExpr(paren_expr) => {
+                                let loc = paren_expr.loc();
+
+                                // paren_exprをaligned_exprでラップする
+                                let aligned =
+                                    AlignedExpr::new(Expr::ParenExpr(paren_expr), loc, false);
+
+                                // Bodyを返すため、separated_linesに格納
+                                let mut separated_lines =
+                                    SeparatedLines::new(self.state.depth, "", false);
+                                separated_lines.add_expr(aligned);
+
+                                Body::SepLines(separated_lines)
+                            }
                             Expr::Asterisk(_asterisk) => todo!(),
+                            _ => unimplemented!(),
                         };
 
                         cursor.goto_parent();
@@ -462,6 +476,7 @@ impl Formatter {
                         Expr::SelectSub(_) => todo!(),
                         Expr::ParenExpr(_) => todo!(),
                         Expr::Asterisk(_) => todo!(),
+                        _ => unimplemented!(),
                     },
                     None => (),
                 }
@@ -522,6 +537,10 @@ impl Formatter {
                 );
                 Expr::Asterisk(Box::new(asterisk))
             }
+            "conditional_expression" => {
+                let cond_expr = self.format_cond_expr(node, src);
+                Expr::Cond(Box::new(cond_expr))
+            }
             _ => {
                 eprintln!(
                     "format_expr(): unimplemented expression {}, {:#?}",
@@ -564,6 +583,7 @@ impl Formatter {
                     boolean_expr.add_expr(aligned);
                 }
                 Expr::Asterisk(_) => todo!(),
+                _ => unimplemented!(),
             }
 
             cursor.goto_next_sibling();
@@ -594,6 +614,7 @@ impl Formatter {
                     boolean_expr.add_expr(aligned);
                 }
                 Expr::Asterisk(_) => todo!(),
+                _ => unimplemented!(),
             }
         }
         Expr::Boolean(Box::new(boolean_expr))
@@ -672,5 +693,165 @@ impl Formatter {
         }
 
         paren_expr
+    }
+
+    fn format_cond_expr(&mut self, node: Node, src: &str) -> CondExpr {
+        // conditional_expression ->
+        //     "CASE"
+        //     ("WHEN" expression "THEN" expression)*
+        //     ("ELSE" expression)?
+        //     "END"
+
+        let mut cursor = node.walk();
+        let mut cond_expr = CondExpr::new(Location::new(node.range()), self.state.depth);
+
+        // CASE, WHEN(, THEN, ELSE)キーワードの分で2つネストが深くなる
+        // TODO: ネストの深さの計算をrender()メソッドで行う変更
+        self.nest();
+        self.nest();
+
+        cursor.goto_first_child();
+        // cursor -> "CASE"
+
+        while cursor.goto_next_sibling() {
+            // cursor -> "WHEN" || "ELSE" || "END"
+            let kw_node = cursor.node();
+
+            match kw_node.kind() {
+                "WHEN" => {
+                    let mut when_clause = Clause::new(
+                        "WHEN".to_string(),
+                        Location::new(kw_node.range()),
+                        self.state.depth,
+                    );
+
+                    cursor.goto_next_sibling();
+                    // cursor -> comment | _expression
+
+                    if cursor.node().kind() == COMMENT {
+                        let comment = Comment::new(
+                            cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                            Location::new(cursor.node().range()),
+                        );
+
+                        if when_clause.loc().is_same_line(&comment.loc()) {
+                            // 同じ行にある行末コメント
+                            when_clause.set_kw_trailing_comment(comment);
+                        } else {
+                            // TODO: 次以降の行にある行末コメント or 複数行コメント
+                        }
+
+                        cursor.goto_next_sibling();
+                    }
+
+                    // cursor -> _expression
+
+                    let when_expr_node = cursor.node();
+                    let when_expr = self.format_expr(when_expr_node, src);
+                    when_clause.set_body(Body::new_body_with_expr(when_expr, self.state.depth));
+
+                    cursor.goto_next_sibling();
+                    // cursor -> comment || "THEN"
+
+                    if cursor.node().kind() == COMMENT {
+                        let comment = Comment::new(
+                            cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                            Location::new(cursor.node().range()),
+                        );
+
+                        when_clause.add_comment_to_child(comment);
+                        cursor.goto_next_sibling();
+                    }
+
+                    // cursor -> "THEN"
+                    let mut then_clause = Clause::new(
+                        "THEN".to_string(),
+                        Location::new(cursor.node().range()),
+                        self.state.depth,
+                    );
+
+                    cursor.goto_next_sibling();
+                    // cursor -> comment || _expression
+
+                    if cursor.node().kind() == COMMENT {
+                        let comment = Comment::new(
+                            cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                            Location::new(cursor.node().range()),
+                        );
+
+                        if then_clause.loc().is_same_line(&comment.loc()) {
+                            // 同じ行にある行末コメント
+                            then_clause.set_kw_trailing_comment(comment);
+                        } else {
+                            // TODO: 次以降の行にある行末コメント or 複数行コメント
+                        }
+
+                        cursor.goto_next_sibling();
+                    }
+
+                    // cursor -> _expression
+
+                    let then_expr_node = cursor.node();
+                    let then_expr = self.format_expr(then_expr_node, src);
+                    then_clause.set_body(Body::new_body_with_expr(then_expr, self.state.depth));
+
+                    cond_expr.add_when_then_clause(when_clause, then_clause);
+                }
+                "ELSE" => {
+                    let mut else_clause = Clause::new(
+                        "ELSE".to_string(),
+                        Location::new(cursor.node().range()),
+                        self.state.depth,
+                    );
+
+                    cursor.goto_next_sibling();
+                    // cursor -> comment || _expression
+
+                    if cursor.node().kind() == COMMENT {
+                        let comment = Comment::new(
+                            cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                            Location::new(cursor.node().range()),
+                        );
+
+                        if else_clause.loc().is_same_line(&comment.loc()) {
+                            // 同じ行にある行末コメント
+                            else_clause.set_kw_trailing_comment(comment);
+                        } else {
+                            // TODO: 次以降の行にある行末コメント or 複数行コメント
+                        }
+
+                        cursor.goto_next_sibling();
+                    }
+
+                    // cursor -> _expression
+
+                    let else_expr_node = cursor.node();
+                    let else_expr = self.format_expr(else_expr_node, src);
+                    else_clause.set_body(Body::new_body_with_expr(else_expr, self.state.depth));
+
+                    cond_expr.set_else_clause(else_clause);
+                }
+                "END" => {
+                    break;
+                }
+                "comment" => {
+                    let comment_node = cursor.node();
+                    let comment = Comment::new(
+                        comment_node.utf8_text(src.as_bytes()).unwrap().to_string(),
+                        Location::new(comment_node.range()),
+                    );
+                    // TODO: 行末コメント以外
+
+                    // 行末コメントを式にセットする
+                    cond_expr.set_trailing_comment(comment);
+                }
+                _ => unimplemented!(), // error
+            }
+        }
+
+        self.unnest();
+        self.unnest();
+
+        cond_expr
     }
 }

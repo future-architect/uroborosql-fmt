@@ -208,13 +208,16 @@ impl Comment {
     pub(crate) fn new(comment: String, loc: Location) -> Comment {
         Comment { comment, loc }
     }
+
+    pub(crate) fn loc(&self) -> Location {
+        self.loc.clone()
+    }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum Body {
     SepLines(SeparatedLines),
     BooleanExpr(BooleanExpr),
-    ParenExpr(ParenExpr),
 }
 
 impl Body {
@@ -222,7 +225,6 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.loc(),
             Body::BooleanExpr(bool_expr) => bool_expr.loc(),
-            Body::ParenExpr(paren_expr) => Some(paren_expr.loc()),
         }
     }
 
@@ -230,7 +232,6 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.render(),
             Body::BooleanExpr(bool_expr) => bool_expr.render(),
-            Body::ParenExpr(paren_expr) => paren_expr.render(),
         }
     }
 
@@ -238,7 +239,32 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.add_comment_to_child(comment),
             Body::BooleanExpr(bool_expr) => bool_expr.add_comment_to_child(comment),
-            Body::ParenExpr(paren_expr) => paren_expr.add_comment_to_child(comment),
+        }
+    }
+
+    // 一つのExprからなるBodyを生成し返す
+    pub(crate) fn new_body_with_expr(expr: Expr, depth: usize) -> Body {
+        if expr.is_body() {
+            // Bodyである場合はそのまま返せばよい
+            if let Expr::Boolean(boolean) = expr {
+                Body::BooleanExpr(*boolean)
+            } else {
+                // error
+                unimplemented!()
+            }
+        } else {
+            // Bodyでない場合、SeparatedLinesにして返す
+            let mut sep_lines = SeparatedLines::new(depth, "", false);
+            match expr {
+                Expr::Aligned(aligned) => sep_lines.add_expr(*aligned),
+                _ => {
+                    // Bodyでなく、AlignedExprでもない場合、AlignedExprでラッピングしてSeparatedLinesに
+                    let loc = expr.loc();
+                    let aligned = AlignedExpr::new(expr, loc, false);
+                    sep_lines.add_expr(aligned);
+                }
+            }
+            Body::SepLines(sep_lines)
         }
     }
 }
@@ -250,7 +276,8 @@ pub(crate) struct Clause {
     body: Option<Body>,
     loc: Location,
     depth: usize,
-    sql_id: Option<Comment>, // DML(, DDL)に付与できるsql_id
+    sql_id: Option<Comment>,              // DML(, DDL)に付与できるsql_id
+    kw_trailing_comment: Option<Comment>, // キーワードの直後に来る行末コメント
 }
 
 impl Clause {
@@ -261,6 +288,7 @@ impl Clause {
             loc,
             depth,
             sql_id: None,
+            kw_trailing_comment: None,
         }
     }
 
@@ -284,6 +312,10 @@ impl Clause {
         self.sql_id = Some(comment);
     }
 
+    pub(crate) fn set_kw_trailing_comment(&mut self, comment: Comment) {
+        self.kw_trailing_comment = Some(comment);
+    }
+
     pub(crate) fn render(&self) -> Result<String, Error> {
         // kw
         // body...
@@ -295,6 +327,11 @@ impl Clause {
         if let Some(sql_id) = &self.sql_id {
             result.push(' ');
             result.push_str(&sql_id.comment);
+        }
+
+        if let Some(trailing) = &self.kw_trailing_comment {
+            result.push('\t');
+            result.push_str(&trailing.comment);
         }
 
         if let Some(sl) = &self.body {
@@ -316,6 +353,7 @@ pub(crate) enum Expr {
     SelectSub(Box<SelectSubExpr>),
     ParenExpr(Box<ParenExpr>),
     Asterisk(Box<AsteriskExpr>),
+    Cond(Box<CondExpr>),
 }
 
 impl Expr {
@@ -327,17 +365,30 @@ impl Expr {
             Expr::SelectSub(select_sub) => select_sub.loc(),
             Expr::ParenExpr(paren_expr) => paren_expr.loc(),
             Expr::Asterisk(asterisk) => asterisk.loc(),
+            Expr::Cond(cond) => cond.loc(),
+            // _ => unimplemented!(),
         }
     }
 
     fn render(&self) -> Result<String, Error> {
         match self {
-            Expr::Aligned(_aligned) => todo!(),
+            Expr::Aligned(aligned) => {
+                // 演算子を縦ぞろえしない場合は、ここでrender()が呼ばれる
+
+                let len_to_op = if aligned.has_rhs() {
+                    Some(aligned.len_lhs())
+                } else {
+                    None
+                };
+                aligned.render(len_to_op, aligned.len_to_comment(len_to_op), false)
+            }
             Expr::Primary(primary) => primary.render(),
             Expr::Boolean(boolean) => boolean.render(),
             Expr::SelectSub(select_sub) => select_sub.render(),
             Expr::ParenExpr(paren_expr) => paren_expr.render(),
             Expr::Asterisk(asterisk) => asterisk.render(),
+            Expr::Cond(cond) => cond.render(),
+            // _ => unimplemented!(),
         }
     }
 
@@ -348,17 +399,19 @@ impl Expr {
             Expr::SelectSub(_) => PAR_TAB_NUM, // 必ずかっこ
             Expr::ParenExpr(_) => PAR_TAB_NUM, // 必ずかっこ
             Expr::Asterisk(asterisk) => asterisk.len(),
-            _ => todo!(),
+            Expr::Cond(_) => PAR_TAB_NUM, // "END"
+            _ => unimplemented!(),
         }
     }
 
     pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         match self {
             Expr::Aligned(aligned) => aligned.set_trailing_comment(comment),
-            Expr::Primary(_primary) => (),
+            Expr::Primary(primary) => primary.set_trailing_comment(comment),
             Expr::Boolean(boolean) => boolean.add_comment_to_child(comment),
             Expr::SelectSub(select_sub) => select_sub.add_comment_to_child(comment),
             Expr::ParenExpr(paren_expr) => paren_expr.add_comment_to_child(comment),
+            Expr::Cond(_cond) => todo!(), // TODO: case式の末尾コメント
             _ => todo!(),
         }
     }
@@ -368,6 +421,21 @@ impl Expr {
             Expr::Boolean(_) | Expr::SelectSub(_) => true,
             Expr::Primary(_) => false,
             _ => todo!(),
+        }
+    }
+
+    // Bodyになる式(先頭のインデントと末尾の改行を行う式)であればtrue
+    // そうでなければfalseを返す
+    fn is_body(&self) -> bool {
+        match self {
+            Expr::Boolean(_) => true,
+            Expr::Aligned(_)
+            | Expr::Primary(_)
+            | Expr::SelectSub(_)
+            | Expr::ParenExpr(_)
+            | Expr::Asterisk(_)
+            | Expr::Cond(_) => false,
+            // _ => unimplemented!(),
         }
     }
 }
@@ -583,6 +651,7 @@ pub(crate) struct PrimaryExpr {
     loc: Location,
     len: usize,
     head_comment: Option<String>,
+    trailing_comment: Option<Comment>, // Alignedが上位にない場合に末尾コメントを保持
 }
 
 impl PrimaryExpr {
@@ -593,6 +662,7 @@ impl PrimaryExpr {
             loc,
             len,
             head_comment: None,
+            trailing_comment: None,
         }
     }
 
@@ -639,6 +709,12 @@ impl PrimaryExpr {
         self.len += head_comment_and_first_element_len - first_element_len;
     }
 
+    // 末尾コメントをセットする
+    // AlignedExprが上位にいない場合に呼び出される
+    fn set_trailing_comment(&mut self, comment: Comment) {
+        self.trailing_comment = Some(comment);
+    }
+
     /// elementsにelementを追加する
     pub(crate) fn add_element(&mut self, element: &str) {
         // TAB_SIZEを1単位として長さを記録する
@@ -663,7 +739,15 @@ impl PrimaryExpr {
     }
 
     pub(crate) fn render(&self) -> Result<String, Error> {
-        let elements_str = self.elements.iter().map(|x| x.to_uppercase()).join("\t");
+        let mut elements_str = self.elements.iter().map(|x| x.to_uppercase()).join("\t");
+
+        // primaryに末尾コメントを追加する
+        // 直後に改行が来ない場合にバグが生じる
+        // TODO: 上位に、primaryの直後が改行でない場合、自動的に改行を挿入する処理を追加
+        if let Some(comment) = &self.trailing_comment {
+            elements_str.push('\t');
+            elements_str.push_str(&comment.comment);
+        }
 
         match self.head_comment.as_ref() {
             Some(comment) => Ok(format!("{}{}", comment, elements_str)),
@@ -896,5 +980,76 @@ impl AsteriskExpr {
 
     pub(crate) fn render(&self) -> Result<String, Error> {
         Ok(self.content.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CondExpr {
+    depth: usize,
+    when_then_clause: Vec<(Clause, Clause)>,
+    else_clause: Option<Clause>,
+    loc: Location,
+}
+
+impl CondExpr {
+    pub(crate) fn new(loc: Location, depth: usize) -> CondExpr {
+        CondExpr {
+            depth,
+            when_then_clause: vec![],
+            else_clause: None,
+            loc,
+        }
+    }
+
+    fn loc(&self) -> Location {
+        self.loc.clone()
+    }
+
+    pub(crate) fn add_when_then_clause(&mut self, when_clause: Clause, then_clause: Clause) {
+        self.when_then_clause.push((when_clause, then_clause));
+    }
+
+    pub(crate) fn set_else_clause(&mut self, else_clause: Clause) {
+        self.else_clause = Some(else_clause);
+    }
+
+    // 最後の式に行末コメントを追加する
+    pub(crate) fn set_trailing_comment(&mut self, comment: Comment) {
+        if let Some(else_clause) = self.else_clause.as_mut() {
+            else_clause.add_comment_to_child(comment);
+        } else if let Some(when_then_expr) = self.when_then_clause.last_mut() {
+            when_then_expr.1.add_comment_to_child(comment);
+        } else {
+            // TODO: when_then/else が存在しない場合
+            //       つまり、CASEキーワードの直後にコメントが来た場合
+        }
+    }
+
+    fn render(&self) -> Result<String, Error> {
+        let mut result = String::new();
+
+        // CASEキーワードの行のインデントは呼び出し側が行う
+        result.push_str("CASE");
+        result.push('\n');
+
+        // when then
+        for (when_clause, then_clause) in &self.when_then_clause {
+            let formatted = when_clause.render()?;
+            result.push_str(&formatted);
+
+            let formatted = then_clause.render()?;
+            result.push_str(&formatted);
+        }
+
+        // else
+        if let Some(else_clause) = &self.else_clause {
+            let formatted = else_clause.render()?;
+            result.push_str(&formatted);
+        }
+
+        result.extend(repeat_n('\t', self.depth + 1));
+        result.push_str("END");
+
+        Ok(result)
     }
 }
