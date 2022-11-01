@@ -5,6 +5,7 @@ FROM
 WHERE
 	1	=	22222222222222	-- comment0
 OR	(
+	-- start
 		TEST1	=	1	-- comment1
 	AND	(
 			TEST2	=	2	-- comment2
@@ -14,4 +15,5 @@ OR	(
 			TEST4	=	4	-- comment5
 		OR	TEST5	=	5	-- comment6
 		)				-- comment7
+	-- end
 	)						-- comment8
