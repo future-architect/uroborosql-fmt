@@ -26,8 +26,8 @@ impl Formatter {
         }
     }
 
-    /// sqlソースファイルをフォーマットし、bufに入れる
-    pub(crate) fn format_sql(&mut self, node: Node, src: &str) -> Statement {
+    /// sqlソースファイルをフォーマット用構造体に変形する
+    pub(crate) fn format_sql(&mut self, node: Node, src: &str) -> Vec<Statement> {
         self.format_source(node, src)
     }
 
@@ -41,34 +41,57 @@ impl Formatter {
         self.state.depth -= 1;
     }
 
-    fn format_source(&mut self, node: Node, src: &str) -> Statement {
+    fn format_source(&mut self, node: Node, src: &str) -> Vec<Statement> {
         // source_file -> _statement*
+        let mut source: Vec<Statement> = vec![];
 
         let mut cursor = node.walk();
-        if cursor.goto_first_child() {
-            let stmt_node = cursor.node();
 
-            // 現状はselect_statementのみ
-            // 文が増えたらマッチ式で分岐させる
-            let mut stmt = self.format_select_stmt(stmt_node, src);
-
-            if cursor.goto_next_sibling() && cursor.node().kind() == COMMENT {
-                let comment_loc = Location::new(cursor.node().range());
-
-                //同じ行の場合
-                if comment_loc.is_same_line(&stmt.loc().unwrap()) {
-                    stmt.add_comment_to_child(Comment::new(
-                        cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
-                        comment_loc,
-                    ));
-                } else {
-                    //違う行の場合
-                }
-            }
-            stmt
-        } else {
+        if !cursor.goto_first_child() {
+            // source_fileに子供がない
             todo!()
         }
+
+        // ソースファイル先頭のコメントを保存するバッファ
+        let mut comment_buf: Vec<Comment> = vec![];
+
+        loop {
+            let stmt_node = cursor.node();
+
+            match stmt_node.kind() {
+                "select_statement" => {
+                    let mut stmt = self.format_select_stmt(stmt_node, src);
+
+                    // コメントが以前にあれば先頭に追加
+                    comment_buf
+                        .iter()
+                        .cloned()
+                        .for_each(|c| stmt.add_comment(c));
+                    comment_buf.clear();
+
+                    source.push(stmt);
+                }
+                COMMENT => {
+                    let comment = Comment::new(stmt_node, src);
+
+                    if let Some(last_stmt) = source.last_mut() {
+                        // すでにstatementがある場合、末尾に追加
+                        last_stmt.add_comment_to_child(comment);
+                    } else {
+                        // まだstatementがない場合、バッファに詰めておく
+                        comment_buf.push(comment);
+                    }
+                }
+                _ => unimplemented!(),
+            }
+
+            if !cursor.goto_next_sibling() {
+                // 次の子供がいない場合、終了
+                break;
+            }
+        }
+
+        source
     }
 
     // SELECT文
@@ -80,7 +103,7 @@ impl Formatter {
                 where_clause?
         */
 
-        let mut statement = Statement::default();
+        let mut statement = Statement::new(self.state.depth);
 
         let mut cursor = node.walk(); // cursor -> select_statement
         if cursor.goto_first_child() {
@@ -112,9 +135,14 @@ impl Formatter {
                         );
 
                         let mut separated_lines = SeparatedLines::new(self.state.depth, ",", true);
-
                         // commaSep
                         if cursor.goto_next_sibling() {
+                            while cursor.node().kind() == COMMENT {
+                                let comment = Comment::new(cursor.node(), src);
+                                clause.add_comment_to_child(comment);
+                                cursor.goto_next_sibling();
+                            }
+
                             // cursor -> _aliasable_expression
                             let expr_node = cursor.node();
 
@@ -133,11 +161,7 @@ impl Formatter {
                                         if comment_loc.is_same_line(&separated_lines.loc().unwrap())
                                         {
                                             separated_lines.add_comment_to_child(Comment::new(
-                                                child_node
-                                                    .utf8_text(src.as_bytes())
-                                                    .unwrap()
-                                                    .to_string(),
-                                                comment_loc,
+                                                child_node, src,
                                             ));
                                         } else {
                                             //違う行の場合
@@ -170,6 +194,13 @@ impl Formatter {
                         );
 
                         cursor.goto_next_sibling();
+
+                        while cursor.node().kind() == COMMENT {
+                            let comment = Comment::new(cursor.node(), src);
+                            clause.add_comment_to_child(comment);
+                            cursor.goto_next_sibling();
+                        }
+
                         // cursor -> _expression
 
                         let expr_node = cursor.node();
@@ -212,19 +243,7 @@ impl Formatter {
                         statement.add_clause(clause);
                     }
                 }
-                COMMENT => {
-                    let comment_loc = Location::new(clause_node.range());
-
-                    //同じ行の場合
-                    if comment_loc.is_same_line(&statement.loc().unwrap()) {
-                        statement.add_comment_to_child(Comment::new(
-                            clause_node.utf8_text(src.as_bytes()).unwrap().to_string(),
-                            comment_loc,
-                        ));
-                    } else {
-                        //違う行の場合
-                    }
-                }
+                COMMENT => statement.add_comment_to_child(Comment::new(clause_node, src)),
                 _ => {
                     break;
                 }
@@ -251,34 +270,21 @@ impl Formatter {
 
         if cursor.goto_first_child() {
             // cursor -> SELECT
-            // SELECTを読み飛ばす(コメントを考える際に変更予定)
 
             cursor.goto_next_sibling();
-            // cursor -> /* _SQL_ID_ */ | select_clause_body
+            // cursor -> comments | select_clause_body
 
-            if cursor.node().kind() == COMMENT {
+            while cursor.node().kind() == COMMENT {
                 let comment_node = cursor.node();
-                let comment_string = comment_node.utf8_text(src.as_bytes()).unwrap();
 
-                // 複数行コメント
-                if comment_string.starts_with("/*") {
-                    let comment = Comment::new(
-                        comment_string.to_string(),
-                        Location::new(comment_node.range()),
-                    );
+                let comment = Comment::new(comment_node, src);
 
-                    let comment_content = comment_string
-                        .trim_start_matches("/*")
-                        .trim_end_matches("*/")
-                        .trim();
-
-                    if comment_content == "_SQL_ID_" || comment_content == "_SQL_IDENTIFIER_" {
-                        // _SQL_ID_
-                        clause.set_sql_id(comment);
-                    }
-                    // TODO: _SQL_ID_以外の複数行コメント
+                // _SQL_ID_かどうかをチェックする
+                if comment.is_sql_id_comment() {
+                    clause.set_sql_id(comment);
+                } else {
+                    clause.add_comment_to_child(comment)
                 }
-                // TODO: 行末コメント
 
                 cursor.goto_next_sibling();
             }
@@ -315,10 +321,7 @@ impl Formatter {
             match child_node.kind() {
                 "," => continue,
                 COMMENT => {
-                    separated_lines.add_comment_to_child(Comment::new(
-                        child_node.utf8_text(src.as_bytes()).unwrap().to_string(),
-                        Location::new(child_node.range()),
-                    ));
+                    separated_lines.add_comment_to_child(Comment::new(child_node, src));
                 }
                 _ => {
                     let aligned = self.format_aliasable_expr(child_node, src);
@@ -358,7 +361,25 @@ impl Formatter {
 
                 // ("AS"? identifier)?
                 if cursor.goto_next_sibling() {
-                    // cursor -> "AS"?
+                    // cursor -> trailing_comment | "AS"?
+
+                    if cursor.node().kind() == COMMENT {
+                        // ASの直前にcommentがある場合
+                        let comment = Comment::new(cursor.node(), src);
+
+                        if comment.is_multi_line_comment()
+                            || !comment.loc().is_same_line(&aligned.loc())
+                        {
+                            // 行末以外のコメント(次以降の行のコメント)は未定義
+                            // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
+                            // エイリアスがない場合は、コメントノードがここに現れない
+                            panic!("unexpected syntax")
+                        } else {
+                            // 行末コメント
+                            aligned.set_lhs_trailing_comment(comment);
+                        }
+                        cursor.goto_next_sibling();
+                    }
 
                     // ASが存在する場合は読み飛ばす
                     if cursor.node().kind() == "AS" {
@@ -455,11 +476,7 @@ impl Formatter {
 
                 let mut head_comment: Option<Comment> = None;
                 if cursor.node().kind() == COMMENT {
-                    let comment_loc = Location::new(cursor.node().range());
-                    head_comment = Some(Comment::new(
-                        cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
-                        comment_loc,
-                    ));
+                    head_comment = Some(Comment::new(cursor.node(), src));
 
                     cursor.goto_next_sibling();
                 }
@@ -571,6 +588,7 @@ impl Formatter {
         if cursor.node().kind() == "NOT" {
             todo!();
         } else {
+            // and or
             let left = self.format_expr(cursor.node(), src);
             match left {
                 Expr::Aligned(aligned) => boolean_expr.add_expr(*aligned),
@@ -588,12 +606,8 @@ impl Formatter {
 
             cursor.goto_next_sibling();
 
-            if cursor.node().kind() == COMMENT {
-                let comment_loc = Location::new(cursor.node().range());
-                boolean_expr.add_comment_to_child(Comment::new(
-                    cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
-                    comment_loc,
-                ));
+            while cursor.node().kind() == COMMENT {
+                boolean_expr.add_comment_to_child(Comment::new(cursor.node(), src));
                 cursor.goto_next_sibling();
             }
 
@@ -630,17 +644,39 @@ impl Formatter {
         cursor.goto_first_child();
         // cursor -> (
         // 将来的には、かっこの数を数えるかもしれない
-
-        cursor.goto_next_sibling();
-        // cursor -> select_statement
-
         self.nest();
-        let select_stmt_node = cursor.node();
-        let select_stmt = self.format_select_stmt(select_stmt_node, src);
-        self.unnest();
 
         cursor.goto_next_sibling();
+        // cursor -> comments | select_statement
+
+        let mut comment_buf: Vec<Comment> = vec![];
+        while cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            comment_buf.push(comment);
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> select_statement
+        let select_stmt_node = cursor.node();
+        let mut select_stmt = self.format_select_stmt(select_stmt_node, src);
+
+        // select_statementの前にコメントがあった場合、コメントを追加
+        comment_buf
+            .into_iter()
+            .for_each(|c| select_stmt.add_comment(c));
+
+        cursor.goto_next_sibling();
+        // cursor -> comments | )
+
+        while cursor.node().kind() == COMMENT {
+            // 閉じかっこの直前にコメントが来る場合
+            let comment = Comment::new(cursor.node(), src);
+            select_stmt.add_comment_to_child(comment);
+            cursor.goto_next_sibling();
+        }
+
         // cursor -> )
+        self.unnest();
 
         SelectSubExpr::new(select_stmt, loc, self.state.depth)
     }
@@ -657,7 +693,16 @@ impl Formatter {
         //cursor -> "("
 
         cursor.goto_next_sibling();
-        //cursor -> expr
+        //cursor -> comments | expr
+
+        let mut comment_buf = vec![];
+        while cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            comment_buf.push(comment);
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> expr
 
         // exprがparen_exprならネストしない
         let is_nest = !matches!(cursor.node().kind(), "parenthesized_expression");
@@ -680,15 +725,17 @@ impl Formatter {
             }
         };
 
-        cursor.goto_next_sibling();
-        //cursor -> ")"
+        // 開きかっこと式の間にあるコメントを追加
+        for comment in comment_buf {
+            paren_expr.add_start_comment(comment);
+        }
 
-        if cursor.node().kind() == COMMENT {
-            let comment_loc = Location::new(cursor.node().range());
-            paren_expr.add_comment_to_child(Comment::new(
-                cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
-                comment_loc,
-            ));
+        cursor.goto_next_sibling();
+        // cursor -> comments | ")"
+
+        // 閉じかっこの前にあるコメントを追加
+        while cursor.node().kind() == COMMENT {
+            paren_expr.add_comment_to_child(Comment::new(cursor.node(), src));
             cursor.goto_next_sibling();
         }
 
@@ -728,19 +775,9 @@ impl Formatter {
                     cursor.goto_next_sibling();
                     // cursor -> comment | _expression
 
-                    if cursor.node().kind() == COMMENT {
-                        let comment = Comment::new(
-                            cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
-                            Location::new(cursor.node().range()),
-                        );
-
-                        if when_clause.loc().is_same_line(&comment.loc()) {
-                            // 同じ行にある行末コメント
-                            when_clause.set_kw_trailing_comment(comment);
-                        } else {
-                            // TODO: 次以降の行にある行末コメント or 複数行コメント
-                        }
-
+                    while cursor.node().kind() == COMMENT {
+                        let comment = Comment::new(cursor.node(), src);
+                        when_clause.add_comment_to_child(comment);
                         cursor.goto_next_sibling();
                     }
 
@@ -753,12 +790,8 @@ impl Formatter {
                     cursor.goto_next_sibling();
                     // cursor -> comment || "THEN"
 
-                    if cursor.node().kind() == COMMENT {
-                        let comment = Comment::new(
-                            cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
-                            Location::new(cursor.node().range()),
-                        );
-
+                    while cursor.node().kind() == COMMENT {
+                        let comment = Comment::new(cursor.node(), src);
                         when_clause.add_comment_to_child(comment);
                         cursor.goto_next_sibling();
                     }
@@ -773,19 +806,9 @@ impl Formatter {
                     cursor.goto_next_sibling();
                     // cursor -> comment || _expression
 
-                    if cursor.node().kind() == COMMENT {
-                        let comment = Comment::new(
-                            cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
-                            Location::new(cursor.node().range()),
-                        );
-
-                        if then_clause.loc().is_same_line(&comment.loc()) {
-                            // 同じ行にある行末コメント
-                            then_clause.set_kw_trailing_comment(comment);
-                        } else {
-                            // TODO: 次以降の行にある行末コメント or 複数行コメント
-                        }
-
+                    while cursor.node().kind() == COMMENT {
+                        let comment = Comment::new(cursor.node(), src);
+                        then_clause.add_comment_to_child(comment);
                         cursor.goto_next_sibling();
                     }
 
@@ -807,19 +830,9 @@ impl Formatter {
                     cursor.goto_next_sibling();
                     // cursor -> comment || _expression
 
-                    if cursor.node().kind() == COMMENT {
-                        let comment = Comment::new(
-                            cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
-                            Location::new(cursor.node().range()),
-                        );
-
-                        if else_clause.loc().is_same_line(&comment.loc()) {
-                            // 同じ行にある行末コメント
-                            else_clause.set_kw_trailing_comment(comment);
-                        } else {
-                            // TODO: 次以降の行にある行末コメント or 複数行コメント
-                        }
-
+                    while cursor.node().kind() == COMMENT {
+                        let comment = Comment::new(cursor.node(), src);
+                        else_clause.add_comment_to_child(comment);
                         cursor.goto_next_sibling();
                     }
 
@@ -836,11 +849,7 @@ impl Formatter {
                 }
                 "comment" => {
                     let comment_node = cursor.node();
-                    let comment = Comment::new(
-                        comment_node.utf8_text(src.as_bytes()).unwrap().to_string(),
-                        Location::new(comment_node.range()),
-                    );
-                    // TODO: 行末コメント以外
+                    let comment = Comment::new(comment_node, src);
 
                     // 行末コメントを式にセットする
                     cond_expr.set_trailing_comment(comment);

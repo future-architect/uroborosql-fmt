@@ -1,10 +1,20 @@
 SELECT
 	A
 ,	(
+		-- comm1
+		/*
+			comm2
+		*/
 		SELECT
 			Z
+		/*
+			z
+		*/
 		FROM
 			TAB2
+		/*
+			comm3
+		*/
 	)
 FROM
 	LONGLONGTABLE	L
@@ -14,4 +24,5 @@ FROM
 		,	C
 		FROM
 			TAB1
-	)				BC
+	)	-- trailing
+					BC

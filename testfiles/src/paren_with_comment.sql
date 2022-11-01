@@ -3,7 +3,8 @@ from tb
 WHERE
 1=22222222222222 --comment0
 OR
-(test1 = 1 --comment1
+( -- start
+test1 = 1 --comment1
 and 
 (test2 = 2 --comment2
 and 
@@ -13,4 +14,5 @@ or (((test4 = 4 --comment5
 or test5 = 5 --comment6
 )) 
 ) --comment7
+-- end
 ) --comment8

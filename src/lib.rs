@@ -28,16 +28,19 @@ pub fn format_sql(src: &str) -> String {
     let mut formatter = Formatter::default();
 
     // formatを行い、バッファに結果を格納
-    let res = formatter.format_sql(root_node, src.as_ref());
+    let stmts = formatter.format_sql(root_node, src.as_ref());
 
     if DEBUG_MODE {
-        eprintln!("{:#?}", res);
+        eprintln!("{:#?}", stmts);
     }
 
-    match res.render() {
-        Ok(res) => res,
-        Err(e) => panic!("{:?}", e),
+    let mut result = String::new();
+
+    for stmt in &stmts {
+        result.push_str(&stmt.render().expect("render: error"));
     }
+
+    result
 }
 
 // cstを表示する関数(デバッグ用)

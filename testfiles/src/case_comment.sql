@@ -1,5 +1,7 @@
 SELECT a,
-        CASE WHEN -- cond_1
+        CASE -- case trailing
+        /* case */
+        WHEN -- cond_1
         a=1 -- a equals 1
         THEN -- cond_1 == true
         'one' -- one
