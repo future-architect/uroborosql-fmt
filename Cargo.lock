@@ -57,9 +57,9 @@ checksum = "a3f87b73ce11b1619a3c6332f45341e0047173771e8b8b73f87bfeefb7b56244"
 
 [[package]]
 name = "tree-sitter"
-version = "0.19.5"
+version = "0.20.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad726ec26496bf4c083fff0f43d4eb3a2ad1bba305323af5ff91383c0b6ecac0"
+checksum = "d4423c784fe11398ca91e505cdc71356b07b1a924fc8735cfab5333afe3e18bc"
 dependencies = [
  "cc",
  "regex",
@@ -68,7 +68,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-sql"
 version = "0.0.2"
-source = "git+https://gitlab.nasa.future.co.jp/oss-incubate/rust-sql-formatter/tree-sitter-sql#8583b9925f6a4f29b5d66cb3f86bd178b47fea2d"
+source = "git+https://gitlab.nasa.future.co.jp/oss-incubate/rust-sql-formatter/tree-sitter-sql#f0baea6d17b99bb7cefed1e9718f2d80b08fbb1a"
 dependencies = [
  "cc",
  "tree-sitter",
