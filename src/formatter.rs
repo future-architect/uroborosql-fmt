@@ -1,4 +1,4 @@
-use tree_sitter::Node;
+use tree_sitter::{Node, TreeCursor};
 
 pub(crate) const COMMENT: &str = "comment";
 
@@ -219,11 +219,8 @@ impl Formatter {
                             Expr::Boolean(boolean) => Body::BooleanExpr(*boolean),
                             Expr::SelectSub(_select_sub) => todo!(),
                             Expr::ParenExpr(paren_expr) => {
-                                let loc = paren_expr.loc();
-
                                 // paren_exprをaligned_exprでラップする
-                                let aligned =
-                                    AlignedExpr::new(Expr::ParenExpr(paren_expr), loc, false);
+                                let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), false);
 
                                 // Bodyを返すため、separated_linesに格納
                                 let mut separated_lines =
@@ -354,13 +351,13 @@ impl Formatter {
                 // cursor -> _expression
 
                 // _expression
-                let lhs_expr = self.format_expr(cursor.node(), src);
-                let lhs_expr_loc = lhs_expr.loc();
+                let lhs_node = cursor.node();
+                let lhs_expr = self.format_expr(lhs_node, src);
 
-                let mut aligned = AlignedExpr::new(lhs_expr, lhs_expr_loc, true);
+                let mut aligned = AlignedExpr::new(lhs_expr, true);
 
                 // ("AS"? identifier)?
-                if cursor.goto_next_sibling() {
+                if goto_next_to_expr(&mut cursor) {
                     // cursor -> trailing_comment | "AS"?
 
                     if cursor.node().kind() == COMMENT {
@@ -404,9 +401,8 @@ impl Formatter {
                 // _expression
                 let expr_node = node;
                 let expr = self.format_expr(expr_node, src);
-                let expr_loc = expr.loc();
 
-                AlignedExpr::new(expr, expr_loc, true)
+                AlignedExpr::new(expr, true)
             }
         }
     }
@@ -419,9 +415,28 @@ impl Formatter {
         )
     }
 
-    // 式
+    /// 式のフォーマットを行う。
+    /// コメントを与えた場合、バインドパラメータであれば結合して返す。
+    /// 式の初めにバインドパラメータが現れた場合、式の本体は隣の兄弟ノードになる。
+    /// その場合、呼び出し元のカーソルはバインドパラメータを指しているため、1度`cursor.goto_next_sibling()`を
+    /// 呼び出しただけでは、式の次のノードにカーソルを移動させることができない。
+    /// そのため、式の次のノードにカーソルを移動させる際は`goto_next_to_expr()`を使用する。
     fn format_expr(&mut self, node: Node, src: &str) -> Expr {
         let mut cursor = node.walk();
+
+        // バインドパラメータをチェック
+        let head_comment = if cursor.node().kind() == COMMENT {
+            let comment_node = cursor.node();
+            let next_sibling_node = node
+                .next_sibling()
+                .expect("this expression has only comment, no body.");
+            cursor = next_sibling_node.walk();
+            // cursor -> _expression
+            // (式の直前に複数コメントが来る場合は想定していない)
+            Some(Comment::new(comment_node, src))
+        } else {
+            None
+        };
 
         match cursor.node().kind() {
             "dotted_name" => {
@@ -429,7 +444,7 @@ impl Formatter {
 
                 // cursor -> dotted_name
 
-                let range = node.range();
+                let range = cursor.node().range();
 
                 cursor.goto_first_child();
 
@@ -449,7 +464,16 @@ impl Formatter {
                     };
                 }
 
-                let primary = PrimaryExpr::new(dotted_name, Location::new(range));
+                let mut primary = PrimaryExpr::new(dotted_name, Location::new(range));
+                if let Some(comment) = head_comment {
+                    if comment.is_multi_line_comment() && comment.loc().is_next_to(&primary.loc()) {
+                        // 複数行コメントかつ式に隣接していれば、バインドパラメータ
+                        primary.set_head_comment(comment);
+                    } else {
+                        // TODO: 隣接していないコメント
+                        todo!()
+                    }
+                }
 
                 Expr::Primary(Box::new(primary))
             }
@@ -463,8 +487,7 @@ impl Formatter {
                 let lhs_node = cursor.node();
                 let lhs_expr = self.format_expr(lhs_node, src);
 
-                // self.goto_not_comment_next_sibiling_for_line(&mut line, &mut cursor, src);
-                cursor.goto_next_sibling();
+                goto_next_to_expr(&mut cursor);
                 // cursor -> op (e.g., "+", "-", "=", ...)
 
                 // 演算子
@@ -474,34 +497,13 @@ impl Formatter {
                 cursor.goto_next_sibling();
                 // cursor -> _expression
 
-                let mut head_comment: Option<Comment> = None;
-                if cursor.node().kind() == COMMENT {
-                    head_comment = Some(Comment::new(cursor.node(), src));
-
-                    cursor.goto_next_sibling();
-                }
-
                 // 右辺
                 let rhs_node = cursor.node();
-                let mut rhs_expr = self.format_expr(rhs_node, src);
-
-                match head_comment {
-                    Some(comment) => match &mut rhs_expr {
-                        Expr::Aligned(_) => todo!(),
-                        Expr::Primary(primary) => primary.set_head_comment(comment),
-                        Expr::Boolean(_) => todo!(),
-                        Expr::SelectSub(_) => todo!(),
-                        Expr::ParenExpr(_) => todo!(),
-                        Expr::Asterisk(_) => todo!(),
-                        _ => unimplemented!(),
-                    },
-                    None => (),
-                }
+                let rhs_expr = self.format_expr(rhs_node, src);
 
                 if Self::is_comp_op(op_str) {
                     // 比較演算子 -> AlignedExpr
-                    let lhs_loc = lhs_expr.loc();
-                    let mut aligned = AlignedExpr::new(lhs_expr, lhs_loc, false);
+                    let mut aligned = AlignedExpr::new(lhs_expr, false);
                     aligned.add_rhs(op_str.to_string(), rhs_expr);
 
                     Expr::Aligned(Box::new(aligned))
@@ -527,13 +529,30 @@ impl Formatter {
                     }
                 }
             }
+            "between_and_expression" => {
+                Expr::Aligned(Box::new(self.format_between_and_expression(node, src)))
+            }
             "boolean_expression" => self.format_bool_expr(node, src),
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
-                let primary = PrimaryExpr::new(
-                    node.utf8_text(src.as_bytes()).unwrap().to_string(),
-                    Location::new(node.range()),
+                let mut primary = PrimaryExpr::new(
+                    cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                    Location::new(cursor.node().range()),
                 );
+
+                if let Some(comment) = head_comment {
+                    if comment.is_multi_line_comment() && comment.loc().is_next_to(&primary.loc()) {
+                        // 複数行コメントかつ式に隣接していれば、バインドパラメータ
+                        primary.set_head_comment(comment);
+                    } else {
+                        // TODO: 隣接していないコメント
+                        todo!(
+                            "\ncomment: {:?}\nprimary: {:?}",
+                            comment.loc(),
+                            primary.loc()
+                        )
+                    }
+                }
 
                 Expr::Primary(Box::new(primary))
             }
@@ -596,15 +615,14 @@ impl Formatter {
                 Expr::Boolean(boolean) => boolean_expr.merge(*boolean),
                 Expr::SelectSub(_) => todo!(),
                 Expr::ParenExpr(paren_expr) => {
-                    let loc = paren_expr.loc();
-                    let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), loc, false);
+                    let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), false);
                     boolean_expr.add_expr(aligned);
                 }
                 Expr::Asterisk(_) => todo!(),
                 _ => unimplemented!(),
             }
 
-            cursor.goto_next_sibling();
+            goto_next_to_expr(&mut cursor);
 
             while cursor.node().kind() == COMMENT {
                 boolean_expr.add_comment_to_child(Comment::new(cursor.node(), src));
@@ -623,8 +641,7 @@ impl Formatter {
                 Expr::Boolean(boolean) => boolean_expr.merge(*boolean),
                 Expr::SelectSub(_) => todo!(),
                 Expr::ParenExpr(paren_expr) => {
-                    let loc = paren_expr.loc();
-                    let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), loc, false);
+                    let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), false);
                     boolean_expr.add_expr(aligned);
                 }
                 Expr::Asterisk(_) => todo!(),
@@ -730,6 +747,8 @@ impl Formatter {
             paren_expr.add_start_comment(comment);
         }
 
+        // かっこの中の式の最初がバインドパラメータを含む場合でも、comment_bufに読み込まれてしまう
+        // そのため、現状ではこの位置のバインドパラメータを考慮せず、goto_next_to_expr()を使用していない
         cursor.goto_next_sibling();
         // cursor -> comments | ")"
 
@@ -787,7 +806,7 @@ impl Formatter {
                     let when_expr = self.format_expr(when_expr_node, src);
                     when_clause.set_body(Body::new_body_with_expr(when_expr, self.state.depth));
 
-                    cursor.goto_next_sibling();
+                    goto_next_to_expr(&mut cursor);
                     // cursor -> comment || "THEN"
 
                     while cursor.node().kind() == COMMENT {
@@ -863,4 +882,66 @@ impl Formatter {
 
         cond_expr
     }
+
+    fn format_between_and_expression(&mut self, node: Node, src: &str) -> AlignedExpr {
+        let mut cursor = node.walk();
+        if !cursor.goto_first_child() {
+            panic!("between_and_expression has no children.");
+        }
+
+        // cursor -> expression
+        let expr_node = cursor.node();
+        let expr = self.format_expr(expr_node, src);
+
+        goto_next_to_expr(&mut cursor);
+        // cursor -> (NOT)? BETWEEN
+
+        let mut operator = String::new();
+
+        if cursor.node().kind() == "NOT" {
+            operator += "NOT";
+            operator += " "; // betweenの前に空白を入れる
+            cursor.goto_next_sibling();
+        }
+
+        ensure_keyword(cursor.node(), "BETWEEN");
+        operator += "BETWEEN";
+        cursor.goto_next_sibling();
+        // cursor -> expression
+
+        let from_expr_node = cursor.node();
+        let from_expr = self.format_expr(from_expr_node, src);
+        goto_next_to_expr(&mut cursor);
+        // cursor -> AND
+
+        ensure_keyword(cursor.node(), "AND");
+        cursor.goto_next_sibling();
+
+        let to_expr_node = cursor.node();
+        let to_expr = self.format_expr(to_expr_node, src);
+
+        let mut rhs = AlignedExpr::new(from_expr, false);
+        rhs.add_rhs("AND".to_string(), to_expr);
+
+        let mut aligned = AlignedExpr::new(expr, false);
+        aligned.add_rhs(operator, Expr::Aligned(Box::new(rhs)));
+
+        aligned
+    }
+}
+
+/// nodeが指定したキーワードノードかどうかをチェックする関数
+/// 期待しているノードではない場合、panicする
+fn ensure_keyword(node: Node, kw: &str) {
+    if node.kind() != kw {
+        panic!("excepted node is {}, but actual {}", kw, node.kind());
+    }
+}
+
+/// _expressionの次のノードにcursorを移動させる関数
+fn goto_next_to_expr(cursor: &mut TreeCursor) -> bool {
+    if cursor.node().kind() == COMMENT {
+        cursor.goto_next_sibling();
+    }
+    cursor.goto_next_sibling()
 }
