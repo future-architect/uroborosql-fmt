@@ -240,6 +240,42 @@ impl Formatter {
                         statement.add_clause(clause);
                     }
                 }
+                "UNION" | "INTERSECT" | "EXCEPT" => {
+                    // 演算の文字列(e.g., "INTERSECT", "UNION ALL", ...)
+                    let mut combining_op = String::from(cursor.node().kind());
+
+                    // 演算のソースコード上での位置
+                    let mut loc = Location::new(cursor.node().range());
+
+                    cursor.goto_next_sibling();
+                    // cursor -> (ALL | DISTINCT) | select_statement
+
+                    if matches!(cursor.node().kind(), "ALL" | "DISTINCT") {
+                        // ALL または DISTINCT を追加する
+                        combining_op.push(' ');
+                        combining_op.push_str(cursor.node().kind());
+                        loc.append(Location::new(cursor.node().range()));
+                        cursor.goto_next_sibling();
+                    }
+                    // cursor -> comments | select_statement
+
+                    // 演算子のみからなる句を追加
+                    let combining_clause = Clause::new(combining_op, loc, self.state.depth);
+                    statement.add_clause(combining_clause);
+
+                    while cursor.node().kind() == COMMENT {
+                        let comment = Comment::new(cursor.node(), src);
+                        statement.add_comment_to_child(comment);
+                        cursor.goto_next_sibling();
+                    }
+
+                    // 副問い合わせを計算
+                    let select_stmt = self.format_select_stmt(cursor.node(), src);
+                    select_stmt
+                        .get_clauses()
+                        .iter()
+                        .for_each(|clause| statement.add_clause(clause.to_owned()));
+                }
                 COMMENT => statement.add_comment_to_child(Comment::new(clause_node, src)),
                 _ => {
                     break;
