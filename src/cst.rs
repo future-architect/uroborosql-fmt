@@ -246,6 +246,11 @@ impl Statement {
         self.loc.clone()
     }
 
+    /// ClauseのVecへの参照を取得する
+    pub(crate) fn get_clauses(self) -> Vec<Clause> {
+        self.clauses
+    }
+
     // 文に句を追加する
     pub(crate) fn add_clause(&mut self, clause: Clause) {
         match &mut self.loc {
@@ -496,6 +501,8 @@ impl Clause {
             let formatted_body = sl.render()?;
             result.push('\n');
             result.push_str(&formatted_body);
+        } else {
+            result.push('\n');
         };
 
         Ok(result)
