@@ -169,7 +169,11 @@ impl SeparatedLines {
         self.contents.push((aligned, vec![]));
     }
 
+    /// 最後の式にコメントを追加する
+    /// 最後の式と同じ行である場合は行末コメントとして追加し、そうでない場合は式の下のコメントとして追加する
     pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
+        let comment_loc = comment.loc();
+
         if comment.is_multi_line_comment() || !self.loc().unwrap().is_same_line(&comment.loc()) {
             // 行末コメントではない場合
             // 最後の要素にコメントを追加
@@ -183,6 +187,12 @@ impl SeparatedLines {
                 .0
                 .set_trailing_comment(comment);
         }
+
+        // locationの更新
+        match &mut self.loc {
+            Some(loc) => loc.append(comment_loc),
+            None => self.loc = Some(comment_loc),
+        };
     }
 
     fn is_empty(&self) -> bool {
@@ -463,10 +473,14 @@ impl Clause {
 
     // bodyをセットする
     pub(crate) fn set_body(&mut self, body: Body) {
-        self.loc.append(body.loc().unwrap());
-        self.body = Some(body);
+        if !body.is_empty() {
+            self.loc.append(body.loc().unwrap());
+            self.body = Some(body);
+        }
     }
 
+    /// Clauseにコメントを追加する
+    /// Bodyがあればその下にコメントを追加し、ない場合はキーワードの下にコメントを追加する
     pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
         match &mut self.body {
             Some(body) if !body.is_empty() => body.add_comment_to_child(comment), // bodyに式があれば、その下につく
@@ -591,6 +605,18 @@ impl Expr {
         }
     }
 
+    /// バインドパラメータをセットする
+    /// コメントがバインドパラメータであるか(式と隣り合っているか)は呼び出し元で保証する
+    pub(crate) fn set_head_comment(&mut self, comment: Comment) {
+        match self {
+            Expr::Primary(primary) => primary.set_head_comment(comment),
+            Expr::Aligned(aligned) => aligned.set_head_comment(comment),
+            Expr::Boolean(boolean) => boolean.set_head_comment(comment),
+            // primary, aligned, boolean以外の式は現状、バインドパラメータがつくことはない
+            _ => unimplemented!(),
+        }
+    }
+
     /// 複数行の式であればtrueを返す
     fn is_multi_line(&self) -> bool {
         match self {
@@ -705,6 +731,12 @@ impl AlignedExpr {
             self.lhs_trailing_comment = Some(trailing_comment);
             self.loc.append(loc)
         }
+    }
+
+    /// 左辺にバインドパラメータをセットする
+    /// 隣り合っているかどうかは呼び出しもとでチェック済み
+    pub fn set_head_comment(&mut self, comment: Comment) {
+        self.lhs.set_head_comment(comment);
     }
 
     // 演算子と右辺の式を追加する
@@ -901,7 +933,6 @@ pub(crate) struct PrimaryExpr {
     loc: Location,
     len: usize,
     head_comment: Option<String>,
-    trailing_comment: Option<Comment>, // Alignedが上位にない場合に末尾コメントを保持
 }
 
 impl PrimaryExpr {
@@ -912,7 +943,6 @@ impl PrimaryExpr {
             loc,
             len,
             head_comment: None,
-            trailing_comment: None,
         }
     }
 
@@ -959,12 +989,6 @@ impl PrimaryExpr {
         self.len += head_comment_and_first_element_len - first_element_len;
     }
 
-    // 末尾コメントをセットする
-    // AlignedExprが上位にいない場合に呼び出される
-    fn set_trailing_comment(&mut self, comment: Comment) {
-        self.trailing_comment = Some(comment);
-    }
-
     /// elementsにelementを追加する
     pub(crate) fn add_element(&mut self, element: &str) {
         // TAB_SIZEを1単位として長さを記録する
@@ -990,14 +1014,6 @@ impl PrimaryExpr {
 
     pub(crate) fn render(&self) -> Result<String, Error> {
         let mut elements_str = self.elements.iter().map(|x| x.to_uppercase()).join("\t");
-
-        // primaryに末尾コメントを追加する
-        // 直後に改行が来ない場合にバグが生じる
-        // TODO: 上位に、primaryの直後が改行でない場合、自動的に改行を挿入する処理を追加
-        if let Some(comment) = &self.trailing_comment {
-            elements_str.push('\t');
-            elements_str.push_str(&comment.text);
-        }
 
         match self.head_comment.as_ref() {
             Some(comment) => Ok(format!("{}{}", comment, elements_str)),
@@ -1050,6 +1066,13 @@ impl BooleanExpr {
                 .1
                 .set_trailing_comment(comment);
         }
+    }
+
+    /// 左辺を展開していき、バインドパラメータをセットする
+    /// 隣り合っているかどうかは、呼び出しもとで確認済みであるとする
+    pub fn set_head_comment(&mut self, comment: Comment) {
+        let left = &mut self.contents.first_mut().unwrap().1;
+        left.set_head_comment(comment);
     }
 
     pub(crate) fn add_expr_with_sep(&mut self, aligned: AlignedExpr, sep: String) {
@@ -1292,7 +1315,7 @@ impl CondExpr {
         self.else_clause = Some(else_clause);
     }
 
-    // 最後の式にコメントを追加する
+    /// 最後の式にコメントを追加する
     pub(crate) fn set_trailing_comment(&mut self, comment: Comment) {
         if let Some(else_clause) = self.else_clause.as_mut() {
             else_clause.add_comment_to_child(comment);
