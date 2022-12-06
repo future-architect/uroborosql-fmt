@@ -201,33 +201,7 @@ impl Formatter {
                     let expr = self.format_expr(cursor, src);
 
                     // 結果として得られた式をBodyに変換する
-                    // TODO: 関数またはBody、Exprのメソッドとして定義する
-                    let body = match expr {
-                        Expr::Aligned(aligned) => {
-                            let mut separated_lines =
-                                SeparatedLines::new(self.state.depth, "", false);
-                            separated_lines.add_expr(*aligned);
-                            Body::SepLines(separated_lines)
-                        }
-                        Expr::Primary(_) => {
-                            todo!();
-                        }
-                        Expr::Boolean(boolean) => Body::BooleanExpr(*boolean),
-                        Expr::SelectSub(_select_sub) => todo!(),
-                        Expr::ParenExpr(paren_expr) => {
-                            // paren_exprをaligned_exprでラップする
-                            let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), false);
-
-                            // Bodyを返すため、separated_linesに格納
-                            let mut separated_lines =
-                                SeparatedLines::new(self.state.depth, "", false);
-                            separated_lines.add_expr(aligned);
-
-                            Body::SepLines(separated_lines)
-                        }
-                        Expr::Asterisk(_asterisk) => todo!(),
-                        _ => unimplemented!(),
-                    };
+                    let body = Body::with_expr(expr, self.state.depth);
 
                     clause.set_body(body);
                     statement.add_clause(clause);
@@ -637,25 +611,28 @@ impl Formatter {
         cursor.goto_first_child();
 
         if cursor.node().kind() == "NOT" {
-            // TODO: NOT
-            todo!();
+            let mut loc = Location::new(cursor.node().range());
+            cursor.goto_next_sibling();
+            // cursor -> _expr
+
+            // ここにバインドパラメータ以外のコメントは来ないことを想定している。
+            let expr = self.format_expr(cursor, src);
+
+            // (NOT expr)のソースコード上の位置を計算
+            loc.append(expr.loc());
+
+            let not_expr = UnaryExpr::new("NOT", expr, loc);
+
+            cursor.goto_parent();
+            ensure_kind(cursor, "boolean_expression");
+
+            // Unaryとして返す
+            return Expr::Unary(Box::new(not_expr));
         } else {
             // and or
             let left = self.format_expr(cursor, src);
 
-            // CST上ではbool式は(left op right)のような構造になっている
-            // BooleanExprでは(expr1 op expr2 ... exprn)のようにフラットに保持するため、左辺がbool式ならmergeメソッドでマージする
-            // また、要素をAlignedExprで保持するため、AlignedExprでない場合ラップする
-            // TODO: BooleanExprかExprのメソッド、または関数として定義したほうがよい可能性がある
-            match left {
-                Expr::Aligned(aligned) => boolean_expr.add_expr(*aligned),
-                Expr::Boolean(boolean) => boolean_expr.merge(*boolean),
-                Expr::ParenExpr(paren_expr) => {
-                    let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), false);
-                    boolean_expr.add_expr(aligned);
-                }
-                _ => todo!(),
-            }
+            boolean_expr.add_expr(left);
 
             cursor.goto_next_sibling();
             // cursor -> COMMENT | op
@@ -674,15 +651,7 @@ impl Formatter {
             let right = self.format_expr(cursor, src);
 
             // 左辺と同様の処理を行う
-            match right {
-                Expr::Aligned(aligned) => boolean_expr.add_expr(*aligned),
-                Expr::Boolean(boolean) => boolean_expr.merge(*boolean),
-                Expr::ParenExpr(paren_expr) => {
-                    let aligned = AlignedExpr::new(Expr::ParenExpr(paren_expr), false);
-                    boolean_expr.add_expr(aligned);
-                }
-                _ => todo!(),
-            }
+            boolean_expr.add_expr(right);
         }
         // cursorをboolean_expressionに戻す
         cursor.goto_parent();
@@ -855,7 +824,7 @@ impl Formatter {
                     // cursor -> _expression
 
                     let when_expr = self.format_expr(cursor, src);
-                    when_clause.set_body(Body::new_body_with_expr(when_expr, self.state.depth));
+                    when_clause.set_body(Body::with_expr(when_expr, self.state.depth));
 
                     cursor.goto_next_sibling();
                     // cursor -> comment || "THEN"
@@ -886,7 +855,7 @@ impl Formatter {
                     // cursor -> _expression
 
                     let then_expr = self.format_expr(cursor, src);
-                    then_clause.set_body(Body::new_body_with_expr(then_expr, self.state.depth));
+                    then_clause.set_body(Body::with_expr(then_expr, self.state.depth));
 
                     cond_expr.add_when_then_clause(when_clause, then_clause);
                 }
@@ -909,7 +878,7 @@ impl Formatter {
                     // cursor -> _expression
 
                     let else_expr = self.format_expr(cursor, src);
-                    else_clause.set_body(Body::new_body_with_expr(else_expr, self.state.depth));
+                    else_clause.set_body(Body::with_expr(else_expr, self.state.depth));
 
                     cond_expr.set_else_clause(else_clause);
                 }
