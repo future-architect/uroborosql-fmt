@@ -419,7 +419,7 @@ impl Body {
     }
 
     // 一つのExprからなるBodyを生成し返す
-    pub(crate) fn new_body_with_expr(expr: Expr, depth: usize) -> Body {
+    pub(crate) fn with_expr(expr: Expr, depth: usize) -> Body {
         if expr.is_body() {
             // Bodyである場合はそのまま返せばよい
             if let Expr::Boolean(boolean) = expr {
@@ -431,14 +431,7 @@ impl Body {
         } else {
             // Bodyでない場合、SeparatedLinesにして返す
             let mut sep_lines = SeparatedLines::new(depth, "", false);
-            match expr {
-                Expr::Aligned(aligned) => sep_lines.add_expr(*aligned),
-                _ => {
-                    // Bodyでなく、AlignedExprでもない場合、AlignedExprでラッピングしてSeparatedLinesに
-                    let aligned = AlignedExpr::new(expr, false);
-                    sep_lines.add_expr(aligned);
-                }
-            }
+            sep_lines.add_expr(expr.to_aligned());
             Body::SepLines(sep_lines)
         }
     }
@@ -526,13 +519,22 @@ impl Clause {
 // 式に対応した列挙体
 #[derive(Debug, Clone)]
 pub(crate) enum Expr {
-    Aligned(Box<AlignedExpr>), // AS句、二項比較演算
-    Primary(Box<PrimaryExpr>), // 識別子、文字列、数値など
-    Boolean(Box<BooleanExpr>), // boolean式
+    /// AS句、二項比較演算、BETWEEN述語など、縦ぞろえを行う式
+    Aligned(Box<AlignedExpr>),
+    /// 識別子、文字列、数値など
+    Primary(Box<PrimaryExpr>),
+    /// bool式
+    Boolean(Box<BooleanExpr>),
+    /// SELECTサブクエリ
     SelectSub(Box<SelectSubExpr>),
+    /// かっこでくくられた式
     ParenExpr(Box<ParenExpr>),
+    /// アスタリスク*
     Asterisk(Box<AsteriskExpr>),
+    /// CASE式
     Cond(Box<CondExpr>),
+    /// 単項演算式(NOT, +, -, ...)
+    Unary(Box<UnaryExpr>),
 }
 
 impl Expr {
@@ -545,6 +547,7 @@ impl Expr {
             Expr::ParenExpr(paren_expr) => paren_expr.loc(),
             Expr::Asterisk(asterisk) => asterisk.loc(),
             Expr::Cond(cond) => cond.loc(),
+            Expr::Unary(unary) => unary.loc(),
             // _ => unimplemented!(),
         }
     }
@@ -572,6 +575,7 @@ impl Expr {
             Expr::ParenExpr(paren_expr) => paren_expr.render(),
             Expr::Asterisk(asterisk) => asterisk.render(),
             Expr::Cond(cond) => cond.render(),
+            Expr::Unary(unary) => unary.render(),
             // _ => unimplemented!(),
         }
     }
@@ -585,6 +589,7 @@ impl Expr {
             Expr::ParenExpr(_) => PAR_TAB_NUM, // 必ずかっこ
             Expr::Asterisk(asterisk) => asterisk.len(),
             Expr::Cond(_) => PAR_TAB_NUM, // "END"
+            Expr::Unary(unary) => unary.len(),
             _ => unimplemented!(),
         }
     }
@@ -623,6 +628,7 @@ impl Expr {
             Expr::Boolean(_) | Expr::SelectSub(_) | Expr::ParenExpr(_) | Expr::Cond(_) => true,
             Expr::Primary(_) => false,
             Expr::Aligned(aligned) => aligned.is_multi_line(),
+            Expr::Unary(unary) => unary.is_multi_line(),
             _ => todo!("is_multi_line: {:?}", self),
         }
     }
@@ -637,8 +643,20 @@ impl Expr {
             | Expr::SelectSub(_)
             | Expr::ParenExpr(_)
             | Expr::Asterisk(_)
-            | Expr::Cond(_) => false,
+            | Expr::Cond(_)
+            | Expr::Unary(_) => false,
             // _ => unimplemented!(),
+        }
+    }
+
+    /// 自身をAlignedExprでラッピングする
+    fn to_aligned(&self) -> AlignedExpr {
+        // TODO: cloneする必要があるか検討
+        if let Expr::Aligned(aligned) = self {
+            *aligned.clone()
+        } else {
+            let aligned = AlignedExpr::new(self.clone(), false);
+            aligned
         }
     }
 }
@@ -1013,7 +1031,7 @@ impl PrimaryExpr {
     }
 
     pub(crate) fn render(&self) -> Result<String, Error> {
-        let mut elements_str = self.elements.iter().map(|x| x.to_uppercase()).join("\t");
+        let elements_str = self.elements.iter().map(|x| x.to_uppercase()).join("\t");
 
         match self.head_comment.as_ref() {
             Some(comment) => Ok(format!("{}{}", comment, elements_str)),
@@ -1022,6 +1040,11 @@ impl PrimaryExpr {
     }
 }
 
+// TOOD: BooleanExprをBodyでなくする
+// 現状、Exprの中でBooleanExprだけがBodyになりうる
+// Bodyは最初の行のインデントと最後の行の改行を自分で行う
+// そのため、式をフォーマットするときに、Body(BooleanExpr)であるかをいちいち確認しなければならない。
+// BooleanExprをBodyでなくして、インデントと改行は上位(SeparatedLines)で行うように変更するほうがよいと考える。
 #[derive(Debug, Clone)]
 pub(crate) struct BooleanExpr {
     depth: usize,              // インデントの深さ
@@ -1075,7 +1098,8 @@ impl BooleanExpr {
         left.set_head_comment(comment);
     }
 
-    pub(crate) fn add_expr_with_sep(&mut self, aligned: AlignedExpr, sep: String) {
+    /// AlignedExprをセパレータ(AND/OR)とともに追加する
+    fn add_aligned_expr_with_sep(&mut self, aligned: AlignedExpr, sep: String) {
         if aligned.has_rhs() {
             self.has_op = true;
         }
@@ -1089,14 +1113,30 @@ impl BooleanExpr {
         self.contents.push((sep, aligned, vec![]));
     }
 
+    /// 式をセパレータ(AND/OR)とともに追加する
+    pub(crate) fn add_expr_with_sep(&mut self, expr: Expr, sep: String) {
+        // CST上ではbool式は(left op right)のような構造になっている
+        // BooleanExprでは(expr1 op expr2 ... exprn)のようにフラットに保持するため、左辺がbool式ならmergeメソッドでマージする
+        // また、要素をAlignedExprで保持するため、AlignedExprでない場合ラップする
+        if let Expr::Boolean(boolean) = expr {
+            self.merge(*boolean);
+            return;
+        }
+
+        let aligned = expr.to_aligned();
+        self.add_aligned_expr_with_sep(aligned, sep);
+    }
+
     fn is_empty(&self) -> bool {
         self.contents.is_empty()
     }
 
-    pub(crate) fn add_expr(&mut self, expr: AlignedExpr) {
+    /// 式を追加する
+    pub(crate) fn add_expr(&mut self, expr: Expr) {
         self.add_expr_with_sep(expr, self.default_separator.clone());
     }
 
+    /// BooleanExprとBooleanExprをマージする
     pub(crate) fn merge(&mut self, other: BooleanExpr) {
         // そろえる演算子があるか
         self.has_op = self.has_op || other.has_op;
@@ -1112,10 +1152,10 @@ impl BooleanExpr {
         let mut is_first_content = true;
         for (sep, aligned, _) in other.contents {
             if is_first_content {
-                self.add_expr_with_sep(aligned, self.default_separator.clone());
+                self.add_aligned_expr_with_sep(aligned, self.default_separator.clone());
                 is_first_content = false;
             } else {
-                self.add_expr_with_sep(aligned, sep);
+                self.add_aligned_expr_with_sep(aligned, sep);
             }
         }
     }
@@ -1246,7 +1286,18 @@ impl ParenExpr {
 
         let formatted = self.expr.render()?;
 
+        // bodyでない式は、最初の行のインデントを自分で行わない。
+        // そのため、かっこのインデントの深さ + 1個分インデントを挿入する。
+        if !self.expr.is_body() {
+            result.extend(repeat_n('\t', self.depth + 1));
+        }
+
         result.push_str(&formatted);
+
+        // インデント同様に、最後の改行も行う
+        if !self.expr.is_body() {
+            result.push('\n');
+        }
 
         for comment in &self.end_comments {
             result.push_str(&comment.render(self.depth)?);
@@ -1358,6 +1409,55 @@ impl CondExpr {
 
         result.extend(repeat_n('\t', self.depth + 1));
         result.push_str("END");
+
+        Ok(result)
+    }
+}
+
+/// 単項演算式
+/// e.g.,) NOT A, -B, ...
+#[derive(Debug, Clone)]
+pub(crate) struct UnaryExpr {
+    operator: String,
+    operand: Expr,
+    loc: Location,
+    len: usize,
+}
+
+impl UnaryExpr {
+    pub(crate) fn new(operator: &str, operand: Expr, loc: Location) -> UnaryExpr {
+        let operator_len = operator.len() / TAB_SIZE + 1;
+        let operand_len = operand.len();
+        UnaryExpr {
+            operator: operator.to_string(),
+            operand,
+            loc,
+            len: operator_len + operand_len,
+        }
+    }
+
+    /// ソースコード上の位置を返す
+    fn loc(&self) -> Location {
+        self.loc.clone()
+    }
+
+    /// タブ文字換算の長さを返す
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    /// 複数行であるかどうかを返す
+    fn is_multi_line(&self) -> bool {
+        self.operand.is_multi_line()
+    }
+
+    /// フォーマットした文字列を返す
+    fn render(&self) -> Result<String, Error> {
+        let mut result = String::new();
+
+        result.push_str(&self.operator);
+        result.push('\t');
+        result.push_str(&self.operand.render()?);
 
         Ok(result)
     }
