@@ -34,11 +34,10 @@ pub fn format_sql(src: &str) -> String {
         eprintln!("{:#?}", stmts);
     }
 
-    let mut result = String::new();
-
-    for stmt in &stmts {
-        result.push_str(&stmt.render().expect("render: error"));
-    }
+    let result = stmts
+        .iter()
+        .map(|stmt| stmt.render().expect("render: error"))
+        .collect();
 
     result
 }
