@@ -1,0 +1,6 @@
+INSERT INTO TABLE1	-- table1
+(
+COLUMN1	-- col1
+, COLUMN2	-- col2
+) 
+VALUES (VALUE1,VALUE2)

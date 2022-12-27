@@ -59,32 +59,48 @@ impl Formatter {
         // ソースファイル先頭のコメントを保存するバッファ
         let mut comment_buf: Vec<Comment> = vec![];
 
+        // 複数のStatement間のコメントの位置を決定するために使用する
+        // 文を読んだが、対応するセミコロンを読んでいない場合はtrue、そうでない場合false
+        let mut above_semi = true;
+
         loop {
-            match cursor.node().kind() {
-                "select_statement" => {
-                    let mut stmt = self.format_select_stmt(cursor, src);
+            let kind = cursor.node().kind();
 
-                    // コメントが以前にあれば先頭に追加
-                    comment_buf
-                        .iter()
-                        .cloned()
-                        .for_each(|c| stmt.add_comment(c));
-                    comment_buf.clear();
+            if kind.ends_with("_statement") {
+                let mut stmt = match kind {
+                    "select_statement" => self.format_select_stmt(cursor, src),
+                    "delete_statement" => self.format_delete_stmt(cursor, src),
+                    "update_statement" => self.format_update_stmt(cursor, src),
+                    "insert_statement" => self.format_insert_stmt(cursor, src),
+                    _ => todo!(),
+                };
 
-                    source.push(stmt);
+                // コメントが以前にあれば先頭に追加
+                comment_buf
+                    .iter()
+                    .cloned()
+                    .for_each(|c| stmt.add_comment(c));
+                comment_buf.clear();
+
+                source.push(stmt);
+                above_semi = true;
+            } else if kind == COMMENT {
+                let comment = Comment::new(cursor.node(), src);
+
+                if !source.is_empty() && above_semi {
+                    let last_stmt = source.last_mut().unwrap();
+                    // すでにstatementがある場合、末尾に追加
+                    last_stmt.add_comment_to_child(comment);
+                } else {
+                    // まだstatementがない場合、バッファに詰めておく
+                    comment_buf.push(comment);
                 }
-                COMMENT => {
-                    let comment = Comment::new(cursor.node(), src);
-
-                    if let Some(last_stmt) = source.last_mut() {
-                        // すでにstatementがある場合、末尾に追加
-                        last_stmt.add_comment_to_child(comment);
-                    } else {
-                        // まだstatementがない場合、バッファに詰めておく
-                        comment_buf.push(comment);
-                    }
+            } else if kind == ";" {
+                above_semi = false;
+                if let Some(last) = source.last_mut() {
+                    last.set_semi(true);
                 }
-                _ => unimplemented!(),
+                // tree-sitter-sqlでは、;の上に文がない場合syntax errorになる
             }
 
             if !cursor.goto_next_sibling() {
@@ -101,12 +117,12 @@ impl Formatter {
     /// SELECT文
     /// 呼び出し後、cursorはselect_statementを指す
     fn format_select_stmt(&mut self, cursor: &mut TreeCursor, src: &str) -> Statement {
-        /*
-            _select_statement ->
-                select_clause
-                from_clause?
-                where_clause?
-        */
+        // SELECT文の定義
+        // select_statement =
+        //      select_clause
+        //      [from_clause]
+        //      [where_clause]
+        //      [_combining_query]
 
         let mut statement = Statement::new(self.state.depth);
 
@@ -124,113 +140,29 @@ impl Formatter {
             // select_statementの子供がいなくなったら終了
             match cursor.node().kind() {
                 "from_clause" => {
-                    // from_clauseは必ずFROMを子供に持つ
-                    cursor.goto_first_child();
-
-                    // cursor -> FROM
-                    ensure_kind(cursor, "FROM");
-                    let mut clause = Clause::new(
-                        "FROM".to_string(),
-                        Location::new(cursor.node().range()),
-                        self.state.depth,
-                    );
-                    let mut separated_lines = SeparatedLines::new(self.state.depth, ",", true);
-
-                    cursor.goto_next_sibling();
-                    // cursor -> comments | _aliasable_expression
-
-                    while cursor.node().kind() == COMMENT {
-                        clause.add_comment_to_child(Comment::new(cursor.node(), src));
-                        cursor.goto_next_sibling();
-                    }
-
-                    // cursor -> aliasable_expression
-                    let alias = self.format_aliasable_expr(cursor, src);
-                    separated_lines.add_expr(alias);
-
-                    // ("," _aliasable_expression)*
-                    while cursor.goto_next_sibling() {
-                        // cursor -> , または comment または _aliasable_expression
-                        match cursor.node().kind() {
-                            "," => continue,
-                            COMMENT => {
-                                separated_lines
-                                    .add_comment_to_child(Comment::new(cursor.node(), src));
-                            }
-                            _ => {
-                                // _aliasable_expression
-                                let alias = self.format_aliasable_expr(cursor, src);
-                                separated_lines.add_expr(alias);
-                            }
-                        }
-                    }
-
-                    clause.set_body(Body::SepLines(separated_lines));
+                    let clause = self.format_from_clause(cursor, src);
                     statement.add_clause(clause);
-
-                    // cursorをfrom_clauseに戻す
-                    cursor.goto_parent();
-                    ensure_kind(cursor, "from_clause");
                 }
                 // where_clause: $ => seq(kw("WHERE"), $._expression),
                 "where_clause" => {
-                    // where_clauseは必ずWHEREを子供に持つ
-                    cursor.goto_first_child();
-
-                    // cursor -> WHERE
-                    ensure_kind(cursor, "WHERE");
-
-                    let where_node = cursor.node();
-                    let mut clause = Clause::new(
-                        "WHERE".to_string(),
-                        Location::new(where_node.range()),
-                        self.state.depth,
-                    );
-
-                    cursor.goto_next_sibling();
-                    // cursor -> COMMENT | _expression
-
-                    // TODO: コメントノードを消費する処理を関数かメソッドにまとめる
-                    while cursor.node().kind() == COMMENT {
-                        let comment = Comment::new(cursor.node(), src);
-                        clause.add_comment_to_child(comment);
-                        cursor.goto_next_sibling();
-                    }
-
-                    // cursor -> _expression
-                    let expr = self.format_expr(cursor, src);
-
-                    // 結果として得られた式をBodyに変換する
-                    let body = Body::with_expr(expr, self.state.depth);
-
-                    clause.set_body(body);
+                    let clause = self.format_where_clause(cursor, src);
                     statement.add_clause(clause);
-
-                    // cursorをwhere_clauseに戻す
-                    cursor.goto_parent();
-                    ensure_kind(cursor, "where_clause");
                 }
                 "UNION" | "INTERSECT" | "EXCEPT" => {
-                    // 演算の文字列(e.g., "INTERSECT", "UNION ALL", ...)
-                    let mut combining_op = String::from(cursor.node().kind());
-
-                    // 演算のソースコード上での位置
-                    let mut loc = Location::new(cursor.node().range());
+                    // 演算(e.g., "INTERSECT", "UNION ALL", ...)
+                    let mut combining_clause = Clause::new(cursor.node(), src, self.state.depth);
 
                     cursor.goto_next_sibling();
                     // cursor -> (ALL | DISTINCT) | select_statement
 
                     if matches!(cursor.node().kind(), "ALL" | "DISTINCT") {
                         // ALL または DISTINCT を追加する
-                        combining_op.push(' ');
-                        combining_op.push_str(cursor.node().kind());
-                        loc.append(Location::new(cursor.node().range()));
+                        combining_clause.extend_kw(cursor.node(), src);
                         cursor.goto_next_sibling();
                     }
                     // cursor -> comments | select_statement
 
                     // 演算子のみからなる句を追加
-                    let combining_clause = Clause::new(combining_op, loc, self.state.depth);
                     statement.add_clause(combining_clause);
 
                     while cursor.node().kind() == COMMENT {
@@ -264,42 +196,28 @@ impl Formatter {
     /// SELECT句
     /// 呼び出し後、cursorはselect_clauseを指している
     fn format_select_clause(&mut self, cursor: &mut TreeCursor, src: &str) -> Clause {
-        /*
-            select_clause ->
-                "SELECT"
-                select_clause_body
-        */
+        // SELECT句の定義
+        //    select_clause =
+        //        "SELECT"
+        //        select_clause_body
 
         // select_clauseは必ずSELECTを子供に持っているはずである
         cursor.goto_first_child();
 
         // cursor -> SELECT
         ensure_kind(cursor, "SELECT");
-        let mut clause = Clause::new(
-            "SELECT".to_string(),
-            Location::new(cursor.node().range()),
-            self.state.depth,
-        );
+        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
 
         cursor.goto_next_sibling();
         // cursor -> comments | select_clause_body
 
-        while cursor.node().kind() == COMMENT {
-            let comment = Comment::new(cursor.node(), src);
+        self.consume_sql_id(cursor, src, &mut clause);
+        self.consume_comment_in_clause(cursor, src, &mut clause);
 
-            // _SQL_ID_かどうかをチェックする
-            if comment.is_sql_id_comment() {
-                clause.set_sql_id(comment);
-            } else {
-                clause.add_comment_to_child(comment)
-            }
-
-            cursor.goto_next_sibling();
-        }
         // cursor -> select_caluse_body
 
         let body = self.format_select_clause_body(cursor, src);
-        clause.set_body(Body::SepLines(body));
+        clause.set_body(body);
 
         // cursorをselect_clauseに戻す
         cursor.goto_parent();
@@ -310,56 +228,453 @@ impl Formatter {
 
     /// SELECT句の本体をSeparatedLinesで返す
     /// 呼び出し後、cursorはselect_clause_bodyを指している
-    fn format_select_clause_body(&mut self, cursor: &mut TreeCursor, src: &str) -> SeparatedLines {
+    fn format_select_clause_body(&mut self, cursor: &mut TreeCursor, src: &str) -> Body {
         // select_clause_body -> _aliasable_expression ("," _aliasable_expression)*
 
         // select_clause_bodyは必ず_aliasable_expressionを子供に持つ
         cursor.goto_first_child();
 
         // cursor -> _aliasable_expression
-
-        let mut separated_lines = SeparatedLines::new(self.state.depth, ",", false);
-
-        let aligned = self.format_aliasable_expr(cursor, src);
-        separated_lines.add_expr(aligned);
-
-        // (',' _aliasable_expression)*
-        while cursor.goto_next_sibling() {
-            // cursor -> , または COMMENT または _aliasable_expression
-            let child_node = cursor.node();
-            match child_node.kind() {
-                "," => continue,
-                COMMENT => {
-                    separated_lines.add_comment_to_child(Comment::new(child_node, src));
-                }
-                _ => {
-                    // _aliasable_expression
-                    let aligned = self.format_aliasable_expr(cursor, src);
-                    separated_lines.add_expr(aligned);
-                }
-            }
-        }
+        // commaSep1(_aliasable_expression)
+        let body = self.format_comma_sep_alias(cursor, src, false);
 
         // cursorをselect_clause_bodyに
         cursor.goto_parent();
         ensure_kind(cursor, "select_clause_body");
 
-        separated_lines
+        body
+    }
+
+    /// FROM句をClause構造体で返す
+    fn format_from_clause(&mut self, cursor: &mut TreeCursor, src: &str) -> Clause {
+        // from_clauseは必ずFROMを子供に持つ
+        cursor.goto_first_child();
+
+        // cursor -> FROM
+        ensure_kind(cursor, "FROM");
+        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
+
+        cursor.goto_next_sibling();
+        // cursor -> comments | _aliasable_expression
+
+        self.consume_comment_in_clause(cursor, src, &mut clause);
+
+        // cursor -> aliasable_expression
+        // commaSep1(_aliasable_expression)
+        let body = self.format_comma_sep_alias(cursor, src, true);
+
+        clause.set_body(body);
+
+        // cursorをfrom_clauseに戻す
+        cursor.goto_parent();
+        ensure_kind(cursor, "from_clause");
+
+        clause
+    }
+
+    fn format_where_clause(&mut self, cursor: &mut TreeCursor, src: &str) -> Clause {
+        // where_clauseは必ずWHEREを子供に持つ
+        cursor.goto_first_child();
+
+        // cursor -> WHERE
+        ensure_kind(cursor, "WHERE");
+        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
+
+        cursor.goto_next_sibling();
+        // cursor -> COMMENT | _expression
+
+        self.consume_comment_in_clause(cursor, src, &mut clause);
+
+        // cursor -> _expression
+        let expr = self.format_expr(cursor, src);
+
+        // 結果として得られた式をBodyに変換する
+        let body = Body::with_expr(expr, self.state.depth);
+
+        clause.set_body(body);
+
+        // cursorをwhere_clauseに戻す
+        cursor.goto_parent();
+        ensure_kind(cursor, "where_clause");
+
+        clause
+    }
+
+    /// DELETE文をStatement構造体で返す
+    fn format_delete_stmt(&mut self, cursor: &mut TreeCursor, src: &str) -> Statement {
+        let mut statement = Statement::new(self.state.depth);
+
+        cursor.goto_first_child();
+        // DELETE
+        ensure_kind(cursor, "DELETE");
+        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
+        cursor.goto_next_sibling();
+
+        self.consume_sql_id(cursor, src, &mut clause);
+        self.consume_comment_in_clause(cursor, src, &mut clause);
+
+        statement.add_clause(clause);
+
+        // cursor -> from_clause
+        let from_clause = self.format_from_clause(cursor, src);
+        statement.add_clause(from_clause);
+
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                "where_clause" => {
+                    let clause = self.format_where_clause(cursor, src);
+                    statement.add_clause(clause);
+                }
+                "returning_clause" => {
+                    let clause = self.format_returning_clause(cursor, src);
+                    statement.add_clause(clause);
+                }
+                COMMENT => {
+                    let comment = Comment::new(cursor.node(), src);
+                    statement.add_comment_to_child(comment)
+                }
+                _ => unimplemented!(),
+            }
+        }
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "delete_statement");
+
+        statement
+    }
+
+    /// UPDATE文をStatement構造体で返す
+    fn format_update_stmt(&mut self, cursor: &mut TreeCursor, src: &str) -> Statement {
+        let mut statement = Statement::new(self.state.depth);
+        cursor.goto_first_child();
+
+        // キーワードの確認
+        ensure_kind(cursor, "UPDATE");
+        let mut update_clause = Clause::new(cursor.node(), src, self.state.depth);
+        cursor.goto_next_sibling();
+
+        self.consume_sql_id(cursor, src, &mut update_clause);
+        self.consume_comment_in_clause(cursor, src, &mut update_clause);
+
+        // 規則上でここに現れるノードは_aliasable_identifierだが、'_'から始まっているためノードに現れない。
+        // _expression、_aliasable_expressionもノードに現れないため、
+        // _aliasable_identifierは実質的に_aliasable_expressionと同じCSTになっている
+        let table_name = self.format_aliasable_expr(cursor, src);
+
+        // update句を追加する
+        // update句のエイリアスはASを省略するため、第三引数のis_omit_opをtrueにしてSeparatedLinesを生成する
+        let mut sep_lines = SeparatedLines::new(self.state.depth, ",", true);
+        sep_lines.add_expr(table_name);
+        update_clause.set_body(Body::SepLines(sep_lines));
+        statement.add_clause(update_clause);
+
+        cursor.goto_next_sibling();
+
+        while cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            statement.add_comment_to_child(comment);
+            cursor.goto_next_sibling();
+        }
+
+        // set句を処理する
+        ensure_kind(cursor, "set_clause");
+        let set_clause = self.format_set_clause(cursor, src);
+        statement.add_clause(set_clause);
+
+        // where句、returning句を持つ可能性がある
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                "where_clause" => {
+                    let clause = self.format_where_clause(cursor, src);
+                    statement.add_clause(clause);
+                }
+                "returning_clause" => {
+                    let clause = self.format_returning_clause(cursor, src);
+                    statement.add_clause(clause);
+                }
+                COMMENT => {
+                    let comment = Comment::new(cursor.node(), src);
+                    statement.add_comment_to_child(comment)
+                }
+                _ => unimplemented!(),
+            }
+        }
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "update_statement");
+
+        statement
+    }
+
+    /// SET句をClause構造体で返す
+    /// UPDATE文、INSERT文で使用する
+    fn format_set_clause(&mut self, cursor: &mut TreeCursor, src: &str) -> Clause {
+        cursor.goto_first_child();
+
+        ensure_kind(cursor, "SET");
+        let mut set_clause = Clause::new(cursor.node(), src, self.state.depth);
+        cursor.goto_next_sibling();
+
+        ensure_kind(cursor, "set_clause_body");
+        cursor.goto_first_child();
+
+        let mut sep_lines = SeparatedLines::new(self.state.depth, ",", false);
+
+        let mut format_set_clause_item = |cursor: &mut TreeCursor| {
+            if cursor.node().kind() == "assigment_expression" {
+                // tree-sitter-sqlのタイポでnが抜けている点に注意
+                let aligned = self.format_assign_expr(cursor, src);
+                aligned
+            } else if cursor.node().kind() == "(" {
+                let lhs = Expr::ColumnList(Box::new(self.format_column_list(cursor, src)));
+                cursor.goto_next_sibling();
+                ensure_kind(cursor, "=");
+
+                cursor.goto_next_sibling();
+
+                let rhs = if cursor.node().kind() == "select_subexpression" {
+                    self.nest();
+                    let expr = Expr::SelectSub(Box::new(self.format_select_subexpr(cursor, src)));
+                    self.unnest();
+                    expr
+                } else {
+                    Expr::ColumnList(Box::new(self.format_column_list(cursor, src)))
+                };
+
+                let mut aligned = AlignedExpr::new(lhs, false);
+                aligned.add_rhs("=".to_string(), rhs);
+
+                aligned
+            } else {
+                panic!(
+                    r#"expected node is assigment_expression, "(" or select_subexpression, but actual {}"#,
+                    cursor.node().kind()
+                );
+            }
+        };
+
+        // commaSep1(set_clause_item)
+        let aligned = format_set_clause_item(cursor);
+        sep_lines.add_expr(aligned);
+
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                COMMENT => {
+                    let comment = Comment::new(cursor.node(), src);
+                    sep_lines.add_comment_to_child(comment);
+                }
+                "," => continue,
+                _ => {
+                    let aligned = format_set_clause_item(cursor);
+                    sep_lines.add_expr(aligned);
+                }
+            }
+        }
+        cursor.goto_parent();
+        ensure_kind(cursor, "set_clause_body");
+
+        // set_clauseにBodyをセット
+        set_clause.set_body(Body::SepLines(sep_lines));
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "set_clause");
+
+        set_clause
+    }
+
+    fn format_assign_expr(&mut self, cursor: &mut TreeCursor, src: &str) -> AlignedExpr {
+        cursor.goto_first_child();
+        let identifier = self.format_expr(cursor, src);
+        cursor.goto_next_sibling();
+        ensure_kind(cursor, "=");
+        cursor.goto_next_sibling();
+        let expr = self.format_expr(cursor, src);
+
+        let mut aligned = AlignedExpr::new(identifier, false);
+        aligned.add_rhs("=".to_string(), expr);
+        cursor.goto_parent();
+        ensure_kind(cursor, "assigment_expression");
+
+        aligned
+    }
+
+    /// INSERT文をStatementで返す
+    fn format_insert_stmt(&mut self, cursor: &mut TreeCursor, src: &str) -> Statement {
+        let mut statement = Statement::new(self.state.depth);
+        let loc = Location::new(cursor.node().range());
+
+        // コーディング規約では、INSERTとINTOの間に改行がある
+        // そのため、INSERTがキーワードの句をキーワードのみ(SQL_IDはこちらに含む)のClauseとして定義し、
+        // 本体をINTOがキーワードであるClauseに追加することで実現する
+
+        cursor.goto_first_child();
+        ensure_kind(cursor, "INSERT");
+        let mut insert = Clause::new(cursor.node(), src, self.state.depth);
+        cursor.goto_next_sibling();
+
+        // SQL_IDがあるかをチェック
+        self.consume_sql_id(cursor, src, &mut insert);
+
+        statement.add_clause(insert);
+
+        ensure_kind(cursor, "INTO");
+        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
+
+        cursor.goto_next_sibling();
+        // cursor -> table_name
+
+        // table_nameは_aliasable_identifierであるが、CST上では_aliasable_expressionと等しいため、
+        // format_aliasable_exprを使用する
+        let table_name = self.format_aliasable_expr(cursor, src);
+        let mut insert_body = InsertBody::new(self.state.depth, loc, table_name);
+
+        cursor.goto_next_sibling();
+        // table_name直後のコメントを処理する
+        if cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            insert_body.add_comment_to_child(comment);
+            cursor.goto_next_sibling();
+        }
+
+        // column_name
+        if cursor.node().kind() == "(" {
+            let mut sep_lines = SeparatedLines::new(self.state.depth, ",", false);
+            while cursor.goto_next_sibling() {
+                match cursor.node().kind() {
+                    "identifier" | "dotted_name" => {
+                        sep_lines.add_expr(self.format_aliasable_expr(cursor, src));
+                    }
+                    ")" => {
+                        insert_body.set_column_name(sep_lines);
+                        break;
+                    }
+                    COMMENT => {
+                        let comment = Comment::new(cursor.node(), src);
+                        sep_lines.add_comment_to_child(comment);
+                    }
+                    _ => continue,
+                }
+            }
+        }
+
+        // values_clause_itemを処理するクロージャ
+        // ColumnList構造体で結果を返す
+        let mut format_values_clause_item = |cursor: &mut TreeCursor| -> ColumnList {
+            cursor.goto_first_child();
+            let column_list = self.format_column_list(cursor, src);
+            cursor.goto_parent();
+            ensure_kind(cursor, "values_clause_item");
+
+            column_list
+        };
+
+        cursor.goto_next_sibling();
+
+        // values句
+        if cursor.node().kind() == "values_clause" {
+            cursor.goto_first_child();
+            ensure_kind(cursor, "VALUES");
+
+            let mut items = vec![];
+            // commaSep1(values_clause_item)
+            while cursor.goto_next_sibling() {
+                match cursor.node().kind() {
+                    "values_clause_item" => {
+                        items.push(format_values_clause_item(cursor));
+                    }
+                    "," => continue,
+                    _ => panic!("unexpected token {}", cursor.node().kind()),
+                }
+            }
+            insert_body.set_values_clause("VALUES", items);
+
+            cursor.goto_parent();
+            ensure_kind(cursor, "values_clause");
+
+            cursor.goto_next_sibling();
+        }
+
+        // InsertBodyに含めるのは、テーブル名、カラム名、VALUES句である
+        // そのため、ここでstatementに追加する
+        clause.set_body(Body::Insert(insert_body));
+        statement.add_clause(clause);
+
+        // select文
+        if cursor.node().kind() == "select_statement" {
+            let stmt = self.format_select_stmt(cursor, src);
+            for clause in stmt.get_clauses() {
+                statement.add_clause(clause);
+            }
+            cursor.goto_next_sibling();
+        }
+
+        // returning句
+        if cursor.node().kind() == "returning_clause" {
+            let returning = self.format_returning_clause(cursor, src);
+            statement.add_clause(returning);
+            cursor.goto_next_sibling();
+        }
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "insert_statement");
+
+        statement
+    }
+
+    /// RETURNING句をClauseで返す
+    fn format_returning_clause(&mut self, cursor: &mut TreeCursor, src: &str) -> Clause {
+        cursor.goto_first_child();
+
+        ensure_kind(cursor, "RETURNING");
+        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
+        cursor.goto_next_sibling();
+
+        let body = self.format_comma_sep_alias(cursor, src, false);
+
+        clause.set_body(body);
+
+        // cursorをfrom_clauseに戻す
+        cursor.goto_parent();
+        ensure_kind(cursor, "returning_clause");
+
+        clause
+    }
+
+    /// カラムリストをColumnListで返す
+    /// カラムリストはVALUES句、SET句で現れ、"(" 式 ["," 式 ...] ")"という構造になっている
+    fn format_column_list(&mut self, cursor: &mut TreeCursor, src: &str) -> ColumnList {
+        ensure_kind(cursor, "(");
+        let mut loc = Location::new(cursor.node().range());
+
+        let mut exprs = vec![];
+        // commaSep1(_expression)
+        while cursor.goto_next_sibling() {
+            loc.append(Location::new(cursor.node().range()));
+            match cursor.node().kind() {
+                "," => continue,
+                ")" => break,
+                COMMENT => unimplemented!(),
+                _ => {
+                    exprs.push(self.format_expr(cursor, src));
+                }
+            }
+        }
+
+        ColumnList::new(exprs, loc)
     }
 
     /// エイリアス可能な式
     /// 呼び出し後、cursorはaliasまたは式のノードを指している
     fn format_aliasable_expr(&mut self, cursor: &mut TreeCursor, src: &str) -> AlignedExpr {
-        /*
-            _aliasable_expression ->
-                alias | _expression
+        // エイリアス可能な式の定義
+        //    _aliasable_expression =
+        //        alias | _expression
 
-            alias ->
-                _expression
-                "AS"?
-                identifier
-                << 未対応!! "(" identifier ("," identifier)* ")" >>
-        */
+        //    alias =
+        //        _expression
+        //        ["AS"]
+        //        identifier
+
         match cursor.node().kind() {
             "alias" => {
                 // cursor -> alias
@@ -597,15 +912,6 @@ impl Formatter {
     /// bool式をフォーマットする
     /// 呼び出し後、cursorはboolean_expressionを指している
     fn format_bool_expr(&mut self, cursor: &mut TreeCursor, src: &str) -> Expr {
-        /*
-        boolean_expression: $ =>
-            choice(
-            prec.left(PREC.unary, seq(kw("NOT"), $._expression)),
-            prec.left(PREC.and, seq($._expression, kw("AND"), $._expression)),
-            prec.left(PREC.or, seq($._expression, kw("OR"), $._expression)),
-        ),
-         */
-
         let mut boolean_expr = BooleanExpr::new(self.state.depth, "-");
 
         cursor.goto_first_child();
@@ -806,20 +1112,12 @@ impl Formatter {
 
             match kw_node.kind() {
                 "WHEN" => {
-                    let mut when_clause = Clause::new(
-                        "WHEN".to_string(),
-                        Location::new(kw_node.range()),
-                        self.state.depth,
-                    );
+                    let mut when_clause = Clause::new(cursor.node(), src, self.state.depth);
 
                     cursor.goto_next_sibling();
                     // cursor -> comment | _expression
 
-                    while cursor.node().kind() == COMMENT {
-                        let comment = Comment::new(cursor.node(), src);
-                        when_clause.add_comment_to_child(comment);
-                        cursor.goto_next_sibling();
-                    }
+                    self.consume_comment_in_clause(cursor, src, &mut when_clause);
 
                     // cursor -> _expression
 
@@ -829,28 +1127,16 @@ impl Formatter {
                     cursor.goto_next_sibling();
                     // cursor -> comment || "THEN"
 
-                    while cursor.node().kind() == COMMENT {
-                        let comment = Comment::new(cursor.node(), src);
-                        when_clause.add_comment_to_child(comment);
-                        cursor.goto_next_sibling();
-                    }
+                    self.consume_comment_in_clause(cursor, src, &mut when_clause);
 
                     // cursor -> "THEN"
                     ensure_kind(cursor, "THEN");
-                    let mut then_clause = Clause::new(
-                        "THEN".to_string(),
-                        Location::new(cursor.node().range()),
-                        self.state.depth,
-                    );
+                    let mut then_clause = Clause::new(cursor.node(), src, self.state.depth);
 
                     cursor.goto_next_sibling();
                     // cursor -> comment || _expression
 
-                    while cursor.node().kind() == COMMENT {
-                        let comment = Comment::new(cursor.node(), src);
-                        then_clause.add_comment_to_child(comment);
-                        cursor.goto_next_sibling();
-                    }
+                    self.consume_comment_in_clause(cursor, src, &mut then_clause);
 
                     // cursor -> _expression
 
@@ -860,20 +1146,12 @@ impl Formatter {
                     cond_expr.add_when_then_clause(when_clause, then_clause);
                 }
                 "ELSE" => {
-                    let mut else_clause = Clause::new(
-                        "ELSE".to_string(),
-                        Location::new(cursor.node().range()),
-                        self.state.depth,
-                    );
+                    let mut else_clause = Clause::new(cursor.node(), src, self.state.depth);
 
                     cursor.goto_next_sibling();
                     // cursor -> comment || _expression
 
-                    while cursor.node().kind() == COMMENT {
-                        let comment = Comment::new(cursor.node(), src);
-                        else_clause.add_comment_to_child(comment);
-                        cursor.goto_next_sibling();
-                    }
+                    self.consume_comment_in_clause(cursor, src, &mut else_clause);
 
                     // cursor -> _expression
 
@@ -952,6 +1230,67 @@ impl Formatter {
         ensure_kind(cursor, "between_and_expression");
 
         aligned
+    }
+
+    /// _aliasable_expressionが,で区切られた構造をBodyにして返す
+    fn format_comma_sep_alias(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+        omit_as: bool,
+    ) -> Body {
+        let mut separated_lines = SeparatedLines::new(self.state.depth, ",", omit_as);
+
+        // commaSep(_aliasable_expression)
+        let alias = self.format_aliasable_expr(cursor, src);
+        separated_lines.add_expr(alias);
+
+        // ("," _aliasable_expression)*
+        while cursor.goto_next_sibling() {
+            // cursor -> , または comment または _aliasable_expression
+            match cursor.node().kind() {
+                "," => continue,
+                COMMENT => {
+                    separated_lines.add_comment_to_child(Comment::new(cursor.node(), src));
+                }
+                _ => {
+                    // _aliasable_expression
+                    let alias = self.format_aliasable_expr(cursor, src);
+                    separated_lines.add_expr(alias);
+                }
+            }
+        }
+
+        Body::SepLines(separated_lines)
+    }
+
+    /// カーソルが指すノードがSQL_IDであれば、clauseに追加する
+    fn consume_sql_id(&mut self, cursor: &mut TreeCursor, src: &str, clause: &mut Clause) {
+        if cursor.node().kind() != COMMENT {
+            return;
+        }
+
+        let comment = Comment::new(cursor.node(), src);
+
+        // _SQL_ID_であれば追加
+        if comment.is_sql_id_comment() {
+            clause.set_sql_id(comment);
+            cursor.goto_next_sibling();
+        }
+    }
+
+    /// カーソルが指すノードがコメントであれば、コメントを消費してclauseに追加する
+    fn consume_comment_in_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+        clause: &mut Clause,
+    ) {
+        while cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            clause.add_comment_to_child(comment);
+            cursor.goto_next_sibling();
+        }
     }
 }
 

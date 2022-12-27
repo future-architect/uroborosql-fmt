@@ -218,7 +218,7 @@ impl SeparatedLines {
             result.push('\t');
 
             // alignedに演算子までの最長の長さを与えてフォーマット済みの文字列をもらう
-            let formatted = aligned.render(self.depth, &align_info, self.is_from_body)?;
+            let formatted = aligned.render_align(self.depth, &align_info, self.is_from_body)?;
             result.push_str(&formatted);
             result.push('\n');
 
@@ -238,8 +238,11 @@ impl SeparatedLines {
 pub(crate) struct Statement {
     clauses: Vec<Clause>,
     loc: Option<Location>,
-    comments: Vec<Comment>, // Statementの上に現れるコメント
+    /// Statementの上に現れるコメント
+    comments: Vec<Comment>,
     depth: usize,
+    /// 末尾にセミコロンがついているか
+    has_semi: bool,
 }
 
 impl Statement {
@@ -249,6 +252,7 @@ impl Statement {
             loc: None,
             comments: vec![] as Vec<Comment>,
             depth,
+            has_semi: false,
         }
     }
 
@@ -282,6 +286,11 @@ impl Statement {
         self.comments.push(comment);
     }
 
+    /// 末尾にセミコロンがつくかどうかを指定する
+    pub(crate) fn set_semi(&mut self, has_semi: bool) {
+        self.has_semi = has_semi;
+    }
+
     pub(crate) fn render(&self) -> Result<String, Error> {
         // clause1
         // ...
@@ -296,6 +305,10 @@ impl Statement {
         // 1つでもエラーの場合は全体もエラー
         for clause in &self.clauses {
             result.push_str(&clause.render()?);
+        }
+
+        if self.has_semi {
+            result.push_str(";\n");
         }
 
         Ok(result)
@@ -386,6 +399,7 @@ impl Comment {
 pub(crate) enum Body {
     SepLines(SeparatedLines),
     BooleanExpr(BooleanExpr),
+    Insert(InsertBody),
 }
 
 impl Body {
@@ -393,6 +407,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.loc(),
             Body::BooleanExpr(bool_expr) => bool_expr.loc(),
+            Body::Insert(insert) => Some(insert.loc()),
         }
     }
 
@@ -400,6 +415,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.render(),
             Body::BooleanExpr(bool_expr) => bool_expr.render(),
+            Body::Insert(insert) => insert.render(),
         }
     }
 
@@ -407,6 +423,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.add_comment_to_child(comment),
             Body::BooleanExpr(bool_expr) => bool_expr.add_comment_to_child(comment),
+            Body::Insert(insert) => insert.add_comment_to_child(comment),
         }
     }
 
@@ -415,6 +432,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.is_empty(),
             Body::BooleanExpr(bool_expr) => bool_expr.is_empty(),
+            Body::Insert(_) => false, // InsertBodyには必ずtable_nameが含まれる
         }
     }
 
@@ -437,6 +455,183 @@ impl Body {
     }
 }
 
+/// 列リストを表す
+/// VALUES句、SET句で使用する
+#[derive(Debug, Clone)]
+pub(crate) struct ColumnList {
+    cols: Vec<Expr>,
+    loc: Location,
+}
+
+impl ColumnList {
+    pub(crate) fn new(cols: Vec<Expr>, loc: Location) -> ColumnList {
+        ColumnList { cols, loc }
+    }
+
+    fn loc(&self) -> Location {
+        self.loc.clone()
+    }
+
+    fn len(&self) -> usize {
+        // かっこ、カンマを考慮していないため、正確な値ではない
+        self.cols.iter().fold(0, |prev, e| prev + e.len())
+    }
+
+    /// カラムリストをrenderする
+    /// VALUES句以外(SET句)で呼び出された場合、1行で出力する
+    /// depth: インデントの深さ。SET句では0が与えられる
+    /// is_one_row: VALUES句で指定される行が一つであればtrue、そうでなければfalseであるような値
+    fn render(&self, depth: usize, is_one_row: bool) -> Result<String, Error> {
+        let mut result = String::new();
+        if is_one_row {
+            // ValuesItemが一つだけである場合、各列を複数行に出力する
+
+            result.push_str(" (\n");
+
+            // 最初の行のインデント
+            result.extend(repeat_n('\t', depth));
+
+            // 各要素間の改行、カンマ、インデント
+            let mut separator = "\n,".to_string();
+            separator.extend(repeat_n('\t', depth));
+
+            result.push_str(
+                &self
+                    .cols
+                    .iter()
+                    .filter_map(|e| e.render().ok())
+                    .join(&separator),
+            );
+
+            result.push('\n');
+            result.extend(repeat_n('\t', depth - 1));
+            result.push(')');
+        } else {
+            // ValuesItemが複数ある場合、各行は1行に出力する
+
+            result.extend(repeat_n('\t', depth));
+            result.push('(');
+            result.push_str(&self.cols.iter().filter_map(|e| e.render().ok()).join(", "));
+            result.push(')');
+        }
+
+        // 閉じかっこの後の改行は呼び出し元が担当
+        Ok(result)
+    }
+}
+
+/// INSERT文の本体
+/// テーブル名、対象のカラム名、VALUES句を含む
+#[derive(Debug, Clone)]
+pub(crate) struct InsertBody {
+    depth: usize,
+    loc: Location,
+    /// テーブル名
+    table_name: AlignedExpr,
+    /// カラム名
+    column_name: Option<SeparatedLines>,
+    /// VALUES句のキーワード(VALUESまたはDEFAULT VALUES)
+    values_kw: Option<String>,
+    /// VALUES句の本体
+    values_body: Vec<ColumnList>,
+}
+
+impl InsertBody {
+    pub(crate) fn new(depth: usize, loc: Location, table_name: AlignedExpr) -> InsertBody {
+        InsertBody {
+            depth,
+            loc,
+            table_name,
+            column_name: None,
+            values_kw: None,
+            values_body: vec![],
+        }
+    }
+
+    pub(crate) fn loc(&self) -> Location {
+        self.loc.clone()
+    }
+
+    /// カラム名をセットする
+    pub(crate) fn set_column_name(&mut self, cols: SeparatedLines) {
+        self.column_name = Some(cols);
+    }
+
+    /// VALUES句をセットする
+    pub(crate) fn set_values_clause(&mut self, kw: &str, body: Vec<ColumnList>) {
+        self.values_kw = Some(kw.to_string());
+        self.values_body = body;
+    }
+
+    /// 子供にコメントを追加する
+    ///
+    /// 対応済み
+    /// - テーブル名の行末コメント
+    ///
+    /// 未対応
+    /// - VALUES句の直後に現れるコメント
+    /// - VALUES句の本体に現れるコメント
+    /// - カラム名の直後に現れるコメント
+    /// - テーブル名の直後に現れるコメント
+    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
+        // 下から順番に見ていく
+
+        // table_nameの直後に現れる
+        if comment.is_multi_line_comment() || !self.table_name.loc().is_same_line(&comment.loc()) {
+            // 行末コメントではない場合は未対応
+            unimplemented!()
+        } else {
+            // 行末コメントである場合、table_nameに追加する
+            self.table_name.set_trailing_comment(comment);
+        }
+    }
+
+    pub(crate) fn render(&self) -> Result<String, Error> {
+        let mut result = String::new();
+
+        // テーブル名
+        result.extend(repeat_n('\t', self.depth + 1));
+        result.push_str(&self.table_name.render()?);
+        result.push('\n');
+
+        // カラム名
+        if let Some(sep_lines) = &self.column_name {
+            result.extend(repeat_n('\t', self.depth));
+            result.push_str("(\n");
+            result.push_str(&sep_lines.render()?);
+            result.push(')');
+        }
+
+        // VALUES句
+        if let Some(kw) = &self.values_kw {
+            result.push(' ');
+            result.push_str(&kw);
+
+            // 要素が一つか二つ以上かでフォーマット方針が異なる
+            let is_one_row = self.values_body.len() == 1;
+
+            if !is_one_row {
+                result.push('\n');
+            }
+
+            result.push_str(
+                &self
+                    .values_body
+                    .iter()
+                    .filter_map(|cols| cols.render(self.depth + 1, is_one_row).ok())
+                    .join("\n,"),
+            );
+            result.push('\n');
+        } else if self.column_name.is_some() {
+            // VALUES句があるときは、改行を入れずに`VALUES`キーワードを出力している
+            // そのため、VALUES句がない場合はここで改行
+            result.push('\n');
+        }
+
+        Ok(result)
+    }
+}
+
 // 句に対応した構造体
 #[derive(Debug, Clone)]
 pub(crate) struct Clause {
@@ -449,7 +644,10 @@ pub(crate) struct Clause {
 }
 
 impl Clause {
-    pub(crate) fn new(keyword: String, loc: Location, depth: usize) -> Clause {
+    pub(crate) fn new(kw_node: Node, src: &str, depth: usize) -> Clause {
+        // コーディング規約によると、キーワードは大文字で記述する
+        let keyword = kw_node.utf8_text(src.as_bytes()).unwrap().to_uppercase();
+        let loc = Location::new(kw_node.range());
         Clause {
             keyword,
             body: None,
@@ -462,6 +660,19 @@ impl Clause {
 
     pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
+    }
+
+    /// キーワードを延長する
+    pub(crate) fn extend_kw(&mut self, node: Node, src: &str) {
+        let loc = Location::new(node.range());
+        self.loc.append(loc);
+        self.keyword.push(' ');
+        self.keyword.push_str(
+            node.utf8_text(src.as_bytes())
+                .unwrap()
+                .to_uppercase()
+                .as_ref(),
+        );
     }
 
     // bodyをセットする
@@ -535,6 +746,8 @@ pub(crate) enum Expr {
     Cond(Box<CondExpr>),
     /// 単項演算式(NOT, +, -, ...)
     Unary(Box<UnaryExpr>),
+    /// カラムリスト(VALUES句、SET句)
+    ColumnList(Box<ColumnList>),
 }
 
 impl Expr {
@@ -548,6 +761,7 @@ impl Expr {
             Expr::Asterisk(asterisk) => asterisk.loc(),
             Expr::Cond(cond) => cond.loc(),
             Expr::Unary(unary) => unary.loc(),
+            Expr::ColumnList(cols) => cols.loc(),
             // _ => unimplemented!(),
         }
     }
@@ -556,18 +770,7 @@ impl Expr {
         match self {
             Expr::Aligned(aligned) => {
                 // 演算子を縦ぞろえしない場合は、ここでrender()が呼ばれる
-
-                let len_to_op = if aligned.has_rhs() {
-                    Some(aligned.len_lhs())
-                } else {
-                    None
-                };
-                let len_op = aligned.len_op();
-                aligned.render(
-                    0,
-                    &AlignInfo::new(len_op, len_to_op, aligned.len_to_comment(len_to_op)),
-                    false,
-                )
+                aligned.render()
             }
             Expr::Primary(primary) => primary.render(),
             Expr::Boolean(boolean) => boolean.render(),
@@ -576,6 +779,7 @@ impl Expr {
             Expr::Asterisk(asterisk) => asterisk.render(),
             Expr::Cond(cond) => cond.render(),
             Expr::Unary(unary) => unary.render(),
+            Expr::ColumnList(cols) => cols.render(0, false),
             // _ => unimplemented!(),
         }
     }
@@ -590,6 +794,7 @@ impl Expr {
             Expr::Asterisk(asterisk) => asterisk.len(),
             Expr::Cond(_) => PAR_TAB_NUM, // "END"
             Expr::Unary(unary) => unary.len(),
+            Expr::ColumnList(cols) => cols.len(),
             _ => unimplemented!(),
         }
     }
@@ -644,7 +849,8 @@ impl Expr {
             | Expr::ParenExpr(_)
             | Expr::Asterisk(_)
             | Expr::Cond(_)
-            | Expr::Unary(_) => false,
+            | Expr::Unary(_)
+            | Expr::ColumnList(_) => false,
             // _ => unimplemented!(),
         }
     }
@@ -811,8 +1017,22 @@ impl AlignedExpr {
         }
     }
 
-    // 演算子までの長さを与え、演算子の前にtab文字を挿入した文字列を返す
-    pub(crate) fn render(
+    /// 演算子・コメントの縦ぞろえをせずにrenderする
+    pub(crate) fn render(&self) -> Result<String, Error> {
+        let len_to_op = if self.has_rhs() {
+            Some(self.len_lhs())
+        } else {
+            None
+        };
+        self.render_align(
+            0,
+            &AlignInfo::new(self.len_op(), len_to_op, self.len_to_comment(len_to_op)),
+            false,
+        )
+    }
+
+    /// 演算子までの長さを与え、演算子の前にtab文字を挿入した文字列を返す
+    pub(crate) fn render_align(
         &self,
         depth: usize,
         align_info: &AlignInfo,
@@ -1177,7 +1397,7 @@ impl BooleanExpr {
             }
             result.push('\t');
 
-            let formatted = aligned.render(self.depth, &align_info, false)?;
+            let formatted = aligned.render_align(self.depth, &align_info, false)?;
             result.push_str(&formatted);
             result.push('\n');
 
