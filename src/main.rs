@@ -12,7 +12,13 @@ fn main() {
 
     let src = read_to_string(&input_file).unwrap();
 
-    let result = format_sql(src.as_ref());
+    let result = match format_sql(src.as_ref()) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("{}", e);
+            src
+        }
+    };
 
     match output_file {
         Some(path) => {

@@ -27,7 +27,13 @@ fn test_all_files() {
             let content = read_to_string(&src_path).unwrap();
 
             // フォーマット結果
-            let result = uroborosql_fmt::format_sql(content.as_str());
+            let result = match uroborosql_fmt::format_sql(content.as_ref()) {
+                Ok(res) => res,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    content
+                }
+            };
 
             // 出力先
             let dst_path = String::from("./testfiles/dst/") + file_name;

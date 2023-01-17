@@ -1,4 +1,5 @@
 use itertools::{repeat_n, Itertools};
+use thiserror::Error;
 use tree_sitter::{Node, Point, Range};
 
 const TAB_SIZE: usize = 4; // タブ幅
@@ -8,9 +9,14 @@ const COMPLEMENT_AS: bool = true; // AS句がない場合に自動的に補完�
 
 const TRIM_BIND_PARAM: bool = false; // バインド変数の中身をトリムする
 
-#[derive(Debug)]
-pub(crate) enum Error {
-    ParseError,
+#[derive(Error, Debug)]
+pub enum UroboroSQLFmtError {
+    #[error("Illegal operation error: {0}")]
+    IllegalOperationError(String),
+    #[error("Unexpected syntax error: {0}")]
+    UnexpectedSyntaxError(String),
+    #[error("Unimplemented Error: {0}")]
+    UnimplementedError(String),
 }
 
 #[derive(Debug, Clone)]
@@ -171,7 +177,10 @@ impl SeparatedLines {
 
     /// 最後の式にコメントを追加する
     /// 最後の式と同じ行である場合は行末コメントとして追加し、そうでない場合は式の下のコメントとして追加する
-    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         let comment_loc = comment.loc();
 
         if comment.is_multi_line_comment() || !self.loc().unwrap().is_same_line(&comment.loc()) {
@@ -185,7 +194,7 @@ impl SeparatedLines {
                 .last_mut()
                 .unwrap()
                 .0
-                .set_trailing_comment(comment);
+                .set_trailing_comment(comment)?;
         }
 
         // locationの更新
@@ -193,6 +202,8 @@ impl SeparatedLines {
             Some(loc) => loc.append(comment_loc),
             None => self.loc = Some(comment_loc),
         };
+
+        Ok(())
     }
 
     fn is_empty(&self) -> bool {
@@ -200,7 +211,7 @@ impl SeparatedLines {
     }
 
     /// AS句で揃えたものを返す
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         // 演算子自体の長さ
@@ -274,11 +285,16 @@ impl Statement {
         self.clauses.push(clause);
     }
 
-    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         self.clauses
             .last_mut()
             .unwrap()
-            .add_comment_to_child(comment);
+            .add_comment_to_child(comment)?;
+
+        Ok(())
     }
 
     // Statementの上に現れるコメントを追加する
@@ -291,7 +307,7 @@ impl Statement {
         self.has_semi = has_semi;
     }
 
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         // clause1
         // ...
         // clausen
@@ -358,7 +374,7 @@ impl Comment {
         }
     }
 
-    fn render(&self, depth: usize) -> Result<String, Error> {
+    fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         if self.text.starts_with("/*") {
@@ -411,7 +427,7 @@ impl Body {
         }
     }
 
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         match self {
             Body::SepLines(sep_lines) => sep_lines.render(),
             Body::BooleanExpr(bool_expr) => bool_expr.render(),
@@ -419,12 +435,23 @@ impl Body {
         }
     }
 
-    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         match self {
-            Body::SepLines(sep_lines) => sep_lines.add_comment_to_child(comment),
-            Body::BooleanExpr(bool_expr) => bool_expr.add_comment_to_child(comment),
-            Body::Insert(insert) => insert.add_comment_to_child(comment),
+            Body::SepLines(sep_lines) => {
+                sep_lines.add_comment_to_child(comment)?;
+            }
+            Body::BooleanExpr(bool_expr) => {
+                bool_expr.add_comment_to_child(comment)?;
+            }
+            Body::Insert(insert) => {
+                insert.add_comment_to_child(comment)?;
+            }
         }
+
+        Ok(())
     }
 
     // bodyの要素が空であるかどうかを返す
@@ -481,7 +508,7 @@ impl ColumnList {
     /// VALUES句以外(SET句)で呼び出された場合、1行で出力する
     /// depth: インデントの深さ。SET句では0が与えられる
     /// is_one_row: VALUES句で指定される行が一つであればtrue、そうでなければfalseであるような値
-    fn render(&self, depth: usize, is_one_row: bool) -> Result<String, Error> {
+    fn render(&self, depth: usize, is_one_row: bool) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
         if is_one_row {
             // ValuesItemが一つだけである場合、各列を複数行に出力する
@@ -573,7 +600,10 @@ impl InsertBody {
     /// - VALUES句の本体に現れるコメント
     /// - カラム名の直後に現れるコメント
     /// - テーブル名の直後に現れるコメント
-    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         // 下から順番に見ていく
 
         // table_nameの直後に現れる
@@ -582,11 +612,13 @@ impl InsertBody {
             unimplemented!()
         } else {
             // 行末コメントである場合、table_nameに追加する
-            self.table_name.set_trailing_comment(comment);
+            self.table_name.set_trailing_comment(comment)?;
         }
+
+        Ok(())
     }
 
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         // テーブル名
@@ -685,18 +717,29 @@ impl Clause {
 
     /// Clauseにコメントを追加する
     /// Bodyがあればその下にコメントを追加し、ない場合はキーワードの下にコメントを追加する
-    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         match &mut self.body {
-            Some(body) if !body.is_empty() => body.add_comment_to_child(comment), // bodyに式があれば、その下につく
-            _ => self.comments.push(comment), // そうでない場合、自分のキーワードの下につく
+            Some(body) if !body.is_empty() => {
+                // bodyに式があれば、その下につく
+                body.add_comment_to_child(comment)?;
+            }
+            _ => {
+                // そうでない場合、自分のキーワードの下につく
+                self.comments.push(comment);
+            }
         }
+
+        Ok(())
     }
 
     pub(crate) fn set_sql_id(&mut self, comment: Comment) {
         self.sql_id = Some(comment);
     }
 
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         // kw
         // body...
         let mut result = String::new();
@@ -766,7 +809,7 @@ impl Expr {
         }
     }
 
-    fn render(&self) -> Result<String, Error> {
+    fn render(&self) -> Result<String, UroboroSQLFmtError> {
         match self {
             Expr::Aligned(aligned) => {
                 // 演算子を縦ぞろえしない場合は、ここでrender()が呼ばれる
@@ -799,20 +842,45 @@ impl Expr {
         }
     }
 
-    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         match self {
             // aligned, primaryは上位のExpr, Bodyでset_trailing_comment()を通じてコメントを追加する
-            Expr::Aligned(_aligned) => unimplemented!(),
-            Expr::Primary(_primary) => unimplemented!(),
+            Expr::Aligned(_aligned) => {
+                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    "add_comment_to_child(): unimplemented for aligned",
+                )));
+            }
+            Expr::Primary(_primary) => {
+                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    "add_comment_to_child(): unimplemented for primary",
+                )));
+            }
 
             // 下位の式にコメントを追加する
-            Expr::Boolean(boolean) => boolean.add_comment_to_child(comment),
+            Expr::Boolean(boolean) => {
+                boolean.add_comment_to_child(comment)?;
+            }
             Expr::SelectSub(select_sub) => select_sub.add_comment_to_child(comment),
-            Expr::ParenExpr(paren_expr) => paren_expr.add_comment_to_child(comment),
+            Expr::ParenExpr(paren_expr) => {
+                paren_expr.add_comment_to_child(comment)?;
+            }
 
-            Expr::Cond(_cond) => unimplemented!(),
-            _ => todo!(),
+            Expr::Cond(_cond) => {
+                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    "add_comment_to_child(): unimplemented for conditional_expr",
+                )));
+            }
+            _ => {
+                // todo
+                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    "add_comment_to_child(): unimplemented expr",
+                )));
+            }
         }
+        Ok(())
     }
 
     /// バインドパラメータをセットする
@@ -918,14 +986,17 @@ impl AlignedExpr {
     }
 
     /// 右辺(行全体)のtrailing_commentをセットする
-    /// 複数行コメントを与えた場合パニックする
-    pub(crate) fn set_trailing_comment(&mut self, comment: Comment) {
+    /// 複数行コメントを与えた場合エラーを返す
+    pub(crate) fn set_trailing_comment(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         if comment.is_multi_line_comment() {
             // 複数行コメント
-            panic!(
+            Err(UroboroSQLFmtError::IllegalOperationError(format!(
                 "set_trailing_comment:{:?} is not trailing comment!",
                 comment
-            );
+            )))
         } else {
             let Comment { text, loc } = comment;
             // 1. 初めのハイフンを削除
@@ -935,25 +1006,30 @@ impl AlignedExpr {
 
             self.trailing_comment = Some(trailing_comment);
             self.loc.append(loc);
+            Ok(())
         }
     }
 
     /// 左辺のtrailing_commentをセットする
     /// 複数行コメントを与えた場合パニックする
-    pub(crate) fn set_lhs_trailing_comment(&mut self, comment: Comment) {
+    pub(crate) fn set_lhs_trailing_comment(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         if comment.is_multi_line_comment() {
             // 複数行コメント
-            panic!(
+            Err(UroboroSQLFmtError::IllegalOperationError(format!(
                 "set_lhs_trailing_comment:{:?} is not trailing comment!",
                 comment
-            );
+            )))
         } else {
             // 行コメント
             let Comment { text, loc } = comment;
             let trailing_comment = format!("-- {}", text.trim_start_matches('-').trim_start());
 
             self.lhs_trailing_comment = Some(trailing_comment);
-            self.loc.append(loc)
+            self.loc.append(loc);
+            Ok(())
         }
     }
 
@@ -1018,7 +1094,7 @@ impl AlignedExpr {
     }
 
     /// 演算子・コメントの縦ぞろえをせずにrenderする
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let len_to_op = if self.has_rhs() {
             Some(self.len_lhs())
         } else {
@@ -1037,7 +1113,7 @@ impl AlignedExpr {
         depth: usize,
         align_info: &AlignInfo,
         is_from_body: bool,
-    ) -> Result<String, Error> {
+    ) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         let max_len_op = align_info.max_len_op;
@@ -1250,7 +1326,7 @@ impl PrimaryExpr {
         self.elements.append(&mut primary.elements().clone())
     }
 
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let elements_str = self.elements.iter().map(|x| x.to_uppercase()).join("\t");
 
         match self.head_comment.as_ref() {
@@ -1295,7 +1371,10 @@ impl BooleanExpr {
         self.default_separator = sep;
     }
 
-    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         if comment.is_multi_line_comment() || !self.loc().unwrap().is_same_line(&comment.loc()) {
             // 行末コメントではない場合
             // 最後の要素にコメントを追加
@@ -1307,8 +1386,10 @@ impl BooleanExpr {
                 .last_mut()
                 .unwrap()
                 .1
-                .set_trailing_comment(comment);
+                .set_trailing_comment(comment)?;
         }
+
+        Ok(())
     }
 
     /// 左辺を展開していき、バインドパラメータをセットする
@@ -1381,7 +1462,7 @@ impl BooleanExpr {
     }
 
     /// 比較演算子で揃えたものを返す
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         let align_info = self.contents.iter().map(|(_, a, _)| a).collect_vec().into();
@@ -1433,7 +1514,7 @@ impl SelectSubExpr {
         unimplemented!()
     }
 
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         result.push_str("(\n");
@@ -1472,12 +1553,17 @@ impl ParenExpr {
         self.loc.clone()
     }
 
-    pub(crate) fn add_comment_to_child(&mut self, comment: Comment) {
+    pub(crate) fn add_comment_to_child(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         if self.expr.loc().is_same_line(&comment.loc()) {
-            self.expr.add_comment_to_child(comment);
+            self.expr.add_comment_to_child(comment)?;
         } else {
             self.add_end_comment(comment);
         }
+
+        Ok(())
     }
 
     pub(crate) fn set_loc(&mut self, loc: Location) {
@@ -1494,7 +1580,7 @@ impl ParenExpr {
         self.end_comments.push(comment);
     }
 
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         result.push_str("(\n");
@@ -1549,7 +1635,7 @@ impl AsteriskExpr {
         self.content.len() / TAB_SIZE + 1
     }
 
-    pub(crate) fn render(&self) -> Result<String, Error> {
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         Ok(self.content.clone())
     }
 }
@@ -1587,19 +1673,24 @@ impl CondExpr {
     }
 
     /// 最後の式にコメントを追加する
-    pub(crate) fn set_trailing_comment(&mut self, comment: Comment) {
+    pub(crate) fn set_trailing_comment(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         if let Some(else_clause) = self.else_clause.as_mut() {
-            else_clause.add_comment_to_child(comment);
+            else_clause.add_comment_to_child(comment)?;
         } else if let Some(when_then_expr) = self.when_then_clause.last_mut() {
-            when_then_expr.1.add_comment_to_child(comment);
+            when_then_expr.1.add_comment_to_child(comment)?;
         } else {
             // when_then/else が存在しない場合
             // つまり、CASEキーワードの直後にコメントが来た場合
             self.comments.push(comment);
         }
+
+        Ok(())
     }
 
-    fn render(&self) -> Result<String, Error> {
+    fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         // CASEキーワードの行のインデントは呼び出し側が行う
@@ -1672,7 +1763,7 @@ impl UnaryExpr {
     }
 
     /// フォーマットした文字列を返す
-    fn render(&self) -> Result<String, Error> {
+    fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         result.push_str(&self.operator);
