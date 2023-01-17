@@ -1,13 +1,14 @@
 mod cst;
 mod formatter;
 
+use cst::UroboroSQLFmtError;
 use formatter::Formatter;
 use tree_sitter::Node;
 
 pub(crate) const DEBUG_MODE: bool = true; // デバッグモード
 
 /// 引数のSQLをフォーマットして返す
-pub fn format_sql(src: &str) -> String {
+pub fn format_sql(src: &str) -> Result<String, UroboroSQLFmtError> {
     // tree-sitter-sqlの言語を取得
     let language = tree_sitter_sql::language();
     // パーサオブジェクトを生成
@@ -28,7 +29,7 @@ pub fn format_sql(src: &str) -> String {
     let mut formatter = Formatter::default();
 
     // formatを行い、バッファに結果を格納
-    let stmts = formatter.format_sql(root_node, src.as_ref());
+    let stmts = formatter.format_sql(root_node, src.as_ref())?;
 
     if DEBUG_MODE {
         eprintln!("{:#?}", stmts);
@@ -39,7 +40,7 @@ pub fn format_sql(src: &str) -> String {
         .map(|stmt| stmt.render().expect("render: error"))
         .collect();
 
-    result
+    Ok(result)
 }
 
 // cstを表示する関数(デバッグ用)
