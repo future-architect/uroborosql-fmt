@@ -2,12 +2,9 @@ use itertools::{repeat_n, Itertools};
 use thiserror::Error;
 use tree_sitter::{Node, Point, Range};
 
-const TAB_SIZE: usize = 4; // タブ幅
+use crate::config::CONFIG;
+
 const PAR_TAB_NUM: usize = 1; // 閉じ括弧のタブ長
-
-const COMPLEMENT_AS: bool = true; // AS句がない場合に自動的に補完する
-
-const TRIM_BIND_PARAM: bool = false; // バインド変数の中身をトリムする
 
 #[derive(Error, Debug)]
 pub enum UroboroSQLFmtError {
@@ -17,6 +14,10 @@ pub enum UroboroSQLFmtError {
     UnexpectedSyntaxError(String),
     #[error("Unimplemented Error: {0}")]
     UnimplementedError(String),
+    #[error("File not found error: {0}")]
+    FileNotFoundError(String),
+    #[error("Illegal setting file error: {0}")]
+    IllegalSettingFileError(String),
 }
 
 #[derive(Debug, Clone)]
@@ -967,7 +968,9 @@ impl AlignedExpr {
 
     /// opのタブ文字換算の長さを返す
     fn len_op(&self) -> Option<usize> {
-        self.op.as_ref().map(|op| op.len() / TAB_SIZE + 1)
+        self.op
+            .as_ref()
+            .map(|op| op.len() / CONFIG.lock().unwrap().tab_size + 1)
     }
 
     /// 最後の行の長さを返す
@@ -1075,7 +1078,9 @@ impl AlignedExpr {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.len()),
             // コメント以外に揃える対象があり、右辺を左辺で補完する場合、左辺の長さ
-            (Some(_), None) if COMPLEMENT_AS && self.is_alias && !is_asterisk => {
+            (Some(_), None)
+                if CONFIG.lock().unwrap().complement_as && self.is_alias && !is_asterisk =>
+            {
                 if let Expr::Primary(primary) = &self.lhs {
                     let str = primary.elements().first().unwrap();
                     let strs: Vec<&str> = str.split('.').collect();
@@ -1157,7 +1162,9 @@ impl AlignedExpr {
                 }
             }
             // AS補完する場合
-            (None, _, Some(max_len)) if COMPLEMENT_AS && self.is_alias && !is_asterisk => {
+            (None, _, Some(max_len))
+                if CONFIG.lock().unwrap().complement_as && self.is_alias && !is_asterisk =>
+            {
                 let tab_num = max_len - self.lhs.len();
                 result.extend(repeat_n('\t', tab_num));
 
@@ -1198,7 +1205,7 @@ impl AlignedExpr {
                         } else {
                             0
                         }
-                } else if COMPLEMENT_AS && self.is_alias && !is_asterisk {
+                } else if CONFIG.lock().unwrap().complement_as && self.is_alias && !is_asterisk {
                     let lhs_len = if let Expr::Primary(primary) = &self.lhs {
                         let str = primary.elements().first().unwrap();
                         let strs: Vec<&str> = str.split('.').collect();
@@ -1227,7 +1234,8 @@ impl AlignedExpr {
             // 末尾コメントが存在し、ほかにはそろえる対象が存在しない場合
             (Some(comment), _, None) => {
                 // max_len_to_opがNoneであればそろえる対象はない
-                let tab_num = (max_len_to_comment.unwrap() - self.lhs.len()) / TAB_SIZE;
+                let tab_num = (max_len_to_comment.unwrap() - self.lhs.len())
+                    / CONFIG.lock().unwrap().tab_size;
 
                 result.extend(repeat_n('\t', tab_num));
 
@@ -1251,7 +1259,7 @@ pub(crate) struct PrimaryExpr {
 
 impl PrimaryExpr {
     pub(crate) fn new(element: String, loc: Location) -> PrimaryExpr {
-        let len = element.len() / TAB_SIZE + 1;
+        let len = element.len() / CONFIG.lock().unwrap().tab_size + 1;
         PrimaryExpr {
             elements: vec![element],
             loc,
@@ -1278,7 +1286,7 @@ impl PrimaryExpr {
             mut loc,
         } = comment;
 
-        if TRIM_BIND_PARAM {
+        if CONFIG.lock().unwrap().trim_bind_param {
             // 1. /*を削除
             // 2. *\を削除
             // 3. 前後の空白文字を削除
@@ -1296,9 +1304,9 @@ impl PrimaryExpr {
         loc.append(self.loc.clone());
         self.loc = loc;
 
-        let first_element_len = self.elements()[0].len() / TAB_SIZE + 1;
+        let first_element_len = self.elements()[0].len() / CONFIG.lock().unwrap().tab_size + 1;
         let head_comment_and_first_element_len =
-            (self.elements()[0].len() + comment.len()) / TAB_SIZE + 1;
+            (self.elements()[0].len() + comment.len()) / CONFIG.lock().unwrap().tab_size + 1;
 
         self.len += head_comment_and_first_element_len - first_element_len;
     }
@@ -1316,7 +1324,7 @@ impl PrimaryExpr {
         // -- 例外 --
         // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
         //
-        self.len += element.len() / TAB_SIZE + 1;
+        self.len += element.len() / CONFIG.lock().unwrap().tab_size + 1;
         self.elements.push(element.to_ascii_uppercase());
     }
 
@@ -1632,7 +1640,7 @@ impl AsteriskExpr {
     }
 
     fn len(&self) -> usize {
-        self.content.len() / TAB_SIZE + 1
+        self.content.len() / CONFIG.lock().unwrap().tab_size + 1
     }
 
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
@@ -1737,7 +1745,7 @@ pub(crate) struct UnaryExpr {
 
 impl UnaryExpr {
     pub(crate) fn new(operator: &str, operand: Expr, loc: Location) -> UnaryExpr {
-        let operator_len = operator.len() / TAB_SIZE + 1;
+        let operator_len = operator.len() / CONFIG.lock().unwrap().tab_size + 1;
         let operand_len = operand.len();
         UnaryExpr {
             operator: operator.to_string(),
