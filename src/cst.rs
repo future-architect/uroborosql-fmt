@@ -1325,7 +1325,7 @@ impl PrimaryExpr {
         // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
         //
         self.len += element.len() / CONFIG.lock().unwrap().tab_size + 1;
-        self.elements.push(element.to_ascii_uppercase());
+        self.elements.push(element.to_owned());
     }
 
     // PrimaryExprの結合
@@ -1335,7 +1335,12 @@ impl PrimaryExpr {
     }
 
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
-        let elements_str = self.elements.iter().map(|x| x.to_uppercase()).join("\t");
+        // 文字列リテラル以外の要素を大文字に変換して、出力する文字列を生成する
+        let elements_str = self
+            .elements
+            .iter()
+            .map(|elem| to_uppercase_identifier(elem))
+            .join("\t");
 
         match self.head_comment.as_ref() {
             Some(comment) => Ok(format!("{}{}", comment, elements_str)),
@@ -1344,6 +1349,19 @@ impl PrimaryExpr {
     }
 }
 
+// TODO: 大文字/小文字を設定ファイルで定義できるようにする
+/// 引数の文字列が識別子であれば大文字にして返す
+/// 文字列リテラル、または引用符付き識別子である場合はそのままの文字列を返す
+fn to_uppercase_identifier(elem: &str) -> String {
+    if (elem.starts_with("\"") && elem.ends_with("\""))
+        || (elem.starts_with("'") && elem.ends_with("'"))
+        || (elem.starts_with("$") && elem.ends_with("$"))
+    {
+        elem.to_owned()
+    } else {
+        elem.to_uppercase()
+    }
+}
 // TOOD: BooleanExprをBodyでなくする
 // 現状、Exprの中でBooleanExprだけがBodyになりうる
 // Bodyは最初の行のインデントと最後の行の改行を自分で行う

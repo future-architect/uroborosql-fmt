@@ -10,16 +10,16 @@ SELECT
 			A	=	1	-- a equals 1
 		THEN
 		-- cond_1 == true
-			'ONE'	-- one
+			'one'	-- one
 		WHEN
 		-- cond_2
 			A	=	2	-- a equals 2
 		THEN
 		-- cond_2 == true
-			'TWO'	-- two
+			'two'	-- two
 		ELSE
 		-- forall i: cond_i == false
-			'OTHER'	-- other
+			'other'	-- other
 	END
 FROM
 	TEST	-- test table

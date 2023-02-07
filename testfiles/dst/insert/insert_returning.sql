@@ -6,7 +6,7 @@ INTO
 ,	DNAME
 ) VALUES (
 	DEFAULT
-,	'XYZ WIDGETS'
+,	'XYZ Widgets'
 )
 RETURNING
 	DID

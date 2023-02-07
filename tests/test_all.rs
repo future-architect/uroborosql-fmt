@@ -1,5 +1,5 @@
 use std::{
-    fs::{create_dir, read_to_string, DirEntry, File},
+    fs::{create_dir, create_dir_all, read_to_string, remove_dir_all, DirEntry, File},
     io::Write,
     path::{self, PathBuf},
 };
@@ -46,20 +46,15 @@ fn test_all_files() {
     let src_dir = test_dir.join("src");
     let dst_dir = test_dir.join("dst");
 
-    // src_dirに含まれるすべてのファイル、ディレクトリ
+    // 最初に ./testfiles/dir/を削除しておく
+    remove_dir_all(&dst_dir).unwrap_or_else(|_| eprintln!("./testfiles/dst/ does not exists"));
+
+    create_dir_all(&dst_dir).expect(&format!("Directory ./testfiles.dst cannot be created.",));
+
     let entries = src_dir.read_dir().unwrap();
 
     // デフォルト値の設定でテスト
-    for entry in entries {
-        let src_path = entry.unwrap().path();
-
-        // ファイルかどうかをチェック
-        if !src_path.is_file() {
-            continue;
-        }
-
-        run_with_config(&dst_dir, &src_path, None);
-    }
+    entries.for_each(|e| test_entry_with_config(e.unwrap(), "", None));
 }
 
 /*
@@ -129,5 +124,37 @@ fn test_config_file() {
 
             run_with_config(&dst_dir, &src_path, Some(&config.path()));
         }
+    }
+}
+
+fn test_entry_with_config(entry: DirEntry, rel_path: &str, config: Option<&PathBuf>) {
+    let src_path = entry.path();
+    if src_path.is_dir() {
+        let dir_name = src_path.file_name().unwrap().to_str().unwrap();
+        let directory_path = ("./testfiles/dst/".to_owned() + rel_path) + dir_name;
+
+        // dstディレクトリに、対応するディレクトリを生成
+        match create_dir_all(path::Path::new(&directory_path)) {
+            Err(e) => panic!("create_dir: {:?}", e),
+            Ok(_) => (),
+        }
+
+        let entries = src_path.read_dir().unwrap();
+        let rel_path = rel_path.to_owned() + dir_name + "/";
+
+        entries.for_each(|e| test_entry_with_config(e.unwrap(), &rel_path, config));
+    } else if src_path.is_file() {
+        // ファイルの拡張子が.sql出ない場合は飛ばす
+        let ext = src_path.extension().unwrap();
+        if ext != "sql" {
+            return ();
+        }
+
+        // 出力先
+        let dst_dir = path::PathBuf::from("./testfiles/dst/");
+        let dst_dir = dst_dir.join(rel_path);
+
+        // フォーマットをデフォルト設定で実行
+        run_with_config(&dst_dir, &src_path, config);
     }
 }
