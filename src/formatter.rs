@@ -3,6 +3,7 @@ use tree_sitter::{Node, TreeCursor};
 pub(crate) const COMMENT: &str = "comment";
 
 use crate::cst::*;
+use crate::util::*;
 
 /// インデントの深さや位置をそろえるための情報を保持する構造体
 struct FormatterState {
@@ -668,7 +669,7 @@ impl Formatter {
                     }
                 }
             }
-            insert_body.set_values_clause("VALUES", items);
+            insert_body.set_values_clause(&format_keyword("VALUES"), items);
 
             cursor.goto_parent();
             ensure_kind(cursor, "values_clause")?;
@@ -827,7 +828,7 @@ impl Formatter {
                         let rhs = cursor.node().utf8_text(src.as_bytes()).unwrap();
                         let rhs_expr =
                             PrimaryExpr::new(rhs.to_string(), Location::new(cursor.node().range()));
-                        aligned.add_rhs("AS".to_string(), Expr::Primary(Box::new(rhs_expr)));
+                        aligned.add_rhs(format_keyword("AS"), Expr::Primary(Box::new(rhs_expr)));
                     }
                 }
 
@@ -1053,7 +1054,7 @@ impl Formatter {
             // (NOT expr)のソースコード上の位置を計算
             loc.append(expr.loc());
 
-            let not_expr = UnaryExpr::new("NOT", expr, loc);
+            let not_expr = UnaryExpr::new(&format_keyword("NOT"), expr, loc);
 
             cursor.goto_parent();
             ensure_kind(cursor, "boolean_expression")?;
@@ -1075,7 +1076,7 @@ impl Formatter {
             }
 
             let sep = cursor.node().kind();
-            boolean_expr.set_default_separator(sep.to_string());
+            boolean_expr.set_default_separator(format_keyword(sep));
 
             cursor.goto_next_sibling();
             // cursor -> _expression
@@ -1346,13 +1347,13 @@ impl Formatter {
         let mut operator = String::new();
 
         if cursor.node().kind() == "NOT" {
-            operator += "NOT";
+            operator += &format_keyword("NOT");
             operator += " "; // betweenの前に空白を入れる
             cursor.goto_next_sibling();
         }
 
         ensure_kind(cursor, "BETWEEN")?;
-        operator += "BETWEEN";
+        operator += &format_keyword("BETWEEN");
         cursor.goto_next_sibling();
         // cursor -> _expression
 
@@ -1368,7 +1369,7 @@ impl Formatter {
 
         // (from AND to)をAlignedExprにまとめる
         let mut rhs = AlignedExpr::new(from_expr, false);
-        rhs.add_rhs("AND".to_string(), to_expr);
+        rhs.add_rhs(format_keyword("AND"), to_expr);
 
         // (expr BETWEEN rhs)をAlignedExprにまとめる
         let mut aligned = AlignedExpr::new(expr, false);
