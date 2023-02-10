@@ -11,28 +11,53 @@ use crate::cst::UroboroSQLFmtError;
 /// 設定を保持するグローバル変数
 pub(crate) static CONFIG: Lazy<Mutex<Config>> = Lazy::new(|| Mutex::new(Config::new()));
 
-/// debugのデフォルト値
+/// debugのデフォルト値(false)
 fn default_debug() -> bool {
     false
 }
 
-/// tab_sizeのデフォルト値
+/// tab_sizeのデフォルト値(4)
 fn default_tab_size() -> usize {
     4
 }
 
-/// complement_asのデフォルト値
+/// complement_asのデフォルト値(true)
 fn default_complement_as() -> bool {
     true
 }
 
-/// trim_bind_paramのデフォルト値
+/// trim_bind_paramのデフォルト値(false)
 fn default_trim_bind_param() -> bool {
     false
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum UpperOrLower {
+    Upper,
+    Lower,
+    None,
+}
+
+impl Default for UpperOrLower {
+    /// upper_or_lowerのデフォルト値(upper)
+    fn default() -> Self {
+        UpperOrLower::Upper
+    }
+}
+
+impl UpperOrLower {
+    pub(crate) fn format(&self, key: &str) -> String {
+        match self {
+            UpperOrLower::Upper => key.to_uppercase(),
+            UpperOrLower::Lower => key.to_lowercase(),
+            UpperOrLower::None => key.to_string(),
+        }
+    }
+}
+
 /// 設定を保持する構造体
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Debug)]
 pub(crate) struct Config {
     /// デバッグモード
     #[serde(default = "default_debug")]
@@ -46,6 +71,9 @@ pub(crate) struct Config {
     /// バインド変数の中身をトリムする
     #[serde(default = "default_trim_bind_param")]
     pub(crate) trim_bind_param: bool,
+    /// キーワードを大文字・小文字にする
+    #[serde(default = "UpperOrLower::default")]
+    pub(crate) keyword_upper_or_lower: UpperOrLower,
 }
 
 impl Config {
@@ -57,6 +85,7 @@ impl Config {
             tab_size: default_tab_size(),
             complement_as: default_complement_as(),
             trim_bind_param: default_trim_bind_param(),
+            keyword_upper_or_lower: UpperOrLower::default(),
         }
     }
 }

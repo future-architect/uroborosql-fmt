@@ -1,0 +1,6 @@
+select
+	IDENTIFIER
+from
+	JAPANESE_STUDENT_TABLE
+where
+	SBJ.GRADE	>	/*grade*/50

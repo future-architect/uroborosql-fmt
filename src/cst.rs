@@ -3,6 +3,7 @@ use thiserror::Error;
 use tree_sitter::{Node, Point, Range};
 
 use crate::config::CONFIG;
+use crate::util::*;
 
 const PAR_TAB_NUM: usize = 1; // 閉じ括弧のタブ長
 
@@ -679,7 +680,7 @@ pub(crate) struct Clause {
 impl Clause {
     pub(crate) fn new(kw_node: Node, src: &str, depth: usize) -> Clause {
         // コーディング規約によると、キーワードは大文字で記述する
-        let keyword = kw_node.utf8_text(src.as_bytes()).unwrap().to_uppercase();
+        let keyword = format_keyword(kw_node.utf8_text(src.as_bytes()).unwrap());
         let loc = Location::new(kw_node.range());
         Clause {
             keyword,
@@ -700,12 +701,8 @@ impl Clause {
         let loc = Location::new(node.range());
         self.loc.append(loc);
         self.keyword.push(' ');
-        self.keyword.push_str(
-            node.utf8_text(src.as_bytes())
-                .unwrap()
-                .to_uppercase()
-                .as_ref(),
-        );
+        self.keyword
+            .push_str(&format_keyword(node.utf8_text(src.as_bytes()).unwrap()));
     }
 
     // bodyをセットする
@@ -1170,7 +1167,7 @@ impl AlignedExpr {
 
                 if !is_from_body {
                     result.push('\t');
-                    result.push_str("AS");
+                    result.push_str(&format_keyword("AS"));
                 }
                 // エイリアス補完はすべての演算子が"AS"であるかないため、すべての演算子の長さ(len_op())は等しい
                 result.push('\t');
@@ -1720,7 +1717,7 @@ impl CondExpr {
         let mut result = String::new();
 
         // CASEキーワードの行のインデントは呼び出し側が行う
-        result.push_str("CASE");
+        result.push_str(&format_keyword("CASE"));
         result.push('\n');
 
         for comment in &self.comments {
@@ -1745,7 +1742,7 @@ impl CondExpr {
         }
 
         result.extend(repeat_n('\t', self.depth + 1));
-        result.push_str("END");
+        result.push_str(&format_keyword("END"));
 
         Ok(result)
     }

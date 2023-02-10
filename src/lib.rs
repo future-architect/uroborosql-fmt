@@ -1,6 +1,7 @@
 mod config;
 mod cst;
 mod formatter;
+mod util;
 
 use config::*;
 use cst::UroboroSQLFmtError;
