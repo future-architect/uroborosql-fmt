@@ -27,7 +27,7 @@ pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, Urobor
     // Treeのルートノードを取得
     let root_node = tree.root_node();
 
-    if CONFIG.lock().unwrap().debug {
+    if CONFIG.read().unwrap().debug {
         dfs(root_node, 0);
         eprintln!();
     }
@@ -38,7 +38,7 @@ pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, Urobor
     // formatを行い、バッファに結果を格納
     let stmts = formatter.format_sql(root_node, src.as_ref())?;
 
-    if CONFIG.lock().unwrap().debug {
+    if CONFIG.read().unwrap().debug {
         eprintln!("{:#?}", stmts);
     }
 

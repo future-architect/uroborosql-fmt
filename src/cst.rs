@@ -5,8 +5,6 @@ use tree_sitter::{Node, Point, Range};
 use crate::config::CONFIG;
 use crate::util::*;
 
-const PAR_TAB_NUM: usize = 1; // 閉じ括弧のタブ長
-
 #[derive(Error, Debug)]
 pub enum UroboroSQLFmtError {
     #[error("Illegal operation error: {0}")]
@@ -19,6 +17,13 @@ pub enum UroboroSQLFmtError {
     FileNotFoundError(String),
     #[error("Illegal setting file error: {0}")]
     IllegalSettingFileError(String),
+    #[error("Rendering Error: {0}")]
+    RenderingError(String),
+}
+
+/// 設定からタブ長を取得する
+fn tab_size() -> usize {
+    CONFIG.read().unwrap().tab_size
 }
 
 #[derive(Debug, Clone)]
@@ -71,11 +76,11 @@ impl Location {
 #[derive(Debug)]
 pub(crate) struct AlignInfo {
     /// 演算子自身の最長の長さ
-    max_len_op: Option<usize>,
+    max_op_tab_num: Option<usize>,
     /// 演算子までの最長の長さ
-    max_len_to_op: Option<usize>,
+    max_tab_num_to_op: Option<usize>,
     /// 行末コメントまでの最長の長さ
-    max_len_to_comment: Option<usize>,
+    max_tab_num_to_comment: Option<usize>,
 }
 
 impl From<Vec<&AlignedExpr>> for AlignInfo {
@@ -88,48 +93,51 @@ impl From<Vec<&AlignedExpr>> for AlignInfo {
         });
 
         // 演算子自体の長さ
-        let max_len_op = if has_op {
+        let max_op_tab_num = if has_op {
             aligned_exprs
                 .iter()
-                .map(|aligned| aligned.len_op().unwrap_or(0))
+                .map(|aligned| aligned.op_tab_num().unwrap_or(0))
                 .max()
         } else {
             None
         };
 
-        let max_len_to_op = if has_op {
-            aligned_exprs.iter().map(|aligned| aligned.len_lhs()).max()
+        let max_tab_num_to_op = if has_op {
+            aligned_exprs
+                .iter()
+                .map(|aligned| aligned.lhs_tab_num())
+                .max()
         } else {
             None
         };
 
-        let max_len_to_comment = if has_comment {
+        let max_tab_num_to_comment = if has_comment {
             aligned_exprs
                 .iter()
-                .flat_map(|aligned| aligned.len_to_comment(max_len_to_op))
+                .flat_map(|aligned| aligned.tab_num_to_comment(max_tab_num_to_op))
                 .max()
         } else {
             None
         };
 
         AlignInfo {
-            max_len_op,
-            max_len_to_op,
-            max_len_to_comment,
+            max_op_tab_num,
+            max_tab_num_to_op,
+            max_tab_num_to_comment,
         }
     }
 }
 
 impl AlignInfo {
     fn new(
-        max_len_op: Option<usize>,
-        max_len_to_op: Option<usize>,
-        max_len_to_comment: Option<usize>,
+        max_op_tab_num: Option<usize>,
+        max_tab_num_to_op: Option<usize>,
+        max_tab_num_to_comment: Option<usize>,
     ) -> AlignInfo {
         AlignInfo {
-            max_len_op,
-            max_len_to_op,
-            max_len_to_comment,
+            max_op_tab_num,
+            max_tab_num_to_op,
+            max_tab_num_to_comment,
         }
     }
 }
@@ -146,10 +154,11 @@ pub(crate) struct SeparatedLines {
 }
 
 impl SeparatedLines {
-    pub(crate) fn new(depth: usize, sep: &str, is_omit_op: bool) -> SeparatedLines {
+    pub(crate) fn new(depth: usize, sep: impl Into<String>, is_omit_op: bool) -> SeparatedLines {
+        let separator = sep.into();
         SeparatedLines {
             depth,
-            separator: sep.to_string(),
+            separator,
             contents: vec![] as Vec<(AlignedExpr, Vec<Comment>)>,
             loc: None,
             has_op: false,
@@ -501,9 +510,12 @@ impl ColumnList {
         self.loc.clone()
     }
 
-    fn len(&self) -> usize {
+    fn last_line_len(&self) -> usize {
         // かっこ、カンマを考慮していないため、正確な値ではない
-        self.cols.iter().fold(0, |prev, e| prev + e.len())
+        self.cols
+            .iter()
+            .fold(0, |prev, e| prev + e.last_line_tab_num())
+            * tab_size()
     }
 
     /// カラムリストをrenderする
@@ -789,6 +801,8 @@ pub(crate) enum Expr {
     Unary(Box<UnaryExpr>),
     /// カラムリスト(VALUES句、SET句)
     ColumnList(Box<ColumnList>),
+    /// 関数呼び出し
+    FunctionCall(Box<FunctionCall>),
 }
 
 impl Expr {
@@ -803,7 +817,7 @@ impl Expr {
             Expr::Cond(cond) => cond.loc(),
             Expr::Unary(unary) => unary.loc(),
             Expr::ColumnList(cols) => cols.loc(),
-            // _ => unimplemented!(),
+            Expr::FunctionCall(func_call) => func_call.loc(),
         }
     }
 
@@ -821,22 +835,28 @@ impl Expr {
             Expr::Cond(cond) => cond.render(),
             Expr::Unary(unary) => unary.render(),
             Expr::ColumnList(cols) => cols.render(0, false),
-            // _ => unimplemented!(),
+            Expr::FunctionCall(func_call) => func_call.render(), // _ => unimplemented!(),
         }
     }
 
     /// 最後の行の長さをタブ文字換算した結果を返す
-    fn len(&self) -> usize {
+    fn last_line_tab_num(&self) -> usize {
+        to_tab_num(self.last_line_len())
+    }
+
+    /// 最後の行の文字列の長さを返す
+    fn last_line_len(&self) -> usize {
         match self {
-            Expr::Primary(primary) => primary.len(),
-            Expr::Aligned(aligned) => aligned.len(),
-            Expr::SelectSub(_) => PAR_TAB_NUM, // 必ずかっこ
-            Expr::ParenExpr(_) => PAR_TAB_NUM, // 必ずかっこ
-            Expr::Asterisk(asterisk) => asterisk.len(),
-            Expr::Cond(_) => PAR_TAB_NUM, // "END"
-            Expr::Unary(unary) => unary.len(),
-            Expr::ColumnList(cols) => cols.len(),
-            _ => unimplemented!(),
+            Expr::Primary(primary) => primary.last_line_len(),
+            Expr::Aligned(aligned) => aligned.last_line_len(),
+            Expr::SelectSub(_) => ")".len(), // 必ずかっこ
+            Expr::ParenExpr(_) => ")".len(), // 必ずかっこ
+            Expr::Asterisk(asterisk) => asterisk.last_line_len(),
+            Expr::Cond(_) => "END".len(), // "END"
+            Expr::Unary(unary) => unary.last_line_len(),
+            Expr::ColumnList(cols) => cols.last_line_len(),
+            Expr::FunctionCall(func_call) => func_call.last_line_len(),
+            Expr::Boolean(_) => unimplemented!(),
         }
     }
 
@@ -897,10 +917,11 @@ impl Expr {
     fn is_multi_line(&self) -> bool {
         match self {
             Expr::Boolean(_) | Expr::SelectSub(_) | Expr::ParenExpr(_) | Expr::Cond(_) => true,
-            Expr::Primary(_) => false,
+            Expr::Primary(_) | Expr::Asterisk(_) => false,
             Expr::Aligned(aligned) => aligned.is_multi_line(),
             Expr::Unary(unary) => unary.is_multi_line(),
-            _ => todo!("is_multi_line: {:?}", self),
+            Expr::FunctionCall(func_call) => func_call.is_multi_line(),
+            Expr::ColumnList(_) => todo!(),
         }
     }
 
@@ -916,13 +937,14 @@ impl Expr {
             | Expr::Asterisk(_)
             | Expr::Cond(_)
             | Expr::Unary(_)
-            | Expr::ColumnList(_) => false,
+            | Expr::ColumnList(_)
+            | Expr::FunctionCall(_) => false,
             // _ => unimplemented!(),
         }
     }
 
     /// 自身をAlignedExprでラッピングする
-    fn to_aligned(&self) -> AlignedExpr {
+    pub(crate) fn to_aligned(&self) -> AlignedExpr {
         // TODO: cloneする必要があるか検討
         if let Expr::Aligned(aligned) = self {
             *aligned.clone()
@@ -964,24 +986,21 @@ impl AlignedExpr {
     }
 
     /// opのタブ文字換算の長さを返す
-    fn len_op(&self) -> Option<usize> {
-        self.op
-            .as_ref()
-            .map(|op| op.len() / CONFIG.lock().unwrap().tab_size + 1)
+    fn op_tab_num(&self) -> Option<usize> {
+        self.op.as_ref().map(|op| to_tab_num(op.len()))
     }
 
-    /// 最後の行の長さを返す
-    fn len(&self) -> usize {
+    /// 最後の行の文字列の長さを返す
+    fn last_line_len(&self) -> usize {
         match (&self.op, &self.rhs) {
-            (Some(_), Some(rhs)) => {
-                // 右辺が存在する場合、右辺が複数行かどうかで決まる
-                if !rhs.is_multi_line() {
-                    self.lhs.len() + self.len_op().unwrap() + rhs.len()
-                } else {
-                    rhs.len()
-                }
+            // 右辺があり、複数行ではない場合、(左辺'\t'演算子'\t'右辺) の長さを返す
+            (Some(_), Some(rhs)) if !rhs.is_multi_line() => {
+                (self.lhs.last_line_tab_num() + self.op_tab_num().unwrap()) * tab_size()
+                    + rhs.last_line_len()
             }
-            _ => self.lhs.len(),
+            // 右辺があり、複数行である場合、右辺の長さを返す
+            (Some(_), Some(rhs)) => rhs.last_line_len(),
+            _ => self.lhs.last_line_len(),
         }
     }
 
@@ -1040,9 +1059,9 @@ impl AlignedExpr {
     }
 
     // 演算子と右辺の式を追加する
-    pub(crate) fn add_rhs(&mut self, op: String, rhs: Expr) {
+    pub(crate) fn add_rhs(&mut self, op: impl Into<String>, rhs: Expr) {
         self.loc.append(rhs.loc());
-        self.op = Some(op);
+        self.op = Some(op.into());
         self.rhs = Some(rhs);
     }
 
@@ -1058,53 +1077,57 @@ impl AlignedExpr {
 
     // 演算子までの長さを返す
     // 左辺の長さを返せばよい
-    pub(crate) fn len_lhs(&self) -> usize {
+    pub(crate) fn lhs_tab_num(&self) -> usize {
         if self.lhs_trailing_comment.is_some() {
             // trailing commentが左辺にある場合、改行するため0
             0
         } else {
-            self.lhs.len()
+            self.lhs.last_line_tab_num()
         }
     }
 
     // 演算子から末尾コメントまでの長さを返す
-    pub(crate) fn len_to_comment(&self, max_len_to_op: Option<usize>) -> Option<usize> {
+    pub(crate) fn tab_num_to_comment(&self, max_tab_num_to_op: Option<usize>) -> Option<usize> {
         let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
 
-        match (max_len_to_op, &self.rhs) {
+        match (max_tab_num_to_op, &self.rhs) {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
-            (Some(_), Some(rhs)) => Some(rhs.len()),
+            (Some(_), Some(rhs)) => Some(rhs.last_line_tab_num()),
             // コメント以外に揃える対象があり、右辺を左辺で補完する場合、左辺の長さ
             (Some(_), None)
-                if CONFIG.lock().unwrap().complement_as && self.is_alias && !is_asterisk =>
+                if CONFIG.read().unwrap().complement_as && self.is_alias && !is_asterisk =>
             {
                 if let Expr::Primary(primary) = &self.lhs {
                     let str = primary.elements().first().unwrap();
                     let strs: Vec<&str> = str.split('.').collect();
-                    let right = strs.last().unwrap();
-                    let new_prim = PrimaryExpr::new(right.to_string(), primary.loc());
-                    Some(new_prim.len())
+                    let right = *strs.last().unwrap();
+                    let new_prim = PrimaryExpr::new(right, primary.loc());
+                    Some(new_prim.last_line_tab_num())
                 } else {
-                    Some(self.lhs.len())
+                    Some(self.lhs.last_line_tab_num())
                 }
             }
             // コメント以外に揃える対象があり、右辺を左辺を保管しない場合、0
             (Some(_), None) => Some(0),
             // そろえる対象がコメントだけであるとき、左辺の長さ
-            _ => Some(self.lhs.len()),
+            _ => Some(self.lhs.last_line_tab_num()),
         }
     }
 
     /// 演算子・コメントの縦ぞろえをせずにrenderする
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
-        let len_to_op = if self.has_rhs() {
-            Some(self.len_lhs())
+        let tab_num_to_op = if self.has_rhs() {
+            Some(self.lhs_tab_num())
         } else {
             None
         };
         self.render_align(
             0,
-            &AlignInfo::new(self.len_op(), len_to_op, self.len_to_comment(len_to_op)),
+            &AlignInfo::new(
+                self.op_tab_num(),
+                tab_num_to_op,
+                self.tab_num_to_comment(tab_num_to_op),
+            ),
             false,
         )
     }
@@ -1118,9 +1141,9 @@ impl AlignedExpr {
     ) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
-        let max_len_op = align_info.max_len_op;
-        let max_len_to_op = align_info.max_len_to_op;
-        let max_len_to_comment = align_info.max_len_to_comment;
+        let max_op_tab_num = align_info.max_op_tab_num;
+        let max_tab_num_to_op = align_info.max_tab_num_to_op;
+        let max_tab_num_to_comment = align_info.max_tab_num_to_comment;
 
         //左辺をrender
         let formatted = self.lhs.render()?;
@@ -1129,8 +1152,8 @@ impl AlignedExpr {
         let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
 
         // 演算子と右辺をrender
-        match (&self.op, max_len_op, max_len_to_op) {
-            (Some(op), Some(max_len_op), Some(max_len)) => {
+        match (&self.op, max_op_tab_num, max_tab_num_to_op) {
+            (Some(op), Some(max_op_tab_num), Some(max_tab_num)) => {
                 if let Some(comment_str) = &self.lhs_trailing_comment {
                     result.push('\t');
                     result.push_str(comment_str);
@@ -1140,7 +1163,7 @@ impl AlignedExpr {
                     result.extend(repeat_n('\t', depth));
                 }
 
-                let tab_num = max_len - self.len_lhs();
+                let tab_num = max_tab_num - self.lhs_tab_num();
                 result.extend(repeat_n('\t', tab_num));
 
                 result.push('\t');
@@ -1148,7 +1171,7 @@ impl AlignedExpr {
                 // from句以外はopを挿入
                 if !is_from_body {
                     result.push_str(op);
-                    let tab_num = max_len_op - self.len_op().unwrap(); // self.op != Noneならlen_op != None
+                    let tab_num = max_op_tab_num - self.op_tab_num().unwrap(); // self.op != Noneならop_tab_num != None
                     result.extend(repeat_n('\t', tab_num + 1));
                 }
 
@@ -1159,24 +1182,24 @@ impl AlignedExpr {
                 }
             }
             // AS補完する場合
-            (None, _, Some(max_len))
-                if CONFIG.lock().unwrap().complement_as && self.is_alias && !is_asterisk =>
+            (None, _, Some(max_tab_num))
+                if CONFIG.read().unwrap().complement_as && self.is_alias && !is_asterisk =>
             {
-                let tab_num = max_len - self.lhs.len();
+                let tab_num = max_tab_num - self.lhs.last_line_tab_num();
                 result.extend(repeat_n('\t', tab_num));
 
                 if !is_from_body {
                     result.push('\t');
                     result.push_str(&format_keyword("AS"));
                 }
-                // エイリアス補完はすべての演算子が"AS"であるかないため、すべての演算子の長さ(len_op())は等しい
+                // エイリアス補完はすべての演算子が"AS"であるかないため、すべての演算子の長さ(op_tab_num())は等しい
                 result.push('\t');
 
                 let formatted = if let Expr::Primary(primary) = &self.lhs {
                     let str = primary.elements().first().unwrap();
                     let strs: Vec<&str> = str.split('.').collect();
-                    let right = strs.last().unwrap();
-                    let new_prim = PrimaryExpr::new(right.to_string(), primary.loc());
+                    let right = *strs.last().unwrap();
+                    let new_prim = PrimaryExpr::new(right, primary.loc());
                     new_prim.render().unwrap()
                 } else {
                     self.lhs.render().unwrap()
@@ -1188,39 +1211,39 @@ impl AlignedExpr {
         }
 
         // 末尾コメントをrender
-        match (&self.trailing_comment, max_len_op, max_len_to_op) {
+        match (&self.trailing_comment, max_op_tab_num, max_tab_num_to_op) {
             // 末尾コメントが存在し、ほかのそろえる対象が存在する場合
-            (Some(comment), Some(max_len_op), Some(max_len)) => {
+            (Some(comment), Some(max_op_tab_num), Some(max_tab_num)) => {
                 let tab_num = if let Some(rhs) = &self.rhs {
                     // 右辺がある場合は、コメントまでの最長の長さ - 右辺の長さ
 
-                    // trailing_commentがある場合、max_len_to_commentは必ずSome(_)
-                    max_len_to_comment.unwrap() - rhs.len()
+                    // trailing_commentがある場合、max_tab_num_to_commentは必ずSome(_)
+                    max_tab_num_to_comment.unwrap() - rhs.last_line_tab_num()
                         + if rhs.is_multi_line() {
                             // 右辺が複数行である場合、最後の行に左辺と演算子はないため、その分タブで埋める
-                            max_len + max_len_op
+                            max_tab_num + max_op_tab_num
                         } else {
                             0
                         }
-                } else if CONFIG.lock().unwrap().complement_as && self.is_alias && !is_asterisk {
-                    let lhs_len = if let Expr::Primary(primary) = &self.lhs {
+                } else if CONFIG.read().unwrap().complement_as && self.is_alias && !is_asterisk {
+                    let lhs_tab_num = if let Expr::Primary(primary) = &self.lhs {
                         let str = primary.elements().first().unwrap();
                         let strs: Vec<&str> = str.split('.').collect();
-                        let right = strs.last().unwrap();
-                        let new_prim = PrimaryExpr::new(right.to_string(), primary.loc());
-                        new_prim.len()
+                        let right = *strs.last().unwrap();
+                        let new_prim = PrimaryExpr::new(right, primary.loc());
+                        new_prim.last_line_tab_num()
                     } else {
-                        self.lhs.len()
+                        self.lhs.last_line_tab_num()
                     };
                     // AS補完する場合には、右辺に左辺と同じ式を挿入する
-                    max_len_to_comment.unwrap() - lhs_len
+                    max_tab_num_to_comment.unwrap() - lhs_tab_num
                 } else {
                     // 右辺がない場合は
                     // コメントまでの最長 + 演算子の長さ + 左辺の最大長からの差分
-                    max_len_to_comment.unwrap()
-                        + (if is_from_body { 0 } else { max_len_op })
-                        + max_len
-                        - self.lhs.len()
+                    max_tab_num_to_comment.unwrap()
+                        + (if is_from_body { 0 } else { max_op_tab_num })
+                        + max_tab_num
+                        - self.lhs.last_line_tab_num()
                 };
 
                 result.extend(repeat_n('\t', tab_num));
@@ -1230,9 +1253,8 @@ impl AlignedExpr {
             }
             // 末尾コメントが存在し、ほかにはそろえる対象が存在しない場合
             (Some(comment), _, None) => {
-                // max_len_to_opがNoneであればそろえる対象はない
-                let tab_num = (max_len_to_comment.unwrap() - self.lhs.len())
-                    / CONFIG.lock().unwrap().tab_size;
+                // max_tab_num_to_opがNoneであればそろえる対象はない
+                let tab_num = max_tab_num_to_comment.unwrap() - self.lhs.last_line_tab_num();
 
                 result.extend(repeat_n('\t', tab_num));
 
@@ -1250,17 +1272,14 @@ impl AlignedExpr {
 pub(crate) struct PrimaryExpr {
     elements: Vec<String>,
     loc: Location,
-    len: usize,
     head_comment: Option<String>,
 }
 
 impl PrimaryExpr {
-    pub(crate) fn new(element: String, loc: Location) -> PrimaryExpr {
-        let len = element.len() / CONFIG.lock().unwrap().tab_size + 1;
+    pub(crate) fn new(element: impl Into<String>, loc: Location) -> PrimaryExpr {
         PrimaryExpr {
-            elements: vec![element],
+            elements: vec![element.into()],
             loc,
-            len,
             head_comment: None,
         }
     }
@@ -1269,8 +1288,33 @@ impl PrimaryExpr {
         self.loc.clone()
     }
 
-    pub(crate) fn len(&self) -> usize {
-        self.len
+    pub(crate) fn last_line_tab_num(&self) -> usize {
+        to_tab_num(self.last_line_len())
+    }
+
+    pub(crate) fn last_line_len(&self) -> usize {
+        // elementsをフォーマットするとき、各要素間に '\t' が挿入される
+        //
+        // e.g., TAB_SIZE = 4のとき
+        // TAB1.NUM: 8文字 = TAB_SIZE * 2 -> tabを足すと長さTAB_SIZE * 2 + TAB_SIZE
+        // TAB1.N  : 5文字 = TAB_SIZE * 1 + 1 -> tabを足すと長さTAB_SIZE + TAB_SIZE
+        // -- 例外 --
+        // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
+
+        self.elements
+            .iter()
+            .map(String::len)
+            .enumerate()
+            .fold(0, |sum, (i, len)| {
+                // 最初の要素には、バインドパラメータがつく可能性がある
+                let len = match (i, &self.head_comment) {
+                    (0, Some(head_comment)) => head_comment.len() + len,
+                    _ => len,
+                };
+
+                // フォーマット時に、各elemの間にタブ文字が挿入される
+                to_tab_num(sum) * tab_size() + len
+            })
     }
 
     pub(crate) fn elements(&self) -> &Vec<String> {
@@ -1283,7 +1327,7 @@ impl PrimaryExpr {
             mut loc,
         } = comment;
 
-        if CONFIG.lock().unwrap().trim_bind_param {
+        if CONFIG.read().unwrap().trim_bind_param {
             // 1. /*を削除
             // 2. *\を削除
             // 3. 前後の空白文字を削除
@@ -1300,34 +1344,15 @@ impl PrimaryExpr {
         self.head_comment = Some(comment.clone());
         loc.append(self.loc.clone());
         self.loc = loc;
-
-        let first_element_len = self.elements()[0].len() / CONFIG.lock().unwrap().tab_size + 1;
-        let head_comment_and_first_element_len =
-            (self.elements()[0].len() + comment.len()) / CONFIG.lock().unwrap().tab_size + 1;
-
-        self.len += head_comment_and_first_element_len - first_element_len;
     }
 
     /// elementsにelementを追加する
     pub(crate) fn add_element(&mut self, element: &str) {
-        // TAB_SIZEを1単位として長さを記録する
-        //
-        // contentを文字列にするとき、必ずその前に一つ'\t'が入る
-        // -> 各contentの長さは content + "\t"となる
-        //
-        // e.g., TAB_SIZE = 4のとき
-        // TAB1.NUM: 8文字 = TAB_SIZE * 2 -> tabを足すと長さTAB_SIZE * 2 + TAB_SIZE
-        // TAB1.N  : 5文字 = TAB_SIZE * 1 + 1 -> tabを足すと長さTAB_SIZE + TAB_SIZE
-        // -- 例外 --
-        // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
-        //
-        self.len += element.len() / CONFIG.lock().unwrap().tab_size + 1;
         self.elements.push(element.to_owned());
     }
 
     // PrimaryExprの結合
     pub(crate) fn append(&mut self, primary: PrimaryExpr) {
-        self.len += primary.len();
         self.elements.append(&mut primary.elements().clone())
     }
 
@@ -1376,10 +1401,10 @@ pub(crate) struct BooleanExpr {
 }
 
 impl BooleanExpr {
-    pub(crate) fn new(depth: usize, sep: &str) -> BooleanExpr {
+    pub(crate) fn new(depth: usize, sep: impl Into<String>) -> BooleanExpr {
         BooleanExpr {
             depth,
-            default_separator: sep.to_string(),
+            default_separator: sep.into(),
             contents: vec![] as Vec<(String, AlignedExpr, Vec<Comment>)>,
             loc: None,
             has_op: false,
@@ -1390,8 +1415,8 @@ impl BooleanExpr {
         self.loc.clone()
     }
 
-    pub(crate) fn set_default_separator(&mut self, sep: String) {
-        self.default_separator = sep;
+    pub(crate) fn set_default_separator(&mut self, sep: impl Into<String>) {
+        self.default_separator = sep.into();
     }
 
     pub(crate) fn add_comment_to_child(
@@ -1646,7 +1671,8 @@ pub(crate) struct AsteriskExpr {
 }
 
 impl AsteriskExpr {
-    pub(crate) fn new(content: String, loc: Location) -> AsteriskExpr {
+    pub(crate) fn new(content: impl Into<String>, loc: Location) -> AsteriskExpr {
+        let content = content.into();
         AsteriskExpr { content, loc }
     }
 
@@ -1654,8 +1680,8 @@ impl AsteriskExpr {
         self.loc.clone()
     }
 
-    fn len(&self) -> usize {
-        self.content.len() / CONFIG.lock().unwrap().tab_size + 1
+    fn last_line_len(&self) -> usize {
+        self.content.len()
     }
 
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
@@ -1755,18 +1781,15 @@ pub(crate) struct UnaryExpr {
     operator: String,
     operand: Expr,
     loc: Location,
-    len: usize,
 }
 
 impl UnaryExpr {
-    pub(crate) fn new(operator: &str, operand: Expr, loc: Location) -> UnaryExpr {
-        let operator_len = operator.len() / CONFIG.lock().unwrap().tab_size + 1;
-        let operand_len = operand.len();
+    pub(crate) fn new(operator: impl Into<String>, operand: Expr, loc: Location) -> UnaryExpr {
+        let operator = operator.into();
         UnaryExpr {
-            operator: operator.to_string(),
+            operator,
             operand,
             loc,
-            len: operator_len + operand_len,
         }
     }
 
@@ -1775,9 +1798,13 @@ impl UnaryExpr {
         self.loc.clone()
     }
 
-    /// タブ文字換算の長さを返す
-    fn len(&self) -> usize {
-        self.len
+    /// 演算子'\t'式 の最後の行の長さを返す
+    fn last_line_len(&self) -> usize {
+        if (&self.operand).is_multi_line() {
+            self.operand.last_line_len()
+        } else {
+            to_tab_num(self.operator.len()) * tab_size() + self.operand.last_line_len()
+        }
     }
 
     /// 複数行であるかどうかを返す
@@ -1794,5 +1821,109 @@ impl UnaryExpr {
         result.push_str(&self.operand.render()?);
 
         Ok(result)
+    }
+}
+
+/// 関数呼び出し
+#[derive(Debug, Clone)]
+pub(crate) struct FunctionCall {
+    name: String,
+    args: Vec<Expr>,
+    loc: Location,
+    depth: usize,
+}
+
+impl FunctionCall {
+    pub(crate) fn new(
+        name: impl Into<String>,
+        args: &[Expr],
+        loc: Location,
+        depth: usize,
+    ) -> FunctionCall {
+        let name = name.into();
+        FunctionCall {
+            name,
+            args: args.to_vec(),
+            loc,
+            depth,
+        }
+    }
+
+    /// 関数名'('引数')' の長さを返す
+    /// 引数が複数行になる場合、')'の長さになる
+    fn last_line_len(&self) -> usize {
+        if self.is_multi_line() {
+            ")".len()
+        } else {
+            let name_len = self.name.len();
+            let args_len = self.args.len();
+            let args_len: usize = self
+                .args
+                .iter()
+                .map(|e| e.last_line_len())
+                .fold(0, |sum, l| sum + l)
+                + ", ".len() * (args_len - 1);
+
+            let last_line_len = name_len + "(".len() + args_len + ")".len();
+
+            last_line_len
+        }
+    }
+
+    fn loc(&self) -> Location {
+        self.loc.clone()
+    }
+
+    fn is_multi_line(&self) -> bool {
+        self.args.iter().any(|expr| expr.is_multi_line())
+    }
+
+    fn render(&self) -> Result<String, UroboroSQLFmtError> {
+        let mut result = String::new();
+        let func_name = to_uppercase_identifier(&self.name);
+
+        result.push_str(&func_name);
+        result.push('(');
+
+        // arguments
+        let args = self
+            .args
+            .iter()
+            .map(|arg| arg.render())
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if self.is_multi_line() {
+            result.push('\n');
+
+            let mut is_first = true;
+            for arg in &args {
+                // 関数呼び出しの深さ + 1 段インデントを挿入する
+                result.extend(repeat_n('\t', self.depth + 1));
+                if is_first {
+                    is_first = false;
+                } else {
+                    result.push(',');
+                }
+                result.push('\t');
+                result.push_str(arg);
+                result.push('\n');
+            }
+            result.extend(repeat_n('\t', self.depth + 1));
+        } else {
+            result.push_str(&args.join(", "));
+        }
+
+        result.push(')');
+
+        Ok(result)
+    }
+}
+
+/// 引数をタブ数換算した値を返す
+fn to_tab_num(len: usize) -> usize {
+    if len == 0 {
+        0
+    } else {
+        len / tab_size() + 1
     }
 }

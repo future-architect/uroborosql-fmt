@@ -205,6 +205,14 @@ impl Formatter {
 
                     // cursorはselect_statementになっているはずである
                 }
+                "group_by_clause" => {
+                    let clauses = self.format_group_by_clause(cursor, src)?;
+                    clauses.into_iter().for_each(|c| statement.add_clause(c));
+                }
+                "order_by_clause" => {
+                    let clause = self.format_order_by_clause(cursor, src)?;
+                    statement.add_clause(clause);
+                }
                 COMMENT => {
                     statement.add_comment_to_child(Comment::new(cursor.node(), src))?;
                 }
@@ -236,12 +244,8 @@ impl Formatter {
         cursor.goto_first_child();
 
         // cursor -> SELECT
-        ensure_kind(cursor, "SELECT")?;
-        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
-
-        cursor.goto_next_sibling();
-        // cursor -> comments | select_clause_body
-
+        let mut clause = create_clause(cursor, src, "SELECT", self.state.depth)?;
+        // SQL_IDとコメントを消費
         self.consume_sql_id(cursor, src, &mut clause);
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
@@ -290,12 +294,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         // cursor -> FROM
-        ensure_kind(cursor, "FROM")?;
-        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
-
-        cursor.goto_next_sibling();
-        // cursor -> comments | _aliasable_expression
-
+        let mut clause = create_clause(cursor, src, "FROM", self.state.depth)?;
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         // cursor -> aliasable_expression
@@ -320,12 +319,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         // cursor -> WHERE
-        ensure_kind(cursor, "WHERE")?;
-        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
-
-        cursor.goto_next_sibling();
-        // cursor -> COMMENT | _expression
-
+        let mut clause = create_clause(cursor, src, "WHERE", self.state.depth)?;
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         // cursor -> _expression
@@ -343,6 +337,215 @@ impl Formatter {
         Ok(clause)
     }
 
+    /// GROPU BY句に対応するClauseを持つVecを返す。
+    /// HAVING句がある場合は、HAVING句に対応するClauseも含む。
+    fn format_group_by_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Vec<Clause>, UroboroSQLFmtError> {
+        let mut clauses: Vec<Clause> = vec![];
+
+        cursor.goto_first_child();
+
+        let mut clause = create_clause(cursor, src, "GROUP_BY", self.state.depth)?;
+        self.consume_comment_in_clause(cursor, src, &mut clause)?;
+
+        let mut sep_lines = SeparatedLines::new(self.state.depth, ",", false);
+        let first = self.format_group_expression(cursor, src)?;
+        sep_lines.add_expr(first.to_aligned());
+
+        // commaSep(group_expression)
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                "," => {
+                    continue;
+                }
+                "group_expression" => {
+                    let expr = self.format_group_expression(cursor, src)?;
+                    sep_lines.add_expr(expr.to_aligned());
+                }
+                COMMENT => {
+                    let comment = Comment::new(cursor.node(), src);
+                    sep_lines.add_comment_to_child(comment)?;
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+
+        clause.set_body(Body::SepLines(sep_lines));
+        clauses.push(clause);
+
+        if cursor.node().kind() == "having_clause" {
+            clauses.push(self.format_having_clause(cursor, src)?);
+        }
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "group_by_clause")?;
+
+        Ok(clauses)
+    }
+
+    fn format_group_expression(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+
+        let ret_value = match cursor.node().kind() {
+            "grouping_sets_clause" | "rollup_clause" | "cube_clause" => {
+                Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    "format_group_expression(): unimplemented node\nnode kind: {}\n{:?}",
+                    cursor.node().kind(),
+                    cursor.node().range()
+                )))
+            }
+            _ => self.format_expr(cursor, src),
+        };
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "group_expression")?;
+
+        ret_value
+    }
+
+    fn format_order_by_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+
+        // "ORDER_BY"
+        let mut clause = create_clause(cursor, src, "ORDER_BY", self.state.depth)?;
+        self.consume_comment_in_clause(cursor, src, &mut clause)?;
+
+        // order_expression は、左辺をカラム名、右辺をオプションとしており、演算子は常に空になる
+        // そのため、is_omit_op (第3引数)に true をセットする
+        let mut sep_lines = SeparatedLines::new(self.state.depth, ",", true);
+        let first = self.format_order_expression(cursor, src)?;
+        sep_lines.add_expr(first);
+
+        // commaSep(order_expression)
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                "order_expression" => {
+                    sep_lines.add_expr(self.format_order_expression(cursor, src)?)
+                }
+                "," => continue,
+                COMMENT => {
+                    let comment = Comment::new(cursor.node(), src);
+                    sep_lines.add_comment_to_child(comment)?;
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                        "format_order_by_clause(): unexpected node\nnode kind: {}\n{:?}",
+                        cursor.node().kind(),
+                        cursor.node().range()
+                    )))
+                }
+            }
+        }
+
+        let body = Body::SepLines(sep_lines);
+        clause.set_body(body);
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "order_by_clause")?;
+
+        Ok(clause)
+    }
+
+    /// ORDER BY句の本体に現れる式を AlignedExpr で返す
+    /// AlignedExpr の左辺にカラム名(式)、右辺にオプション (ASC, DESC, NULLS FIRST...)を持ち、演算子は常に空にする
+    fn format_order_expression(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+        let expr = self.format_expr(cursor, src)?;
+
+        cursor.goto_next_sibling();
+
+        let order_expr = self.format_order_option(cursor, src, expr)?;
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "order_expression")?;
+
+        Ok(order_expr)
+    }
+
+    /// order_expression のオプション部分を担当する
+    /// 引数に受け取った expr を左辺とする AlignedExpr を返す
+    fn format_order_option(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+        expr: Expr,
+    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
+        let mut order_expr = AlignedExpr::new(expr, false);
+
+        // オプション
+        let mut order = vec![];
+        // オプションの Location
+        let mut order_loc = vec![];
+
+        if matches!(cursor.node().kind(), "ASC" | "DESC") {
+            let asc_or_desc = cursor.node().utf8_text(src.as_bytes()).unwrap();
+            order.push(asc_or_desc);
+            order_loc.push(Location::new(cursor.node().range()));
+
+            cursor.goto_next_sibling();
+        }
+
+        if matches!(cursor.node().kind(), "NULLS") {
+            let nulls = cursor.node().utf8_text(src.as_bytes()).unwrap();
+            order.push(nulls);
+            order_loc.push(Location::new(cursor.node().range()));
+            cursor.goto_next_sibling();
+
+            let first_or_last = cursor.node().utf8_text(src.as_bytes()).unwrap();
+            order.push(first_or_last);
+            order_loc.push(Location::new(cursor.node().range()));
+            cursor.goto_next_sibling();
+        };
+
+        if !order.is_empty() {
+            // Location を計算
+            let mut loc = order_loc[0].clone();
+            order_loc.into_iter().for_each(|l| loc.append(l));
+
+            let order = PrimaryExpr::new(order.join(" "), loc);
+            order_expr.add_rhs("", Expr::Primary(Box::new(order)));
+        }
+
+        Ok(order_expr)
+    }
+
+    fn format_having_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+
+        let mut clause = create_clause(cursor, src, "HAVING", self.state.depth)?;
+        self.consume_comment_in_clause(cursor, src, &mut clause)?;
+
+        let expr = self.format_expr(cursor, src)?;
+
+        clause.set_body(Body::with_expr(expr, self.state.depth));
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "having_clause")?;
+
+        Ok(clause)
+    }
+
     /// DELETE文をStatement構造体で返す
     fn format_delete_stmt(
         &mut self,
@@ -352,11 +555,9 @@ impl Formatter {
         let mut statement = Statement::new(self.state.depth);
 
         cursor.goto_first_child();
-        // DELETE
-        ensure_kind(cursor, "DELETE")?;
-        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
-        cursor.goto_next_sibling();
 
+        // DELETE
+        let mut clause = create_clause(cursor, src, "DELETE", self.state.depth)?;
         self.consume_sql_id(cursor, src, &mut clause);
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
@@ -405,11 +606,7 @@ impl Formatter {
         let mut statement = Statement::new(self.state.depth);
         cursor.goto_first_child();
 
-        // キーワードの確認
-        ensure_kind(cursor, "UPDATE")?;
-        let mut update_clause = Clause::new(cursor.node(), src, self.state.depth);
-        cursor.goto_next_sibling();
-
+        let mut update_clause = create_clause(cursor, src, "UPDATE", self.state.depth)?;
         self.consume_sql_id(cursor, src, &mut update_clause);
         self.consume_comment_in_clause(cursor, src, &mut update_clause)?;
 
@@ -509,7 +706,7 @@ impl Formatter {
                 };
 
                 let mut aligned = AlignedExpr::new(lhs, false);
-                aligned.add_rhs("=".to_string(), rhs);
+                aligned.add_rhs("=", rhs);
 
                 Ok(aligned)
             } else {
@@ -563,7 +760,7 @@ impl Formatter {
         let expr = self.format_expr(cursor, src)?;
 
         let mut aligned = AlignedExpr::new(identifier, false);
-        aligned.add_rhs("=".to_string(), expr);
+        aligned.add_rhs("=", expr);
         cursor.goto_parent();
         ensure_kind(cursor, "assigment_expression")?;
 
@@ -584,19 +781,17 @@ impl Formatter {
         // 本体をINTOがキーワードであるClauseに追加することで実現する
 
         cursor.goto_first_child();
-        ensure_kind(cursor, "INSERT")?;
-        let mut insert = Clause::new(cursor.node(), src, self.state.depth);
-        cursor.goto_next_sibling();
 
+        let mut insert = create_clause(cursor, src, "INSERT", self.state.depth)?;
         // SQL_IDがあるかをチェック
         self.consume_sql_id(cursor, src, &mut insert);
+        self.consume_comment_in_clause(cursor, src, &mut insert)?;
 
         statement.add_clause(insert);
 
-        ensure_kind(cursor, "INTO")?;
-        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
+        let mut clause = create_clause(cursor, src, "INTO", self.state.depth)?;
+        self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
-        cursor.goto_next_sibling();
         // cursor -> table_name
 
         // table_nameは_aliasable_identifierであるが、CST上では_aliasable_expressionと等しいため、
@@ -935,7 +1130,7 @@ impl Formatter {
                 if Self::is_comp_op(op_str) {
                     // 比較演算子ならばそろえる必要があるため、AlignedExprとする
                     let mut aligned = AlignedExpr::new(lhs_expr, false);
-                    aligned.add_rhs(op_str.to_string(), rhs_expr);
+                    aligned.add_rhs(op_str, rhs_expr);
 
                     Expr::Aligned(Box::new(aligned))
                 } else {
@@ -977,7 +1172,7 @@ impl Formatter {
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
                 let primary = PrimaryExpr::new(
-                    cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                    cursor.node().utf8_text(src.as_bytes()).unwrap(),
                     Location::new(cursor.node().range()),
                 );
 
@@ -995,7 +1190,7 @@ impl Formatter {
             }
             "asterisk_expression" => {
                 let asterisk = AsteriskExpr::new(
-                    cursor.node().utf8_text(src.as_bytes()).unwrap().to_string(),
+                    cursor.node().utf8_text(src.as_bytes()).unwrap(),
                     Location::new(cursor.node().range()),
                 );
                 Expr::Asterisk(Box::new(asterisk))
@@ -1003,6 +1198,18 @@ impl Formatter {
             "conditional_expression" => {
                 let cond_expr = self.format_cond_expr(cursor, src)?;
                 Expr::Cond(Box::new(cond_expr))
+            }
+            "function_call" => {
+                let func_call = self.format_function_call(cursor, src)?;
+                Expr::FunctionCall(Box::new(func_call))
+            }
+            "TRUE" | "FALSE" | "NULL" => {
+                let primary = PrimaryExpr::new(
+                    cursor.node().utf8_text(src.as_bytes()).unwrap(),
+                    Location::new(cursor.node().range()),
+                );
+
+                Expr::Primary(Box::new(primary))
             }
             _ => {
                 // todo
@@ -1251,49 +1458,32 @@ impl Formatter {
 
             match kw_node.kind() {
                 "WHEN" => {
-                    let mut when_clause = Clause::new(cursor.node(), src, self.state.depth);
-
-                    cursor.goto_next_sibling();
-                    // cursor -> comment | _expression
-
+                    let mut when_clause = create_clause(cursor, src, "WHEN", self.state.depth)?;
                     self.consume_comment_in_clause(cursor, src, &mut when_clause)?;
 
                     // cursor -> _expression
-
                     let when_expr = self.format_expr(cursor, src)?;
                     when_clause.set_body(Body::with_expr(when_expr, self.state.depth));
 
                     cursor.goto_next_sibling();
-                    // cursor -> comment || "THEN"
-
+                    // cursor -> comment | "THEN"
                     self.consume_comment_in_clause(cursor, src, &mut when_clause)?;
 
                     // cursor -> "THEN"
-                    ensure_kind(cursor, "THEN")?;
-                    let mut then_clause = Clause::new(cursor.node(), src, self.state.depth);
-
-                    cursor.goto_next_sibling();
-                    // cursor -> comment || _expression
-
+                    let mut then_clause = create_clause(cursor, src, "THEN", self.state.depth)?;
                     self.consume_comment_in_clause(cursor, src, &mut then_clause)?;
 
                     // cursor -> _expression
-
                     let then_expr = self.format_expr(cursor, src)?;
                     then_clause.set_body(Body::with_expr(then_expr, self.state.depth));
 
                     cond_expr.add_when_then_clause(when_clause, then_clause);
                 }
                 "ELSE" => {
-                    let mut else_clause = Clause::new(cursor.node(), src, self.state.depth);
-
-                    cursor.goto_next_sibling();
-                    // cursor -> comment || _expression
-
+                    let mut else_clause = create_clause(cursor, src, "ELSE", self.state.depth)?;
                     self.consume_comment_in_clause(cursor, src, &mut else_clause)?;
 
                     // cursor -> _expression
-
                     let else_expr = self.format_expr(cursor, src)?;
                     else_clause.set_body(Body::with_expr(else_expr, self.state.depth));
 
@@ -1381,6 +1571,79 @@ impl Formatter {
         Ok(aligned)
     }
 
+    fn format_function_call(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<FunctionCall, UroboroSQLFmtError> {
+        let function_call_loc = Location::new(cursor.node().range());
+        cursor.goto_first_child();
+
+        // "LATERAL"は未対応
+
+        // 関数名
+        let function_name = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        cursor.goto_next_sibling();
+
+        ensure_kind(cursor, "(")?;
+        self.nest();
+        let args = self.format_function_call_arguments(cursor, src)?;
+        self.unnest();
+
+        // TODO: filter, over
+
+        let func_call =
+            FunctionCall::new(function_name, &args, function_call_loc, self.state.depth);
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "function_call")?;
+
+        Ok(func_call)
+    }
+
+    /// 関数呼び出しの引数をフォーマット
+    /// 引数の前に現れるALL/DISTINCTと、引数の後に現れるorder byには未対応
+    fn format_function_call_arguments(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Vec<Expr>, UroboroSQLFmtError> {
+        let mut args: Vec<Expr> = vec![];
+        loop {
+            if !cursor.goto_next_sibling() {
+                return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    "format_function_call_arguments(): expected '('\nnode kind{}\n{:?}",
+                    cursor.node().kind(),
+                    cursor.node().range()
+                )));
+            }
+
+            match cursor.node().kind() {
+                ")" => {
+                    break;
+                }
+                "," => {
+                    continue;
+                }
+                // TODO: 引数のORDER BY句、ALL、DISTINCTに対応する
+                "order_by_clause" | "ALL" | "DISTINCT" => {
+                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                        "format_function_call_arguments():  unimplemented node\nnode kind{}\n{:?}",
+                        cursor.node().kind(),
+                        cursor.node().range()
+                    )))
+                }
+                _ => {
+                    // TODO: 関数呼び出しの引数の部分に、コメントを許容できるようにする
+                    let expr = self.format_expr(cursor, src)?;
+                    args.push(expr);
+                }
+            }
+        }
+
+        Ok(args)
+    }
+
     /// _aliasable_expressionが,で区切られた構造をBodyにして返す
     fn format_comma_sep_alias(
         &mut self,
@@ -1461,4 +1724,33 @@ fn ensure_kind<'a>(
     } else {
         Ok(cursor)
     }
+}
+
+/// keyword の Clauseを生成し、cursor をキーワードのノードの次まで進める関数。
+/// cursor のノードがキーワードと異なっていたら UroboroSQLFmtErrorを返す。
+/// 複数の語からなるキーワードは '_' で区切られており、それぞれのノードは同じ kind を持っている。
+///
+/// 例: "ORDER_BY" は
+///     (content: "ORDER", kind: "ORDER_BY")
+///     (content: "BY", kind: "ORDER_BY")
+/// というノードになっている。
+fn create_clause(
+    cursor: &mut TreeCursor,
+    src: &str,
+    keyword: &str,
+    depth: usize,
+) -> Result<Clause, UroboroSQLFmtError> {
+    let splited: Vec<_> = keyword.split("_").collect();
+
+    ensure_kind(cursor, keyword)?;
+    let mut clause = Clause::new(cursor.node(), src, depth);
+    cursor.goto_next_sibling();
+
+    for _ in 1..splited.len() {
+        ensure_kind(cursor, keyword)?;
+        clause.extend_kw(cursor.node(), src);
+        cursor.goto_next_sibling();
+    }
+
+    Ok(clause)
 }
