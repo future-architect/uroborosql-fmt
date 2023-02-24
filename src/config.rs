@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::fmt::Debug;
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -9,7 +9,7 @@ use std::io::BufReader;
 use crate::cst::UroboroSQLFmtError;
 
 /// 設定を保持するグローバル変数
-pub(crate) static CONFIG: Lazy<Mutex<Config>> = Lazy::new(|| Mutex::new(Config::new()));
+pub(crate) static CONFIG: Lazy<RwLock<Config>> = Lazy::new(|| RwLock::new(Config::new()));
 
 /// debugのデフォルト値(false)
 fn default_debug() -> bool {
@@ -100,7 +100,7 @@ pub(crate) fn load_settings(path: &str) -> Result<(), UroboroSQLFmtError> {
     let config = serde_json::from_reader(reader)
         .map_err(|e| UroboroSQLFmtError::IllegalSettingFileError(e.to_string()))?;
 
-    *CONFIG.lock().unwrap() = config;
+    *CONFIG.write().unwrap() = config;
 
     Ok(())
 }
