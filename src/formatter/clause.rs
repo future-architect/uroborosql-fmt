@@ -1,7 +1,7 @@
 use tree_sitter::TreeCursor;
 
 use crate::cst::{
-    AlignedExpr, Body, Clause, Comment, Expr, Location, PrimaryExpr, SeparatedLines,
+    AlignedExpr, Body, Clause, Comment, Expr, ExprSeq, Location, PrimaryExpr, SeparatedLines,
     UroboroSQLFmtError,
 };
 
@@ -159,7 +159,7 @@ impl Formatter {
         clauses.push(clause);
 
         if cursor.node().kind() == "having_clause" {
-            clauses.push(self.format_having_clause(cursor, src)?);
+            clauses.push(self.format_simple_clause(cursor, src, "having_clause", "HAVING")?);
         }
 
         cursor.goto_parent();
@@ -306,26 +306,6 @@ impl Formatter {
         Ok(order_expr)
     }
 
-    pub(crate) fn format_having_clause(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<Clause, UroboroSQLFmtError> {
-        cursor.goto_first_child();
-
-        let mut clause = create_clause(cursor, src, "HAVING", self.state.depth)?;
-        self.consume_comment_in_clause(cursor, src, &mut clause)?;
-
-        let expr = self.format_expr(cursor, src)?;
-
-        clause.set_body(Body::with_expr(expr, self.state.depth));
-
-        cursor.goto_parent();
-        ensure_kind(cursor, "having_clause")?;
-
-        Ok(clause)
-    }
-
     /// SET句をClause構造体で返す
     /// UPDATE文、INSERT文で使用する
     pub(crate) fn format_set_clause(
@@ -427,25 +407,153 @@ impl Formatter {
         Ok(aligned)
     }
 
-    /// RETURNING句をClauseで返す
-    pub(crate) fn format_returning_clause(
+    /// frame_clause
+    pub(crate) fn format_frame_clause(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
         cursor.goto_first_child();
 
-        ensure_kind(cursor, "RETURNING")?;
-        let mut clause = Clause::new(cursor.node(), src, self.state.depth);
-        cursor.goto_next_sibling();
+        ensure_kind(cursor, "frame_kind")?;
+        cursor.goto_first_child();
+
+        // RANGE | ROWS | GROUPS
+        let mut clause = create_clause(cursor, src, cursor.node().kind(), self.state.depth)?;
+
+        cursor.goto_parent();
+
+        // frame_clause の各要素を Expr の Vec として持つ
+        let mut exprs: Vec<Expr> = vec![];
+
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                "BETWEEN" | "AND" => {
+                    let prim = PrimaryExpr::with_node(cursor.node(), src);
+                    exprs.push(Expr::Primary(Box::new(prim)));
+                }
+                "frame_bound" => {
+                    exprs.extend(self.format_frame_bound(cursor, src)?);
+                }
+                "frame_exclusion" => {
+                    cursor.goto_first_child();
+
+                    loop {
+                        if !matches!(
+                            cursor.node().kind(),
+                            "EXCLUDE_CULLENT_ROW"
+                                | "EXCLUDE_GROUP"
+                                | "EXCLUDE_TIES"
+                                | "EXCLUDE_NO_OTHERS"
+                        ) {
+                            return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                                "format_frame_clause(): expected EXCLUDE_{{CULLENT_ROW | GROUP | TIES | NO_OTHERS}}, but actual {}\n{:?}",
+                                cursor.node().kind(),
+                                cursor.node().range()
+                            )));
+                        }
+                        let prim = PrimaryExpr::with_node(cursor.node(), src);
+                        exprs.push(Expr::Primary(Box::new(prim)));
+
+                        if !cursor.goto_next_sibling() {
+                            break;
+                        }
+                    }
+                    cursor.goto_parent();
+                    ensure_kind(cursor, "frame_exclusion")?;
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                        "format_frame_clause(): unexpected node {:?}",
+                        cursor.node()
+                    )))
+                }
+            }
+        }
+
+        let n_expr = ExprSeq::new(&exprs);
+
+        // 単一行に描画するため、SingleLineを生成する
+        clause.set_body(Body::to_single_line(
+            Expr::ExprSeq(Box::new(n_expr)),
+            self.state.depth,
+        ));
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "frame_clause")?;
+
+        Ok(clause)
+    }
+
+    /// frame_clause の frame_bound 部分のフォーマット処理を行う。
+    fn format_frame_bound(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Vec<Expr>, UroboroSQLFmtError> {
+        let mut exprs = vec![];
+        cursor.goto_first_child();
+        match cursor.node().kind() {
+            "UNBOUNDED_PRECEDING" | "CURRENT_ROW" | "UNBOUNDED_FOLLOWING" => {
+                let prim = PrimaryExpr::with_node(cursor.node(), src);
+                exprs.push(Expr::Primary(Box::new(prim)));
+                cursor.goto_next_sibling();
+
+                let prim = PrimaryExpr::with_node(cursor.node(), src);
+                exprs.push(Expr::Primary(Box::new(prim)));
+                cursor.goto_next_sibling();
+            }
+            _ => {
+                let expr = self.format_expr(cursor, src)?;
+                exprs.push(expr);
+                cursor.goto_next_sibling();
+
+                if !matches!(cursor.node().kind(), "PRECEDING" | "FOLLOWING") {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                        r##"format_frame_clause(): exprect "PRECEDING" or "FOLLOWING", but actual  {:?}"##,
+                        cursor.node()
+                    )));
+                }
+
+                let prim = PrimaryExpr::with_node(cursor.node(), src);
+                exprs.push(Expr::Primary(Box::new(prim)));
+            }
+        }
+        cursor.goto_parent();
+        ensure_kind(cursor, "frame_bound")?;
+
+        Ok(exprs)
+    }
+
+    /// キーワードとカンマで区切られた式からなる、単純な句をフォーマットする。
+    /// 引数の `clause_node_name` に句のノード名を、`clause_keyword` にキーワードを与える。
+    /// 例えば、`format_simple_clause(cursor, src, "having_clause", "HAVING")` のように使用する。
+    ///
+    /// ```sql
+    /// KEYWORD
+    ///     EXPR1
+    /// ,   EXPR2
+    /// ...
+    /// ```
+    pub(crate) fn format_simple_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+        clause_node_name: &str,
+        clause_keyword: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+
+        let mut clause = create_clause(cursor, src, clause_keyword, self.state.depth)?;
+        self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         let body = self.format_comma_sep_alias(cursor, src, false)?;
 
         clause.set_body(body);
 
-        // cursorをfrom_clauseに戻す
+        // cursorを戻す
         cursor.goto_parent();
-        ensure_kind(cursor, "returning_clause")?;
+        ensure_kind(cursor, clause_node_name)?;
 
         Ok(clause)
     }

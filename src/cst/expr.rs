@@ -14,7 +14,7 @@ use self::{
     paren::ParenExpr, primary::PrimaryExpr,
 };
 
-use super::{Comment, Location, Statement, UroboroSQLFmtError};
+use super::{Comment, Location, Position, Statement, UroboroSQLFmtError};
 
 /// 式に対応した列挙体
 #[derive(Debug, Clone)]
@@ -39,6 +39,8 @@ pub(crate) enum Expr {
     ColumnList(Box<ColumnList>),
     /// 関数呼び出し
     FunctionCall(Box<FunctionCall>),
+    /// N個の式の連続
+    ExprSeq(Box<ExprSeq>),
 }
 
 impl Expr {
@@ -54,6 +56,7 @@ impl Expr {
             Expr::Unary(unary) => unary.loc(),
             Expr::ColumnList(cols) => cols.loc(),
             Expr::FunctionCall(func_call) => func_call.loc(),
+            Expr::ExprSeq(n_expr) => n_expr.loc(),
         }
     }
 
@@ -71,7 +74,8 @@ impl Expr {
             Expr::Cond(cond) => cond.render(),
             Expr::Unary(unary) => unary.render(),
             Expr::ColumnList(cols) => cols.render(0, false),
-            Expr::FunctionCall(func_call) => func_call.render(), // _ => unimplemented!(),
+            Expr::FunctionCall(func_call) => func_call.render(),
+            Expr::ExprSeq(n_expr) => n_expr.render(),
         }
     }
 
@@ -93,6 +97,7 @@ impl Expr {
             Expr::ColumnList(cols) => cols.last_line_len(),
             Expr::FunctionCall(func_call) => func_call.last_line_len(),
             Expr::Boolean(_) => unimplemented!(),
+            Expr::ExprSeq(n_expr) => n_expr.last_line_len(),
         }
     }
 
@@ -162,6 +167,7 @@ impl Expr {
             Expr::Unary(unary) => unary.is_multi_line(),
             Expr::FunctionCall(func_call) => func_call.is_multi_line(),
             Expr::ColumnList(_) => todo!(),
+            Expr::ExprSeq(n_expr) => n_expr.is_multi_line(),
         }
     }
 
@@ -178,7 +184,8 @@ impl Expr {
             | Expr::Cond(_)
             | Expr::Unary(_)
             | Expr::ColumnList(_)
-            | Expr::FunctionCall(_) => false,
+            | Expr::FunctionCall(_)
+            | Expr::ExprSeq(_) => false,
             // _ => unimplemented!(),
         }
     }
@@ -377,6 +384,62 @@ impl ColumnList {
 
         // 閉じかっこの後の改行は呼び出し元が担当
         Ok(result)
+    }
+}
+
+/// 複数の式をタブ文字で接続する式
+/// TODO: 途中にコメントが入る場合への対応
+#[derive(Debug, Clone)]
+pub(crate) struct ExprSeq {
+    exprs: Vec<Expr>,
+    loc: Location,
+}
+
+impl ExprSeq {
+    pub(crate) fn new(exprs: &[Expr]) -> ExprSeq {
+        let exprs = exprs.to_vec();
+        let loc = if let Some(first) = exprs.first() {
+            let mut loc = first.loc();
+            exprs.iter().for_each(|e| loc.append(e.loc()));
+            loc
+        } else {
+            Location {
+                start_position: Position { row: 0, col: 0 },
+                end_position: Position { row: 0, col: 0 },
+            }
+        };
+        ExprSeq { exprs, loc }
+    }
+
+    pub(crate) fn loc(&self) -> Location {
+        self.loc.clone()
+    }
+
+    pub(crate) fn is_multi_line(&self) -> bool {
+        self.exprs.iter().any(|e| e.is_multi_line())
+    }
+
+    /// 最後の行の文字列数を返す。
+    /// 複数行の式がある場合、最後に現れる複数行の式の長さと、それ以降の式の長さの和となる。
+    pub(crate) fn last_line_len(&self) -> usize {
+        let mut last_line_len = 0;
+        for e in self.exprs.iter() {
+            if e.is_multi_line() {
+                last_line_len = e.last_line_len();
+            } else {
+                last_line_len = to_tab_num(last_line_len) * tab_size() + e.last_line_len();
+            }
+        }
+        last_line_len
+    }
+
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+        Ok(self
+            .exprs
+            .iter()
+            .map(Expr::render)
+            .collect::<Result<Vec<_>, _>>()?
+            .join("\t"))
     }
 }
 

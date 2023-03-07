@@ -1,0 +1,57 @@
+SELECT
+	DEPNAME
+,	EMPNO
+,	SALARY
+,	RANK() OVER(
+		PARTITION BY
+			DEPNAME
+		ORDER BY
+			SALARY	DESC
+	)
+FROM
+	EMPSALARY
+;
+-- 0 argument over
+SELECT
+	SALARY				-- salary
+,	SUM(SALARY) OVER()	-- sum
+FROM
+	EMPSALARY
+;
+-- frame_clause
+SELECT
+	ORDER_ID	AS	ORDER_ID
+,	ITEM		AS	ITEM
+,	QTY			AS	QTY
+,	SUM(QTY) OVER(
+		ORDER BY
+			ORDER_ID
+		ROWS	BETWEEN	1	PRECEDING	AND	1	FOLLOWING
+	)			AS	RESULT
+FROM
+	TEST_ORDERS
+;
+SELECT
+	*
+,	STRING_AGG(V, ',') OVER(
+		PARTITION BY
+			COLOR
+		/*
+			partition by
+		*/
+		ORDER BY
+			V
+		/*
+			order by
+		*/
+		GROUPS	BETWEEN	UNBOUNDED	PRECEDING	AND	CURRENT	ROW	EXCLUDE	NO	OTHERS
+		/*
+			frame clause with exclusion
+		*/
+		/*
+			over clause
+		*/
+	)
+FROM
+	T
+;

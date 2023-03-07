@@ -8,14 +8,18 @@ pub(crate) enum Body {
     SepLines(SeparatedLines),
     BooleanExpr(BooleanExpr),
     Insert(Box<InsertBody>),
+    /// Clause と Expr を単一行で描画する際の Body
+    SingleLine(Box<SingleLine>),
 }
 
 impl Body {
+    /// 本体の要素が空である場合 None を返す
     pub(crate) fn loc(&self) -> Option<Location> {
         match self {
             Body::SepLines(sep_lines) => sep_lines.loc(),
             Body::BooleanExpr(bool_expr) => bool_expr.loc(),
             Body::Insert(insert) => Some(insert.loc()),
+            Body::SingleLine(expr_body) => Some(expr_body.loc()),
         }
     }
 
@@ -24,6 +28,7 @@ impl Body {
             Body::SepLines(sep_lines) => sep_lines.render(),
             Body::BooleanExpr(bool_expr) => bool_expr.render(),
             Body::Insert(insert) => insert.render(),
+            Body::SingleLine(single_line) => single_line.render(),
         }
     }
 
@@ -32,15 +37,10 @@ impl Body {
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
         match self {
-            Body::SepLines(sep_lines) => {
-                sep_lines.add_comment_to_child(comment)?;
-            }
-            Body::BooleanExpr(bool_expr) => {
-                bool_expr.add_comment_to_child(comment)?;
-            }
-            Body::Insert(insert) => {
-                insert.add_comment_to_child(comment)?;
-            }
+            Body::SepLines(sep_lines) => sep_lines.add_comment_to_child(comment)?,
+            Body::BooleanExpr(bool_expr) => bool_expr.add_comment_to_child(comment)?,
+            Body::Insert(insert) => insert.add_comment_to_child(comment)?,
+            Body::SingleLine(single_line) => single_line.add_comment_to_child(comment)?,
         }
 
         Ok(())
@@ -52,6 +52,7 @@ impl Body {
             Body::SepLines(sep_lines) => sep_lines.is_empty(),
             Body::BooleanExpr(bool_expr) => bool_expr.is_empty(),
             Body::Insert(_) => false, // InsertBodyには必ずtable_nameが含まれる
+            Body::SingleLine(_) => false,
         }
     }
 
@@ -71,6 +72,11 @@ impl Body {
             sep_lines.add_expr(expr.to_aligned());
             Body::SepLines(sep_lines)
         }
+    }
+
+    /// 単一行の Clause の Body となる SingleLineを生成する
+    pub(crate) fn to_single_line(expr: Expr, depth: usize) -> Body {
+        Body::SingleLine(Box::new(SingleLine::new(expr, depth)))
     }
 }
 
@@ -291,6 +297,69 @@ impl InsertBody {
         } else if self.3.is_some() {
             // VALUES句があるときは、改行を入れずに`VALUES`キーワードを出力している
             // そのため、VALUES句がない場合はここで改行
+            result.push('\n');
+        }
+
+        Ok(result)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SingleLine {
+    depth: usize,
+    expr: AlignedExpr,
+    loc: Location,
+    comments: Vec<Comment>,
+}
+
+impl SingleLine {
+    pub(crate) fn new(expr: Expr, depth: usize) -> SingleLine {
+        let expr = expr.to_aligned();
+        let loc = expr.loc();
+        SingleLine {
+            depth,
+            expr,
+            loc,
+            comments: vec![],
+        }
+    }
+
+    pub(crate) fn loc(&self) -> Location {
+        self.loc.clone()
+    }
+
+    pub(crate) fn add_comment_to_child(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
+        if comment.is_multi_line_comment() || !self.loc.is_same_line(&comment.loc()) {
+            // 行末コメントではない場合
+            self.comments.push(comment);
+        } else {
+            // 末尾の行の行末コメントである場合
+            // 最後の式にtrailing commentとして追加
+            self.expr.set_trailing_comment(comment)?;
+        }
+        Ok(())
+    }
+
+    /// 先頭にインデントを挿入せずに render する。
+    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+        let mut result = String::new();
+
+        // 式は一つのみであるため、縦ぞろえはしない
+        result.push_str(&self.expr.render()?);
+
+        result.push('\n');
+        if !self.comments.is_empty() {
+            result.push_str(
+                &self
+                    .comments
+                    .iter()
+                    .map(|c| c.render(self.depth))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .join("\n"),
+            );
             result.push('\n');
         }
 

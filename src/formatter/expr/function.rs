@@ -25,12 +25,18 @@ impl Formatter {
         ensure_kind(cursor, "(")?;
         self.nest();
         let args = self.format_function_call_arguments(cursor, src)?;
+        cursor.goto_next_sibling();
         self.unnest();
 
-        // TODO: filter, over
-
-        let func_call =
+        let mut func_call =
             FunctionCall::new(function_name, &args, function_call_loc, self.state.depth);
+
+        // TODO: filter
+
+        if cursor.node().kind() == "over_clause" {
+            func_call.set_over_window_definition(&self.format_over_clause(cursor, src)?);
+            cursor.goto_next_sibling();
+        }
 
         cursor.goto_parent();
         ensure_kind(cursor, "function_call")?;
@@ -79,5 +85,61 @@ impl Formatter {
         }
 
         Ok(args)
+    }
+
+    fn format_over_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Vec<Clause>, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+        // over
+        ensure_kind(cursor, "OVER")?;
+        cursor.goto_next_sibling();
+
+        // window_definition
+        ensure_kind(cursor, "window_definition")?;
+        cursor.goto_first_child();
+
+        ensure_kind(cursor, "(")?;
+        self.nest();
+        self.nest();
+        cursor.goto_next_sibling();
+
+        let mut clauses: Vec<Clause> = vec![];
+
+        if cursor.node().kind() == "partition_by_clause" {
+            let mut clause =
+                self.format_simple_clause(cursor, src, "partition_by_clause", "PARTITION_BY")?;
+            cursor.goto_next_sibling();
+            self.consume_comment_in_clause(cursor, src, &mut clause)?;
+            clauses.push(clause);
+        };
+
+        if cursor.node().kind() == "order_by_clause" {
+            let mut clause = self.format_order_by_clause(cursor, src)?;
+            cursor.goto_next_sibling();
+            self.consume_comment_in_clause(cursor, src, &mut clause)?;
+            clauses.push(clause);
+        }
+
+        if cursor.node().kind() == "frame_clause" {
+            let mut clause = self.format_frame_clause(cursor, src)?;
+            cursor.goto_next_sibling();
+            self.consume_comment_in_clause(cursor, src, &mut clause)?;
+            clauses.push(clause);
+        }
+
+        self.unnest();
+        self.unnest();
+        ensure_kind(cursor, ")")?;
+
+        cursor.goto_parent();
+        // cursor -> window_definition
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "over_clause")?;
+
+        Ok(clauses)
     }
 }

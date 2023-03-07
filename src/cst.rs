@@ -253,8 +253,10 @@ pub(crate) struct Clause {
     body: Option<Body>,
     loc: Location,
     depth: usize,
-    sql_id: Option<Comment>, // DML(, DDL)に付与できるsql_id
-    comments: Vec<Comment>,  // キーワードの下に現れるコメント
+    /// DML(, DDL)に付与できるsql_id
+    sql_id: Option<Comment>,
+    /// キーワードの下に現れるコメント
+    comments: Vec<Comment>,
 }
 
 impl Clause {
@@ -336,13 +338,19 @@ impl Clause {
             result.push_str(&comment.render(self.depth)?);
         }
 
-        if let Some(sl) = &self.body {
-            let formatted_body = sl.render()?;
-            result.push('\n');
-            result.push_str(&formatted_body);
-        } else {
-            result.push('\n');
-        };
+        match &self.body {
+            // 句と本体を同じ行に render する
+            Some(Body::SingleLine(single_line)) => {
+                result.push('\t');
+                result.push_str(&single_line.render()?);
+            }
+            Some(body) => {
+                let formatted_body = body.render()?;
+                result.push('\n');
+                result.push_str(&formatted_body);
+            }
+            None => result.push('\n'),
+        }
 
         Ok(result)
     }
