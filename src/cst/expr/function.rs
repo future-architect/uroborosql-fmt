@@ -1,6 +1,9 @@
 use itertools::repeat_n;
 
-use crate::cst::{Location, UroboroSQLFmtError};
+use crate::{
+    cst::{Clause, Location, UroboroSQLFmtError},
+    util::{format_keyword, tab_size, to_tab_num},
+};
 
 use super::{to_uppercase_identifier, Expr};
 
@@ -9,6 +12,9 @@ use super::{to_uppercase_identifier, Expr};
 pub(crate) struct FunctionCall {
     name: String,
     args: Vec<Expr>,
+    /// OVER句が持つ句 (PARTITION BY、ORDER BY)
+    /// None であるならば OVER句自体がない
+    over_window_definition: Option<Vec<Clause>>,
     loc: Location,
     depth: usize,
 }
@@ -24,15 +30,26 @@ impl FunctionCall {
         FunctionCall {
             name,
             args: args.to_vec(),
+            over_window_definition: None,
             loc,
             depth,
         }
     }
 
-    /// 関数名'('引数')' の長さを返す
-    /// 引数が複数行になる場合、')'の長さになる
+    /// window_definition の句をセットする。
+    pub(crate) fn set_over_window_definition(&mut self, clauses: &[Clause]) {
+        let mut window_definiton = vec![];
+        clauses.iter().for_each(|c| {
+            self.loc.append(c.loc());
+            window_definiton.push(c.clone())
+        });
+        self.over_window_definition = Some(window_definiton);
+    }
+
+    /// 関数呼び出しの最後の行の文字数を返す。
+    /// 引数が複数行に及ぶ場合や、OVER句の有無を考慮する。
     pub(crate) fn last_line_len(&self) -> usize {
-        if self.is_multi_line() {
+        let arguments_last_len = if self.has_multi_line_arguments() {
             ")".len()
         } else {
             let name_len = self.name.len();
@@ -41,6 +58,16 @@ impl FunctionCall {
                 + ", ".len() * (args_len - 1);
 
             name_len + "(".len() + args_len + ")".len()
+        };
+
+        match &self.over_window_definition {
+            // OVER句があるが内容が空である場合、最後の行は "...) OVER()"
+            Some(over) if over.is_empty() => {
+                to_tab_num(arguments_last_len) * tab_size() + " OVER()".len()
+            }
+            // OVER句がある場合、最後の行は ")"
+            Some(_) => ")".len(),
+            None => arguments_last_len,
         }
     }
 
@@ -48,8 +75,22 @@ impl FunctionCall {
         self.loc.clone()
     }
 
-    pub(crate) fn is_multi_line(&self) -> bool {
+    /// 引数が複数行になる場合 true を返す
+    fn has_multi_line_arguments(&self) -> bool {
         self.args.iter().any(|expr| expr.is_multi_line())
+    }
+
+    /// window定義を持つ場合 true を返す
+    fn has_window_definiton_in_over(&self) -> bool {
+        match &self.over_window_definition {
+            Some(clauses) => !clauses.is_empty(),
+            None => false,
+        }
+    }
+
+    /// 関数呼び出し式が複数行になる場合 true を返す
+    pub(crate) fn is_multi_line(&self) -> bool {
+        self.has_window_definiton_in_over() || self.has_multi_line_arguments()
     }
 
     /// 関数呼び出しをフォーマットした文字列を返す。
@@ -68,7 +109,7 @@ impl FunctionCall {
             .map(|arg| arg.render())
             .collect::<Result<Vec<_>, _>>()?;
 
-        if self.is_multi_line() {
+        if self.has_multi_line_arguments() {
             result.push('\n');
 
             let mut is_first = true;
@@ -90,6 +131,28 @@ impl FunctionCall {
         }
 
         result.push(')');
+
+        // OVER句
+        if let Some(clauses) = &self.over_window_definition {
+            result.push(' ');
+            result.push_str(&format_keyword("OVER"));
+            result.push('(');
+
+            if !clauses.is_empty() {
+                result.push('\n');
+
+                let clauses = clauses
+                    .iter()
+                    .map(Clause::render)
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                clauses.iter().for_each(|c| result.push_str(&c));
+
+                result.extend(repeat_n('\t', self.depth + 1));
+            }
+
+            result.push(')');
+        }
 
         Ok(result)
     }

@@ -126,7 +126,8 @@ impl Formatter {
                     statement.add_clause(clause);
                 }
                 "returning_clause" => {
-                    let clause = self.format_returning_clause(cursor, src)?;
+                    let clause =
+                        self.format_simple_clause(cursor, src, "returning_clause", "RETURNING")?;
                     statement.add_clause(clause);
                 }
                 COMMENT => {
@@ -195,7 +196,8 @@ impl Formatter {
                     statement.add_clause(clause);
                 }
                 "returning_clause" => {
-                    let clause = self.format_returning_clause(cursor, src)?;
+                    let clause =
+                        self.format_simple_clause(cursor, src, "returning_clause", "RETURNING")?;
                     statement.add_clause(clause);
                 }
                 COMMENT => {
@@ -339,7 +341,8 @@ impl Formatter {
 
         // returning句
         if cursor.node().kind() == "returning_clause" {
-            let returning = self.format_returning_clause(cursor, src)?;
+            let returning =
+                self.format_simple_clause(cursor, src, "returning_clause", "RETURNING")?;
             statement.add_clause(returning);
             cursor.goto_next_sibling();
         }

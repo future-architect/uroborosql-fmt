@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use tree_sitter::Node;
 
 use crate::{
     config::CONFIG,
@@ -8,7 +9,8 @@ use crate::{
 
 use super::to_uppercase_identifier;
 
-/// 識別子、リテラルを表す
+/// 識別子、リテラルを表す。
+/// また、キーワードは式ではないが、便宜上PrimaryExprとして扱う場合がある。
 #[derive(Clone, Debug)]
 pub(crate) struct PrimaryExpr {
     elements: Vec<String>,
@@ -24,6 +26,15 @@ impl PrimaryExpr {
             loc,
             head_comment: None,
         }
+    }
+
+    /// tree_sitter::Node から PrimaryExpr を生成する。
+    /// キーワードをPrimaryExprとして扱う場合があり、その際はこのメソッドで生成する。
+    pub(crate) fn with_node(node: Node, src: &str) -> PrimaryExpr {
+        PrimaryExpr::new(
+            node.utf8_text(src.as_bytes()).unwrap(),
+            Location::new(node.range()),
+        )
     }
 
     pub(crate) fn loc(&self) -> Location {

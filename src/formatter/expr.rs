@@ -75,12 +75,10 @@ impl Formatter {
                     // cursor -> identifier
 
                     // identifier
-                    if cursor.node().kind() == "identifier" {
-                        let rhs = cursor.node().utf8_text(src.as_bytes()).unwrap();
-                        let rhs_expr =
-                            PrimaryExpr::new(rhs.to_string(), Location::new(cursor.node().range()));
-                        aligned.add_rhs(format_keyword("AS"), Expr::Primary(Box::new(rhs_expr)));
-                    }
+                    ensure_kind(cursor, "identifier")?;
+
+                    let rhs_expr = PrimaryExpr::with_node(cursor.node(), src);
+                    aligned.add_rhs(format_keyword("AS"), Expr::Primary(Box::new(rhs_expr)));
                 }
 
                 // cursorをalias に戻す
@@ -156,11 +154,7 @@ impl Formatter {
             "boolean_expression" => self.format_bool_expr(cursor, src)?,
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
-                let primary = PrimaryExpr::new(
-                    cursor.node().utf8_text(src.as_bytes()).unwrap(),
-                    Location::new(cursor.node().range()),
-                );
-
+                let primary = PrimaryExpr::with_node(cursor.node(), src);
                 Expr::Primary(Box::new(primary))
             }
             "select_subexpression" => {
@@ -189,11 +183,7 @@ impl Formatter {
                 Expr::FunctionCall(Box::new(func_call))
             }
             "TRUE" | "FALSE" | "NULL" => {
-                let primary = PrimaryExpr::new(
-                    cursor.node().utf8_text(src.as_bytes()).unwrap(),
-                    Location::new(cursor.node().range()),
-                );
-
+                let primary = PrimaryExpr::with_node(cursor.node(), src);
                 Expr::Primary(Box::new(primary))
             }
             _ => {
