@@ -35,6 +35,7 @@ impl Formatter {
             match kw_node.kind() {
                 "WHEN" => {
                     let mut when_clause = create_clause(cursor, src, "WHEN", self.state.depth)?;
+                    cursor.goto_next_sibling();
                     self.consume_comment_in_clause(cursor, src, &mut when_clause)?;
 
                     // cursor -> _expression
@@ -47,6 +48,7 @@ impl Formatter {
 
                     // cursor -> "THEN"
                     let mut then_clause = create_clause(cursor, src, "THEN", self.state.depth)?;
+                    cursor.goto_next_sibling();
                     self.consume_comment_in_clause(cursor, src, &mut then_clause)?;
 
                     // cursor -> _expression
@@ -57,6 +59,7 @@ impl Formatter {
                 }
                 "ELSE" => {
                     let mut else_clause = create_clause(cursor, src, "ELSE", self.state.depth)?;
+                    cursor.goto_next_sibling();
                     self.consume_comment_in_clause(cursor, src, &mut else_clause)?;
 
                     // cursor -> _expression

@@ -43,6 +43,10 @@ impl Formatter {
                     let clause = self.format_where_clause(cursor, src)?;
                     statement.add_clause(clause);
                 }
+                "join_clause" => {
+                    let clauses = self.format_join_cluase(cursor, src)?;
+                    clauses.into_iter().for_each(|c| statement.add_clause(c));
+                }
                 "UNION" | "INTERSECT" | "EXCEPT" => {
                     // 演算(e.g., "INTERSECT", "UNION ALL", ...)
                     let mut combining_clause = Clause::new(cursor.node(), src, self.state.depth);
@@ -110,6 +114,7 @@ impl Formatter {
 
         // DELETE
         let mut clause = create_clause(cursor, src, "DELETE", self.state.depth)?;
+        cursor.goto_next_sibling();
         self.consume_sql_id(cursor, src, &mut clause);
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
@@ -160,6 +165,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         let mut update_clause = create_clause(cursor, src, "UPDATE", self.state.depth)?;
+        cursor.goto_next_sibling();
         self.consume_sql_id(cursor, src, &mut update_clause);
         self.consume_comment_in_clause(cursor, src, &mut update_clause)?;
 
@@ -236,6 +242,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         let mut insert = create_clause(cursor, src, "INSERT", self.state.depth)?;
+        cursor.goto_next_sibling();
         // SQL_IDがあるかをチェック
         self.consume_sql_id(cursor, src, &mut insert);
         self.consume_comment_in_clause(cursor, src, &mut insert)?;
@@ -243,6 +250,7 @@ impl Formatter {
         statement.add_clause(insert);
 
         let mut clause = create_clause(cursor, src, "INTO", self.state.depth)?;
+        cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         // cursor -> table_name
