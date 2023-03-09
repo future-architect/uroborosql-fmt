@@ -25,6 +25,8 @@ impl Formatter {
 
         // cursor -> SELECT
         let mut clause = create_clause(cursor, src, "SELECT", self.state.depth)?;
+        cursor.goto_next_sibling();
+
         // SQL_IDとコメントを消費
         self.consume_sql_id(cursor, src, &mut clause);
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
@@ -75,6 +77,7 @@ impl Formatter {
 
         // cursor -> FROM
         let mut clause = create_clause(cursor, src, "FROM", self.state.depth)?;
+        cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         // cursor -> aliasable_expression
@@ -100,6 +103,7 @@ impl Formatter {
 
         // cursor -> WHERE
         let mut clause = create_clause(cursor, src, "WHERE", self.state.depth)?;
+        cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         // cursor -> _expression
@@ -117,6 +121,117 @@ impl Formatter {
         Ok(clause)
     }
 
+    /// JOIN句
+    pub(crate) fn format_join_cluase(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Vec<Clause>, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+
+        // 返り値用
+        let mut clauses: Vec<Clause> = vec![];
+
+        let mut join_clause = if cursor.node().kind() == "join_type" {
+            let mut clause = self.format_join_type(cursor, src)?;
+            cursor.goto_next_sibling();
+
+            ensure_kind(cursor, "JOIN")?;
+            clause.extend_kw(cursor.node(), src);
+
+            clause
+        } else {
+            create_clause(cursor, src, "JOIN", self.state.depth)?
+        };
+        cursor.goto_next_sibling();
+
+        let table = self.format_aliasable_expr(cursor, src)?;
+        let body = Body::with_expr(Expr::Aligned(Box::new(table)), self.state.depth);
+        join_clause.set_body(body);
+
+        clauses.push(join_clause);
+
+        // join_condition
+        if cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                "ON" => {
+                    let mut on_clause = create_clause(cursor, src, "ON", self.state.depth)?;
+                    cursor.goto_next_sibling();
+
+                    let expr = self.format_expr(cursor, src)?;
+                    let body = Body::with_expr(expr, self.state.depth);
+                    on_clause.set_body(body);
+
+                    clauses.push(on_clause);
+                }
+                "USING" => {
+                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                        "format_join_clause(): JOIN USING(...) is unimplemented\n{:?}",
+                        cursor.node().range(),
+                    )))
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                        "format_join_clause(): unimplemented node {}\n{:?}",
+                        cursor.node().kind(),
+                        cursor.node().range(),
+                    )))
+                }
+            }
+        }
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "join_clause")?;
+
+        Ok(clauses)
+    }
+
+    /// join_type の Clause を返す。
+    /// join_type は次のように定義されている。
+    ///
+    /// ```text
+    /// join_type :=
+    ///     CROSS
+    ///     | [NATURAL] [INNER | [LEFT | RIGHT | FULL] OUTER]
+    /// ```
+    ///
+    /// 例えば、JOIN句 が ".. NATURAL LEFT OUTER JOIN ..." であった場合、join_type は "NATURAL LEFT OUTER"
+    /// であり、これをキーワードとする Clause を返す。
+    fn format_join_type(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+
+        if !matches!(
+            cursor.node().kind(),
+            "CROSS" | "NATURAL" | "INNER" | "OUTER" | "LEFT" | "RIGHT" | "FULL"
+        ) {
+            return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                "format_join_type(): expected node is NATURAL, INNER, OUTER, LEFT , RIGHT or FULL, but actual {}\n{:?}", cursor.node().kind(), cursor.node().range()
+            )));
+        }
+
+        let mut clause = create_clause(cursor, src, cursor.node().kind(), self.state.depth)?;
+
+        while cursor.goto_next_sibling() {
+            if !matches!(
+                cursor.node().kind(),
+                "INNER" | "OUTER" | "LEFT" | "RIGHT" | "FULL"
+            ) {
+                return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                        "format_join_type(): expected node is INNER, OUTER, LEFT, RIGHT or FULL, but actual {}\n{:?}", cursor.node().kind(), cursor.node().range()
+                    )));
+            }
+            clause.extend_kw(cursor.node(), src);
+        }
+        cursor.goto_parent();
+        ensure_kind(cursor, "join_type")?;
+
+        Ok(clause)
+    }
+
     /// GROPU BY句に対応するClauseを持つVecを返す。
     /// HAVING句がある場合は、HAVING句に対応するClauseも含む。
     pub(crate) fn format_group_by_clause(
@@ -129,6 +244,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         let mut clause = create_clause(cursor, src, "GROUP_BY", self.state.depth)?;
+        cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         let mut sep_lines = SeparatedLines::new(self.state.depth, ",", false);
@@ -201,6 +317,7 @@ impl Formatter {
 
         // "ORDER_BY"
         let mut clause = create_clause(cursor, src, "ORDER_BY", self.state.depth)?;
+        cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         // order_expression は、左辺をカラム名、右辺をオプションとしており、演算子は常に空になる
@@ -545,6 +662,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         let mut clause = create_clause(cursor, src, clause_keyword, self.state.depth)?;
+        cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         let body = self.format_comma_sep_alias(cursor, src, false)?;

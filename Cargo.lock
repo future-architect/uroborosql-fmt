@@ -166,7 +166,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-sql"
 version = "0.0.2"
-source = "git+https://gitlab.nasa.future.co.jp/oss-incubate/rust-sql-formatter/tree-sitter-sql#7811d4a9fd5590060d53ab44c5805489ef718a5c"
+source = "git+https://gitlab.nasa.future.co.jp/oss-incubate/rust-sql-formatter/tree-sitter-sql#7bd308ec380f9bcf9ea1dccd776cc87e6cda4b03"
 dependencies = [
  "cc",
  "tree-sitter",

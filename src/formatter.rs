@@ -220,7 +220,8 @@ fn ensure_kind<'a>(
     }
 }
 
-/// keyword の Clauseを生成し、cursor をキーワードのノードの次まで進める関数。
+/// keyword の Clauseを生成する関数。
+/// 呼び出し後の cursor はキーワードの最後のノードを指す。
 /// cursor のノードがキーワードと異なっていたら UroboroSQLFmtErrorを返す。
 /// 複数の語からなるキーワードは '_' で区切られており、それぞれのノードは同じ kind を持っている。
 ///
@@ -236,12 +237,11 @@ fn create_clause(
 ) -> Result<Clause, UroboroSQLFmtError> {
     ensure_kind(cursor, keyword)?;
     let mut clause = Clause::new(cursor.node(), src, depth);
-    cursor.goto_next_sibling();
 
     for _ in 1..keyword.split('_').count() {
+        cursor.goto_next_sibling();
         ensure_kind(cursor, keyword)?;
         clause.extend_kw(cursor.node(), src);
-        cursor.goto_next_sibling();
     }
 
     Ok(clause)
