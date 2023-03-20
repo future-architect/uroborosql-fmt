@@ -149,41 +149,56 @@ impl Formatter {
         let body = Body::with_expr(Expr::Aligned(Box::new(table)), self.state.depth);
         join_clause.set_body(body);
 
+        if cursor.goto_next_sibling() {
+            self.consume_comment_in_clause(cursor, src, &mut join_clause)?;
+        }
+
         clauses.push(join_clause);
 
         // join_condition
-        if cursor.goto_next_sibling() {
-            match cursor.node().kind() {
-                "ON" => {
-                    let mut on_clause = create_clause(cursor, src, "ON", self.state.depth)?;
-                    cursor.goto_next_sibling();
-
-                    let expr = self.format_expr(cursor, src)?;
-                    let body = Body::with_expr(expr, self.state.depth);
-                    on_clause.set_body(body);
-
-                    clauses.push(on_clause);
-                }
-                "USING" => {
-                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
-                        "format_join_clause(): JOIN USING(...) is unimplemented\n{:?}",
-                        cursor.node().range(),
-                    )))
-                }
-                _ => {
-                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
-                        "format_join_clause(): unimplemented node {}\n{:?}",
-                        cursor.node().kind(),
-                        cursor.node().range(),
-                    )))
-                }
-            }
+        // コメント処理を行ったため、join_condition (ON ..., USING( ... ))がある場合、カーソルはjoin_conditionを指している。
+        if cursor.node().kind() == "ON" || cursor.node().kind() == "USING" {
+            clauses.push(self.format_join_condition(cursor, src)?);
         }
 
         cursor.goto_parent();
         ensure_kind(cursor, "join_clause")?;
 
         Ok(clauses)
+    }
+
+    /// join_condition のフォーマットを行い、Clause で返す。
+    /// join_condition は `ON ...` または `USING( ... )` である。
+    fn format_join_condition(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        match cursor.node().kind() {
+            "ON" => {
+                let mut on_clause = create_clause(cursor, src, "ON", self.state.depth)?;
+                cursor.goto_next_sibling();
+
+                let expr = self.format_expr(cursor, src)?;
+                let body = Body::with_expr(expr, self.state.depth);
+                on_clause.set_body(body);
+
+                Ok(on_clause)
+            }
+            "USING" => {
+                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    "format_join_clause(): JOIN USING(...) is unimplemented\n{:?}",
+                    cursor.node().range(),
+                )))
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    "format_join_condition(): unimplemented node {}\n{:?}",
+                    cursor.node().kind(),
+                    cursor.node().range(),
+                )))
+            }
+        }
     }
 
     /// join_type の Clause を返す。

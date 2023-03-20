@@ -9,8 +9,12 @@ and
 (test2 = 2 --comment2
 and 
 test3 = 3 --comment3
+/* multi comment3 */
 ) --comment4
 or (((test4 = 4 --comment5
+/*
+multi comment5
+*/
 or test5 = 5 --comment6
 )) 
 ) --comment7

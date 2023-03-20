@@ -45,20 +45,44 @@ impl ParenExpr {
         self.loc = loc;
     }
 
-    // 開きかっこから最初の式の間に現れるコメントを追加する
+    /// 開きかっこから最初の式の間に現れるコメントを追加する
     pub(crate) fn add_start_comment(&mut self, comment: Comment) {
         self.start_comments.push(comment);
     }
 
-    // 最後の式から閉じかっこの間に現れるコメントを追加する
+    /// 最後の式から閉じかっこの間に現れるコメントを追加する
     pub(crate) fn add_end_comment(&mut self, comment: Comment) {
         self.end_comments.push(comment);
+    }
+
+    /// 複数行であるかどうかを bool 型の値で返す。
+    /// くくられている式が複数行であるか、かっこ式にコメントが含まれる場合は true、そうでなければ false を返す。
+    pub(crate) fn is_multi_line(&self) -> bool {
+        self.expr.is_multi_line()
+            || !self.start_comments.is_empty()
+            || !self.end_comments.is_empty()
+    }
+
+    /// 自身を描画した際に、最後の行のインデントからの文字列の長さを返す。
+    /// 複数行である場合は、必ず閉じかっこのみとなる。
+    /// 引数 acc には、自身の左側に存在する式のインデントからの長さを与える。
+    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
+        if self.is_multi_line() {
+            ")".len()
+        } else {
+            let current_len = acc + "(".len();
+            self.expr.last_line_len_from_left(current_len) + ")".len()
+        }
     }
 
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
-        result.push_str("(\n");
+        result.push('(');
+
+        if self.is_multi_line() {
+            result.push('\n');
+        }
 
         for comment in &self.start_comments {
             result.push_str(&comment.render(self.depth)?);
@@ -69,14 +93,14 @@ impl ParenExpr {
 
         // bodyでない式は、最初の行のインデントを自分で行わない。
         // そのため、かっこのインデントの深さ + 1個分インデントを挿入する。
-        if !self.expr.is_body() {
+        if self.is_multi_line() && !self.expr.is_body() {
             result.extend(repeat_n('\t', self.depth + 1));
         }
 
         result.push_str(&formatted);
 
         // インデント同様に、最後の改行も行う
-        if !self.expr.is_body() {
+        if self.is_multi_line() && !self.expr.is_body() {
             result.push('\n');
         }
 
@@ -85,7 +109,10 @@ impl ParenExpr {
             result.push('\n');
         }
 
-        result.extend(repeat_n('\t', self.depth));
+        if self.is_multi_line() {
+            result.extend(repeat_n('\t', self.depth));
+        }
+
         result.push(')');
         Ok(result)
     }

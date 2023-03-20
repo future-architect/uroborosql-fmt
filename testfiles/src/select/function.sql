@@ -7,3 +7,4 @@ SELECT city, max(temp_lo)
     FROM weather
     GROUP BY city
     HAVING max(temp_lo) < 40;
+SELECT func((a - b), c)

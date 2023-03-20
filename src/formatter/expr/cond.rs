@@ -1,6 +1,6 @@
 use tree_sitter::TreeCursor;
 
-use crate::formatter::{create_clause, ensure_kind, Formatter};
+use crate::formatter::{create_clause, ensure_kind, Formatter, COMMENT};
 
 use crate::cst::*;
 
@@ -71,20 +71,33 @@ impl Formatter {
                 "END" => {
                     break;
                 }
-                "comment" => {
-                    let comment_node = cursor.node();
-                    let comment = Comment::new(comment_node, src);
+                COMMENT => {
+                    // カーソルを覚えておく
+                    let current_cursor = cursor.clone();
 
-                    // 行末コメントを式にセットする
-                    cond_expr.set_trailing_comment(comment)?;
+                    // バインドパラメータである可能性があるため、調べる
+                    match self.format_expr(cursor, src) {
+                        Ok(expr) => {
+                            // expression としてフォーマットできた場合は、単純CASE式としてセットする
+                            // ここで、単純CASE式の条件以外の部分では、バインドパラメータを持つ式は現れないことを想定する。
+                            cond_expr.set_expr(expr);
+                        }
+                        Err(_) => {
+                            // バインドパラメータではない場合、カーソルを戻してからコメントをセットする。
+                            *cursor = current_cursor;
+                            let comment_node = cursor.node();
+                            let comment = Comment::new(comment_node, src);
+
+                            // 行末コメントを式にセットする
+                            cond_expr.set_trailing_comment(comment)?;
+                        }
+                    }
                 }
                 _ => {
-                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
-                "format_cond_expr(): unimplemented conditional_expression\nnode_kind: {}\n{:#?}",
-                cursor.node().kind(),
-                cursor.node().range(),
-            )))
-                } // error
+                    // 単純CASE式とみなす
+                    let expr = self.format_expr(cursor, src)?;
+                    cond_expr.set_expr(expr);
+                }
             }
         }
 

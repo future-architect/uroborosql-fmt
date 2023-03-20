@@ -78,6 +78,17 @@ impl Body {
     pub(crate) fn to_single_line(expr: Expr, depth: usize) -> Body {
         Body::SingleLine(Box::new(SingleLine::new(expr, depth)))
     }
+
+    /// Body に含まれる最初の式にバインドパラメータをセットすることを試みる。
+    /// セットできた場合は true を返し、できなかった場合は false を返す。
+    pub(crate) fn try_set_head_comment(&mut self, comment: Comment) -> bool {
+        match self {
+            Body::SepLines(sep_lines) => sep_lines.try_set_head_comment(comment),
+            Body::BooleanExpr(boolean) => boolean.try_set_head_comment(comment),
+            Body::Insert(_) => false,
+            Body::SingleLine(single_line) => single_line.try_set_head_comment(comment),
+        }
+    }
 }
 
 /// 句の本体にあたる部分である、あるseparatorで区切られた式の集まり
@@ -162,6 +173,16 @@ impl SeparatedLines {
 
     fn is_empty(&self) -> bool {
         self.contents.is_empty()
+    }
+
+    fn try_set_head_comment(&mut self, comment: Comment) -> bool {
+        if let Some((first_aligned, _)) = self.contents.first_mut() {
+            if comment.loc().is_next_to(&first_aligned.loc()) {
+                first_aligned.set_head_comment(comment);
+                return true;
+            }
+        }
+        false
     }
 
     /// AS句で揃えたものを返す
@@ -341,6 +362,15 @@ impl SingleLine {
             self.expr.set_trailing_comment(comment)?;
         }
         Ok(())
+    }
+
+    fn try_set_head_comment(&mut self, comment: Comment) -> bool {
+        if comment.loc().is_next_to(&self.expr.loc()) {
+            self.expr.set_head_comment(comment);
+            true
+        } else {
+            false
+        }
     }
 
     /// 先頭にインデントを挿入せずに render する。

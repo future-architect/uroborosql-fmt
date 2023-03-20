@@ -36,21 +36,13 @@ SELECT
 ,	STRING_AGG(V, ',') OVER(
 		PARTITION BY
 			COLOR
-		/*
-			partition by
-		*/
+		/* partition by */
 		ORDER BY
 			V
-		/*
-			order by
-		*/
+		/* order by */
 		GROUPS	BETWEEN	UNBOUNDED	PRECEDING	AND	CURRENT	ROW	EXCLUDE	NO	OTHERS
-		/*
-			frame clause with exclusion
-		*/
-		/*
-			over clause
-		*/
+		/* frame clause with exclusion */
+		/* over clause */
 	)
 FROM
 	T

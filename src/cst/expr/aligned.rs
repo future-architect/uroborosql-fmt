@@ -116,12 +116,14 @@ impl AlignedExpr {
         self.op.as_ref().map(|op| to_tab_num(op.len()))
     }
 
-    /// 最後の行の文字列の長さを返す
-    pub(crate) fn last_line_len(&self) -> usize {
+    /// 最後の行のインデントからの文字列の長さを返す。
+    /// 引数 acc には、自身の左側の式についてインデントからの文字列の長さを与える。
+    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
         match (&self.op, &self.rhs) {
             // 右辺があり、複数行ではない場合、(左辺'\t'演算子'\t'右辺) の長さを返す
             (Some(_), Some(rhs)) if !rhs.is_multi_line() => {
-                (self.lhs.last_line_tab_num() + self.op_tab_num().unwrap()) * tab_size()
+                (self.lhs.last_line_tab_num_from_left(acc) + self.op_tab_num().unwrap())
+                    * tab_size()
                     + rhs.last_line_len()
             }
             // 右辺があり、複数行である場合、右辺の長さを返す
@@ -215,28 +217,23 @@ impl AlignedExpr {
     // 演算子から末尾コメントまでの長さを返す
     pub(crate) fn tab_num_to_comment(&self, max_tab_num_to_op: Option<usize>) -> Option<usize> {
         let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
+        let complement_as = CONFIG.read().unwrap().complement_as && self.is_alias && !is_asterisk;
 
         match (max_tab_num_to_op, &self.rhs) {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.last_line_tab_num()),
             // コメント以外に揃える対象があり、右辺を左辺で補完する場合、左辺の長さ
-            (Some(_), None)
-                if CONFIG.read().unwrap().complement_as && self.is_alias && !is_asterisk =>
-            {
-                if let Expr::Primary(primary) = &self.lhs {
-                    let str = primary.elements().first().unwrap();
-                    let strs: Vec<&str> = str.split('.').collect();
-                    let right = *strs.last().unwrap();
-                    let new_prim = PrimaryExpr::new(right, primary.loc());
-                    Some(new_prim.last_line_tab_num())
+            (Some(_), None) if complement_as => {
+                if let Some(alias_name) = create_alias(&self.lhs) {
+                    Some(alias_name.last_line_tab_num())
                 } else {
-                    Some(self.lhs.last_line_tab_num())
+                    Some(0)
                 }
             }
             // コメント以外に揃える対象があり、右辺を左辺を保管しない場合、0
             (Some(_), None) => Some(0),
             // そろえる対象がコメントだけであるとき、左辺の長さ
-            _ => Some(self.lhs.last_line_tab_num()),
+            (_, _) => Some(self.lhs.last_line_tab_num()),
         }
     }
 
@@ -276,6 +273,7 @@ impl AlignedExpr {
         result.push_str(&formatted);
 
         let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
+        let complement_as = CONFIG.read().unwrap().complement_as && self.is_alias && !is_asterisk;
 
         // 演算子と右辺をrender
         match (&self.op, max_op_tab_num, max_tab_num_to_op) {
@@ -308,30 +306,24 @@ impl AlignedExpr {
                 }
             }
             // AS補完する場合
-            (None, _, Some(max_tab_num))
-                if CONFIG.read().unwrap().complement_as && self.is_alias && !is_asterisk =>
-            {
-                let tab_num = max_tab_num - self.lhs.last_line_tab_num();
+            (None, _, Some(max_tab_num)) if complement_as => {
+                // 演算子までのタブ文字を挿入する
+                let tab_num = max_tab_num - &self.lhs_tab_num();
                 result.extend(repeat_n('\t', tab_num));
 
-                if !is_from_body {
+                if let Some(alias_name) = create_alias(&self.lhs) {
+                    // エイリアス名を生成できた場合に、エイリアス補完を行う
+
+                    if !is_from_body {
+                        result.push('\t');
+                        result.push_str(&format_keyword("AS"));
+                    }
+
+                    // エイリアス補完はすべての演算子が"AS"であるかないため、すべての演算子の長さ(op_tab_num())は等しい
                     result.push('\t');
-                    result.push_str(&format_keyword("AS"));
+
+                    result.push_str(&alias_name.render()?);
                 }
-                // エイリアス補完はすべての演算子が"AS"であるかないため、すべての演算子の長さ(op_tab_num())は等しい
-                result.push('\t');
-
-                let formatted = if let Expr::Primary(primary) = &self.lhs {
-                    let str = primary.elements().first().unwrap();
-                    let strs: Vec<&str> = str.split('.').collect();
-                    let right = *strs.last().unwrap();
-                    let new_prim = PrimaryExpr::new(right, primary.loc());
-                    new_prim.render().unwrap()
-                } else {
-                    self.lhs.render().unwrap()
-                };
-
-                result.push_str(&formatted);
             }
             (_, _, _) => (),
         }
@@ -351,18 +343,14 @@ impl AlignedExpr {
                         } else {
                             0
                         }
-                } else if CONFIG.read().unwrap().complement_as && self.is_alias && !is_asterisk {
-                    let lhs_tab_num = if let Expr::Primary(primary) = &self.lhs {
-                        let str = primary.elements().first().unwrap();
-                        let strs: Vec<&str> = str.split('.').collect();
-                        let right = *strs.last().unwrap();
-                        let new_prim = PrimaryExpr::new(right, primary.loc());
-                        new_prim.last_line_tab_num()
+                } else if complement_as {
+                    // エイリアス補完を行う場合は、コメントまでの最長の長さ - エイリアス名の長さ
+                    // エイリアス名を求められない場合は、演算子とコメントまでの最大長分タブを挿入する
+                    if let Some(alias_name) = create_alias(&self.lhs) {
+                        max_tab_num_to_comment.unwrap() - alias_name.last_line_tab_num()
                     } else {
-                        self.lhs.last_line_tab_num()
-                    };
-                    // AS補完する場合には、右辺に左辺と同じ式を挿入する
-                    max_tab_num_to_comment.unwrap() - lhs_tab_num
+                        max_tab_num_to_comment.unwrap() + max_op_tab_num
+                    }
                 } else {
                     // 右辺がない場合は
                     // コメントまでの最長 + 演算子の長さ + 左辺の最大長からの差分
@@ -391,5 +379,24 @@ impl AlignedExpr {
         }
 
         Ok(result)
+    }
+}
+
+/// エイリアス補完を行う際に、エイリアス名を持つ Expr を生成する関数。
+/// 引数に元の式を与える。その式がPrimary式ではない場合は、エイリアス名を生成できないので、None を返す。
+fn create_alias(lhs: &Expr) -> Option<Expr> {
+    // 補完用に生成した式には、仮に左辺の位置情報を入れておく
+    let loc = lhs.loc();
+
+    match lhs {
+        Expr::Primary(prim) if prim.is_identifier() => {
+            // Primary式であり、さらに識別子である場合のみ、エイリアス名を作成する
+            let element = prim.element();
+            element
+                .split(".")
+                .last()
+                .and_then(|s| Some(Expr::Primary(Box::new(PrimaryExpr::new(s, loc)))))
+        }
+        _ => None,
     }
 }

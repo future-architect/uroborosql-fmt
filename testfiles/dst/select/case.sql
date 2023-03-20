@@ -22,3 +22,38 @@ FROM
 	RISYU
 WHERE
 	SUBJECT_NUMBER	=	'005'
+;
+SELECT
+	ID	AS	ID
+,	CASE
+		GRADE
+		WHEN
+			'A'
+		THEN
+			5
+		WHEN
+			'B'
+		THEN
+			4
+		WHEN
+			'C'
+		THEN
+			3
+		ELSE
+			0
+	END	AS	P
+FROM
+	RISYU
+WHERE
+	SUBJECT_NUMBER	=	'006'
+;
+SELECT
+	CASE
+		/*param*/A	-- simple case cond
+		WHEN
+			/*a*/'a'
+		THEN
+			'A'
+		ELSE
+			'B'
+	END

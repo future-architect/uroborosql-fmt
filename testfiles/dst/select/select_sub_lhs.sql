@@ -2,19 +2,13 @@ SELECT
 	A
 ,	(
 		-- comm1
-		/*
-			comm2
-		*/
+		/* comm2 */
 		SELECT
 			Z
-		/*
-			z
-		*/
+		/* z */
 		FROM
 			TAB2
-		/*
-			comm3
-		*/
+		/* comm3*/
 	)
 FROM
 	LONGLONGTABLE	L

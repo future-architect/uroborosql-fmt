@@ -155,15 +155,22 @@ impl Formatter {
         while cursor.goto_next_sibling() {
             // cursor -> , または comment または _aliasable_expression
             match cursor.node().kind() {
-                "," => continue,
-                COMMENT => {
-                    separated_lines.add_comment_to_child(Comment::new(cursor.node(), src))?;
-                }
-                _ => {
+                "," => {
+                    cursor.goto_next_sibling();
                     // _aliasable_expression
                     let alias = self.format_aliasable_expr(cursor, src)?;
                     separated_lines.add_expr(alias);
                 }
+                COMMENT => {
+                    separated_lines.add_comment_to_child(Comment::new(cursor.node(), src))?;
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                                    "format_comma_sep_alias(): expected node is ',' or COMMENT, but actual {}\n{:?}",
+                                    cursor.node().kind(),
+                                    cursor.node().range()
+                                )))
+                },
             }
         }
 

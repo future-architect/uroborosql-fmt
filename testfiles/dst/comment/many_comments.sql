@@ -1,11 +1,7 @@
-/*
-	discription
-*/
+/* discription */
 -- hoge
 SELECT /* _SQL_ID_ */
-/*
-	select body
-*/
+/* select body */
 -- comment
 	STD.ID		AS	ID		-- identifier
 ,	STD.GRADE	AS	GRADE
@@ -15,28 +11,16 @@ SELECT /* _SQL_ID_ */
 	hoge hoge fuga
 */
 ,	STD.AGE		AS	AGE		-- age
-/*
-	end select
-*/
+/* end select */
 -- from clause
 FROM
-/*
-	table lists
-*/
+/* table lists */
 	STUDENT		STD
 ,	PROFESSOR	PROF
 WHERE
-/*
-	conditions
-*/
+/* conditions */
 	ID	=	5	-- check id
-/*
-	others
-*/
+/* others */
 AND	AGE	>=	18
-/*
-	hoge
-*/
-/*
-	huga
-*/
+/* hoge */
+/* huga */
