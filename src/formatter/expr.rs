@@ -27,6 +27,14 @@ impl Formatter {
         //        ["AS"]
         //        identifier
 
+        let comment = if cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            cursor.goto_next_sibling();
+            Some(comment)
+        } else {
+            None
+        };
+
         match cursor.node().kind() {
             "alias" => {
                 // cursor -> alias
@@ -35,7 +43,18 @@ impl Formatter {
                 // cursor -> _expression
 
                 // _expression
-                let lhs_expr = self.format_expr(cursor, src)?;
+                let mut lhs_expr = self.format_expr(cursor, src)?;
+                if let Some(comment) = comment {
+                    if comment.loc().is_next_to(&lhs_expr.loc()) {
+                        lhs_expr.set_head_comment(comment);
+                    } else {
+                        // エイリアス式の直前のコメントは、バインドパラメータしか考慮していない
+                        return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                            "format_aliasable_expr(): unexpected comment\n{:?}",
+                            cursor.node().range()
+                        )));
+                    }
+                }
 
                 let mut aligned = AlignedExpr::new(lhs_expr, true);
 

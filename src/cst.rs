@@ -31,6 +31,8 @@ pub enum UroboroSQLFmtError {
     IllegalSettingFileError(String),
     #[error("Rendering Error: {0}")]
     RenderingError(String),
+    #[error("Runtime Error: {0}")]
+    RuntimeError(String),
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +78,11 @@ impl Location {
     // Locationのappend
     pub(crate) fn append(&mut self, loc: Location) {
         self.end_position = loc.end_position;
+    }
+
+    /// Location が単一行を意味していれば true を返す
+    pub(crate) fn is_single_line(&self) -> bool {
+        self.start_position.row == self.end_position.row
     }
 }
 
@@ -212,7 +219,13 @@ impl Comment {
     fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
-        if self.text.starts_with("/*") {
+        // インデントの挿入
+        result.extend(repeat_n('\t', depth));
+
+        if self.is_multi_line_comment() && self.loc.is_single_line() {
+            // 元のコメントが、単一行のブロックコメントである場合、そのまま描画する
+            result.push_str(&self.text);
+        } else if self.is_multi_line_comment() {
             // multi lines
 
             let lines: Vec<_> = self
@@ -223,7 +236,6 @@ impl Comment {
                 .split('\n')
                 .collect();
 
-            result.extend(repeat_n('\t', depth));
             result.push_str("/*\n");
 
             for line in &lines {
@@ -237,8 +249,6 @@ impl Comment {
             result.push_str("*/");
         } else {
             // single line
-
-            result.extend(repeat_n('\t', depth));
             result.push_str(&self.text);
         }
 
@@ -293,6 +303,8 @@ impl Clause {
             self.loc.append(body.loc().unwrap());
             self.body = Some(body);
         }
+
+        self.fix_head_comment();
     }
 
     /// Clauseにコメントを追加する
@@ -317,6 +329,25 @@ impl Clause {
 
     pub(crate) fn set_sql_id(&mut self, comment: Comment) {
         self.sql_id = Some(comment);
+    }
+
+    /// Clause のキーワードの下のコメントとして追加したコメントが、
+    /// バインドパラメータである場合に、式のバインドパラメータとして付け替えるメソッド。
+    ///
+    /// 例えば、以下のSQLの `/*param*/` は Clause のコメントとして扱われているため、
+    /// 式 `1` のバインドパラメータとして付け替える必要がある。
+    /// ```sql
+    /// THEN
+    ///     /*param*/1
+    /// ```
+    pub(crate) fn fix_head_comment(&mut self) {
+        if let Some(last_comment) = self.comments.last() {
+            if let Some(body) = &mut self.body {
+                if body.try_set_head_comment(last_comment.clone()) {
+                    self.comments.pop();
+                }
+            }
+        }
     }
 
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {

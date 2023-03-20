@@ -84,20 +84,32 @@ impl Expr {
         to_tab_num(self.last_line_len())
     }
 
-    /// 最後の行の文字列の長さを返す
+    /// 自身を描画した際に、最後の行のインデントからの長さを、タブ文字換算した結果を返す。
+    /// 引数 acc には、自身の左側に存在する式のインデントからの文字列の長さを与える。
+    fn last_line_tab_num_from_left(&self, acc: usize) -> usize {
+        to_tab_num(self.last_line_len_from_left(acc))
+    }
+
+    /// 自身がインデントの直後に描画される際の、最後の行の文字列の長さを返す
     fn last_line_len(&self) -> usize {
+        self.last_line_len_from_left(0)
+    }
+
+    /// 自身を描画した際に、最後の行のインデントからの文字列の長さを返す。
+    /// 引数 acc には、自身の左側に存在する式のインデントからの長さを与える。
+    fn last_line_len_from_left(&self, acc: usize) -> usize {
         match self {
-            Expr::Primary(primary) => primary.last_line_len(),
-            Expr::Aligned(aligned) => aligned.last_line_len(),
+            Expr::Primary(primary) => primary.last_line_len_from_left(acc),
+            Expr::Aligned(aligned) => aligned.last_line_len_from_left(acc),
             Expr::SelectSub(_) => ")".len(), // 必ずかっこ
-            Expr::ParenExpr(_) => ")".len(), // 必ずかっこ
+            Expr::ParenExpr(paren) => paren.last_line_len_from_left(acc),
             Expr::Asterisk(asterisk) => asterisk.last_line_len(),
             Expr::Cond(_) => "END".len(), // "END"
-            Expr::Unary(unary) => unary.last_line_len(),
+            Expr::Unary(unary) => unary.last_line_len_from_left(acc),
             Expr::ColumnList(cols) => cols.last_line_len(),
-            Expr::FunctionCall(func_call) => func_call.last_line_len(),
+            Expr::FunctionCall(func_call) => func_call.last_line_len_from_left(acc),
             Expr::Boolean(_) => unimplemented!(),
-            Expr::ExprSeq(n_expr) => n_expr.last_line_len(),
+            Expr::ExprSeq(n_expr) => n_expr.last_line_len_from_left(acc),
         }
     }
 
@@ -161,10 +173,11 @@ impl Expr {
     /// 複数行の式であればtrueを返す
     fn is_multi_line(&self) -> bool {
         match self {
-            Expr::Boolean(_) | Expr::SelectSub(_) | Expr::ParenExpr(_) | Expr::Cond(_) => true,
+            Expr::Boolean(_) | Expr::SelectSub(_) | Expr::Cond(_) => true,
             Expr::Primary(_) | Expr::Asterisk(_) => false,
             Expr::Aligned(aligned) => aligned.is_multi_line(),
             Expr::Unary(unary) => unary.is_multi_line(),
+            Expr::ParenExpr(paren) => paren.is_multi_line(),
             Expr::FunctionCall(func_call) => func_call.is_multi_line(),
             Expr::ColumnList(_) => todo!(),
             Expr::ExprSeq(n_expr) => n_expr.is_multi_line(),
@@ -289,12 +302,14 @@ impl UnaryExpr {
         self.loc.clone()
     }
 
-    /// 演算子'\t'式 の最後の行の長さを返す
-    fn last_line_len(&self) -> usize {
+    /// 自身を描画した際に、最後の行のインデントからの文字列の長さを返す。
+    /// 引数 acc には、自身の左側に存在する式のインデントからの長さを与える。
+    fn last_line_len_from_left(&self, acc: usize) -> usize {
         if self.operand.is_multi_line() {
             self.operand.last_line_len()
         } else {
-            to_tab_num(self.operator.len()) * tab_size() + self.operand.last_line_len()
+            // ( 演算子 '\t' 式 ) の長さ
+            to_tab_num(self.operator.len() + acc) * tab_size() + self.operand.last_line_len()
         }
     }
 
@@ -419,18 +434,22 @@ impl ExprSeq {
         self.exprs.iter().any(|e| e.is_multi_line())
     }
 
-    /// 最後の行の文字列数を返す。
+    /// 自身を描画した際に、最後の行のインデントからの文字列の長さを返す。
     /// 複数行の式がある場合、最後に現れる複数行の式の長さと、それ以降の式の長さの和となる。
-    pub(crate) fn last_line_len(&self) -> usize {
-        let mut last_line_len = 0;
-        for e in self.exprs.iter() {
+    /// 引数 acc には、自身の左側に存在する式のインデントからの長さを与える。
+    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
+        let mut current_len = acc;
+        for (i, e) in self.exprs.iter().enumerate() {
             if e.is_multi_line() {
-                last_line_len = e.last_line_len();
+                current_len = e.last_line_len()
+            } else if i == 0 {
+                current_len = e.last_line_len_from_left(current_len)
             } else {
-                last_line_len = to_tab_num(last_line_len) * tab_size() + e.last_line_len();
+                let tab_num = to_tab_num(current_len);
+                current_len = e.last_line_len_from_left(tab_num * tab_size())
             }
         }
-        last_line_len
+        current_len
     }
 
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
@@ -447,12 +466,17 @@ impl ExprSeq {
 /// 引数の文字列が識別子であれば大文字にして返す
 /// 文字列リテラル、または引用符付き識別子である場合はそのままの文字列を返す
 pub(crate) fn to_uppercase_identifier(elem: &str) -> String {
-    if (elem.starts_with('"') && elem.ends_with('"'))
-        || (elem.starts_with('\'') && elem.ends_with('\''))
-        || (elem.starts_with('$') && elem.ends_with('$'))
-    {
+    if is_quoted(elem) {
         elem.to_owned()
     } else {
         elem.to_uppercase()
     }
+}
+
+/// 引数の文字列が引用符付けされているかどうかを判定する。
+/// 引用符付けされている場合は true を返す。
+pub(crate) fn is_quoted(elem: &str) -> bool {
+    (elem.starts_with('"') && elem.ends_with('"'))
+        || (elem.starts_with('\'') && elem.ends_with('\''))
+        || (elem.starts_with('$') && elem.ends_with('$'))
 }

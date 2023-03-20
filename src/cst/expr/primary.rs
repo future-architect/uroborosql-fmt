@@ -1,19 +1,17 @@
-use itertools::Itertools;
 use tree_sitter::Node;
 
 use crate::{
     config::CONFIG,
     cst::{Comment, Location, UroboroSQLFmtError},
-    util::{tab_size, to_tab_num},
 };
 
-use super::to_uppercase_identifier;
+use super::{is_quoted, to_uppercase_identifier};
 
 /// 識別子、リテラルを表す。
 /// また、キーワードは式ではないが、便宜上PrimaryExprとして扱う場合がある。
 #[derive(Clone, Debug)]
 pub(crate) struct PrimaryExpr {
-    elements: Vec<String>,
+    element: String,
     loc: Location,
     /// バインドパラメータ
     head_comment: Option<String>,
@@ -22,7 +20,7 @@ pub(crate) struct PrimaryExpr {
 impl PrimaryExpr {
     pub(crate) fn new(element: impl Into<String>, loc: Location) -> PrimaryExpr {
         PrimaryExpr {
-            elements: vec![element.into()],
+            element: element.into(),
             loc,
             head_comment: None,
         }
@@ -41,37 +39,27 @@ impl PrimaryExpr {
         self.loc.clone()
     }
 
-    pub(crate) fn last_line_tab_num(&self) -> usize {
-        to_tab_num(self.last_line_len())
+    /// 自身を描画した際に、最後の行のインデントからの文字列の長さを返す。
+    /// 引数 acc には、自身の左側に存在する式のインデントからの長さを与える。
+    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
+        let mut len = self.element.len() + acc;
+        if let Some(head_comment) = &self.head_comment {
+            len += head_comment.len()
+        };
+        len
     }
 
-    pub(crate) fn last_line_len(&self) -> usize {
-        // elementsをフォーマットするとき、各要素間に '\t' が挿入される
-        //
-        // e.g., TAB_SIZE = 4のとき
-        // TAB1.NUM: 8文字 = TAB_SIZE * 2 -> tabを足すと長さTAB_SIZE * 2 + TAB_SIZE
-        // TAB1.N  : 5文字 = TAB_SIZE * 1 + 1 -> tabを足すと長さTAB_SIZE + TAB_SIZE
-        // -- 例外 --
-        // N       : 1文字 < TAB_SIZE -> tabを入れると長さTAB_SIZE
-
-        self.elements
-            .iter()
-            .map(String::len)
-            .enumerate()
-            .fold(0, |sum, (i, len)| {
-                // 最初の要素には、バインドパラメータがつく可能性がある
-                let len = match (i, &self.head_comment) {
-                    (0, Some(head_comment)) => head_comment.len() + len,
-                    _ => len,
-                };
-
-                // フォーマット時に、各elemの間にタブ文字が挿入される
-                to_tab_num(sum) * tab_size() + len
-            })
+    pub(crate) fn element(&self) -> &str {
+        &self.element
     }
 
-    pub(crate) fn elements(&self) -> &Vec<String> {
-        &self.elements
+    /// 式が識別子であるかどうかを返す。
+    /// 識別子である場合は true そうでない場合、false を返す。
+    pub(crate) fn is_identifier(&self) -> bool {
+        let is_quoted = is_quoted(&self.element);
+        let is_num = self.element.parse::<i64>().is_ok();
+
+        !is_quoted && !is_num
     }
 
     /// バインドパラメータをセットする
@@ -100,29 +88,15 @@ impl PrimaryExpr {
         self.loc = loc;
     }
 
-    /// elementsにelementを追加する
-    pub(crate) fn add_element(&mut self, element: &str) {
-        self.elements.push(element.to_owned());
-    }
-
-    /// PrimaryExprの結合
-    pub(crate) fn append(&mut self, primary: PrimaryExpr) {
-        self.elements.append(&mut primary.elements().clone())
-    }
-
     /// フォーマット後の文字列に変換する。
     /// 大文字・小文字は to_uppercase_identifier() 関数の結果に依存する。
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         // 文字列リテラル以外の要素を大文字に変換して、出力する文字列を生成する
-        let elements_str = self
-            .elements
-            .iter()
-            .map(|elem| to_uppercase_identifier(elem))
-            .join("\t");
+        let element_str = to_uppercase_identifier(&self.element);
 
         match self.head_comment.as_ref() {
-            Some(comment) => Ok(format!("{}{}", comment, elements_str)),
-            None => Ok(elements_str),
+            Some(comment) => Ok(format!("{}{}", comment, element_str)),
+            None => Ok(element_str),
         }
     }
 }

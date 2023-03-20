@@ -2,14 +2,10 @@ SELECT
 	A
 FROM
 	B
-/*
-	select - union
-*/
+/* select - union */
 UNION
 -- union
-/*
-	union - subselect
-*/
+/* union - subselect */
 SELECT
 	C
 FROM

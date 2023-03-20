@@ -46,18 +46,22 @@ impl FunctionCall {
         self.over_window_definition = Some(window_definiton);
     }
 
-    /// 関数呼び出しの最後の行の文字数を返す。
+    /// 関数呼び出しの最後の行のインデントからの文字数を返す。
     /// 引数が複数行に及ぶ場合や、OVER句の有無を考慮する。
-    pub(crate) fn last_line_len(&self) -> usize {
+    /// 引数 acc には、自身の左側の式の文字列の長さを与える。
+    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
         let arguments_last_len = if self.has_multi_line_arguments() {
             ")".len()
         } else {
-            let name_len = self.name.len();
-            let args_len = self.args.len();
-            let args_len: usize = self.args.iter().map(|e| e.last_line_len()).sum::<usize>()
-                + ", ".len() * (args_len - 1);
-
-            name_len + "(".len() + args_len + ")".len()
+            let mut current_len = acc + self.name.len() + "(".len();
+            for (i, arg) in self.args.iter().enumerate() {
+                current_len = arg.last_line_len_from_left(current_len);
+                if i < self.args.len() - 1 {
+                    // 最後以外の要素なら、"," と " " が挿入される。
+                    current_len = current_len + ", ".len();
+                }
+            }
+            current_len + ")".len()
         };
 
         match &self.over_window_definition {

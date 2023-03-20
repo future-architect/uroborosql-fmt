@@ -52,3 +52,18 @@ FROM
 NATURAL INNER JOIN
 	T2
 ;
+SELECT
+	*
+FROM
+	T1	-- table 1
+CROSS JOIN
+	T2	-- table 2
+;
+SELECT
+	*
+FROM
+	T1
+INNER JOIN
+	T2	-- tbl
+ON
+	T1.NUM	=	T2.NUM	-- cond

@@ -2,9 +2,7 @@ SELECT
 	A
 ,	CASE
 		-- case trailing
-		/*
-			case
-		*/
+		/* case */
 		WHEN
 		-- cond_1
 			A	=	1	-- a equals 1

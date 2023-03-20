@@ -45,37 +45,14 @@ impl Formatter {
 
             Ok(Expr::Aligned(Box::new(aligned)))
         } else {
-            // 比較演算子でないならば、PrimaryExprに
-            // e.g.,) 1 + 1
-            match lhs_expr {
-                Expr::Primary(mut lhs) => {
-                    lhs.add_element(op_str);
-                    match rhs_expr {
-                        Expr::Primary(rhs) => {
-                            lhs.append(*rhs);
-                            Ok(Expr::Primary(lhs))
-                        }
-                        _ => {
-                            // 右辺が複数行の場合
-                            // todo
-                            Err(UroboroSQLFmtError::UnimplementedError(format!(
-                                "format_binary_expr(): (binary expression) right has multiple lines \nnode_kind: {}\n{:#?}",
-                                cursor.node().kind(),
-                                cursor.node().range(),
-                            )))
-                        }
-                    }
-                }
-                _ => {
-                    // 左辺が複数行の場合
-                    // todo
-                    Err(UroboroSQLFmtError::UnimplementedError(format!(
-                        "format_expr(): (binary expression) left has multiple lines \nnode_kind: {}\n{:#?}",
-                        cursor.node().kind(),
-                        cursor.node().range(),
-                    )))
-                }
-            }
+            // 比較演算子でない(算術演算等)ならば、ExprSeq に
+
+            // 実装の都合上、演算子を PrimaryExpr として扱う
+            let op_prim = PrimaryExpr::with_node(op_node, src);
+            let op_expr = Expr::Primary(Box::new(op_prim));
+
+            let bin_expr = ExprSeq::new(&vec![lhs_expr, op_expr, rhs_expr]);
+            Ok(Expr::ExprSeq(Box::new(bin_expr)))
         }
     }
 }

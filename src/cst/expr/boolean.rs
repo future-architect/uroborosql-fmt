@@ -105,6 +105,16 @@ impl BooleanExpr {
         self.add_expr_with_sep(expr, self.default_separator.clone());
     }
 
+    pub(crate) fn try_set_head_comment(&mut self, comment: Comment) -> bool {
+        if let Some((_, first_aligned, _)) = self.contents.first_mut() {
+            if comment.loc().is_next_to(&first_aligned.loc()) {
+                first_aligned.set_head_comment(comment);
+                return true;
+            }
+        }
+        false
+    }
+
     /// BooleanExprとBooleanExprをマージする
     pub(crate) fn merge(&mut self, other: BooleanExpr) {
         // そろえる演算子があるか

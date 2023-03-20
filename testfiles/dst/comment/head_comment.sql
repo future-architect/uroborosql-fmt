@@ -1,5 +1,6 @@
 SELECT
-	A
+	A				AS	A
+,	/*param*/'1'	AS	B
 FROM
 	T
 WHERE

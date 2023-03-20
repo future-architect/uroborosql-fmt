@@ -9,12 +9,7 @@ SELECT
 			VALUE3
 		FROM
 			TABLE2
-	)		AS	(
-		SELECT
-			VALUE3
-		FROM
-			TABLE2
-	)						-- サブクエリ
+	)									-- サブクエリ
 FROM
 	TABLE1
 WHERE
