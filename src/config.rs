@@ -33,25 +33,25 @@ fn default_trim_bind_param() -> bool {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum UpperOrLower {
+pub(crate) enum Case {
     Upper,
     Lower,
-    None,
+    Preserve,
 }
 
-impl Default for UpperOrLower {
-    /// upper_or_lowerのデフォルト値(upper)
+impl Default for Case {
+    /// Caseのデフォルト値(upper)
     fn default() -> Self {
-        UpperOrLower::Upper
+        Case::Upper
     }
 }
 
-impl UpperOrLower {
+impl Case {
     pub(crate) fn format(&self, key: &str) -> String {
         match self {
-            UpperOrLower::Upper => key.to_uppercase(),
-            UpperOrLower::Lower => key.to_lowercase(),
-            UpperOrLower::None => key.to_string(),
+            Case::Upper => key.to_uppercase(),
+            Case::Lower => key.to_lowercase(),
+            Case::Preserve => key.to_string(),
         }
     }
 }
@@ -72,8 +72,8 @@ pub(crate) struct Config {
     #[serde(default = "default_trim_bind_param")]
     pub(crate) trim_bind_param: bool,
     /// キーワードを大文字・小文字にする
-    #[serde(default = "UpperOrLower::default")]
-    pub(crate) keyword_upper_or_lower: UpperOrLower,
+    #[serde(default = "Case::default")]
+    pub(crate) keyword_case: Case,
 }
 
 impl Config {
@@ -85,7 +85,7 @@ impl Config {
             tab_size: default_tab_size(),
             complement_as: default_complement_as(),
             trim_bind_param: default_trim_bind_param(),
-            keyword_upper_or_lower: UpperOrLower::default(),
+            keyword_case: Case::default(),
         }
     }
 }
