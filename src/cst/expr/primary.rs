@@ -2,10 +2,10 @@ use tree_sitter::Node;
 
 use crate::{
     cst::{Comment, Location, UroboroSQLFmtError},
-    util::{is_quoted, trim_bind_param},
+    util::{convert_keyword_case, is_quoted, trim_bind_param},
 };
 
-use super::convert_indentifier_case;
+use super::convert_identifier_case;
 
 /// 識別子、リテラルを表す。
 /// また、キーワードは式ではないが、便宜上PrimaryExprとして扱う場合がある。
@@ -76,8 +76,14 @@ impl PrimaryExpr {
     /// フォーマット後の文字列に変換する。
     /// 大文字・小文字は to_uppercase_identifier() 関数の結果に依存する。
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
-        // 文字列リテラル以外の要素を大文字に変換して、出力する文字列を生成する
-        let element_str = convert_indentifier_case(&self.element);
+        // "default"であるかチェック
+        let element_str = if "default".eq_ignore_ascii_case(&self.element) {
+            // キーワードの大文字小文字設定を適用した文字列
+            convert_keyword_case(&self.element)
+        } else {
+            // 文字列リテラルであればそのまま、DBオブジェクトであれば大文字小文字設定を適用した文字列
+            convert_identifier_case(&self.element)
+        };
 
         match self.head_comment.as_ref() {
             Some(comment) => Ok(format!("{}{}", comment, element_str)),

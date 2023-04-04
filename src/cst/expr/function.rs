@@ -5,7 +5,7 @@ use crate::{
     util::{convert_keyword_case, tab_size, to_tab_num},
 };
 
-use super::{convert_indentifier_case, Expr};
+use super::{convert_identifier_case, Expr};
 
 /// 関数呼び出しを表す
 #[derive(Debug, Clone)]
@@ -94,7 +94,7 @@ impl FunctionCall {
     /// 引数が単一行に収まる場合は単一行の文字列を、複数行になる場合は引数ごとに改行を挿入した文字列を返す
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
-        let func_name = convert_indentifier_case(&self.name);
+        let func_name = convert_identifier_case(&self.name);
 
         result.push_str(&func_name);
         result.push('(');

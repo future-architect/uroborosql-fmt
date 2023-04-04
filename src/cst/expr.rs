@@ -7,7 +7,7 @@ pub(crate) mod primary;
 
 use itertools::{repeat_n, Itertools};
 
-use crate::util::{convert_indentifier_case, tab_size, to_tab_num, trim_bind_param};
+use crate::util::{convert_identifier_case, tab_size, to_tab_num, trim_bind_param};
 
 use self::{
     aligned::AlignedExpr, boolean::BooleanExpr, cond::CondExpr, function::FunctionCall,
