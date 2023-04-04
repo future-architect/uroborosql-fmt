@@ -16,23 +16,16 @@ pub(crate) struct FunctionCall {
     /// None であるならば OVER句自体がない
     over_window_definition: Option<Vec<Clause>>,
     loc: Location,
-    depth: usize,
 }
 
 impl FunctionCall {
-    pub(crate) fn new(
-        name: impl Into<String>,
-        args: &[Expr],
-        loc: Location,
-        depth: usize,
-    ) -> FunctionCall {
+    pub(crate) fn new(name: impl Into<String>, args: &[Expr], loc: Location) -> FunctionCall {
         let name = name.into();
         FunctionCall {
             name,
             args: args.to_vec(),
             over_window_definition: None,
             loc,
-            depth,
         }
     }
 
@@ -99,18 +92,19 @@ impl FunctionCall {
 
     /// 関数呼び出しをフォーマットした文字列を返す。
     /// 引数が単一行に収まる場合は単一行の文字列を、複数行になる場合は引数ごとに改行を挿入した文字列を返す
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
         let func_name = convert_indentifier_case(&self.name);
 
         result.push_str(&func_name);
         result.push('(');
 
-        // arguments
+        // 引数の描画を行う。
+        // インデントの深さは、関数呼び出しのインデントの深さ + ",\t" として、depth + 1 を与える。
         let args = self
             .args
             .iter()
-            .map(|arg| arg.render())
+            .map(|arg| arg.render(depth + 1))
             .collect::<Result<Vec<_>, _>>()?;
 
         if self.has_multi_line_arguments() {
@@ -118,8 +112,8 @@ impl FunctionCall {
 
             let mut is_first = true;
             for arg in &args {
-                // 関数呼び出しの深さ + 1 段インデントを挿入する
-                result.extend(repeat_n('\t', self.depth + 1));
+                // 関数呼び出しの深さ分インデントを挿入する
+                result.extend(repeat_n('\t', depth));
                 if is_first {
                     is_first = false;
                 } else {
@@ -129,7 +123,7 @@ impl FunctionCall {
                 result.push_str(arg);
                 result.push('\n');
             }
-            result.extend(repeat_n('\t', self.depth + 1));
+            result.extend(repeat_n('\t', depth));
         } else {
             result.push_str(&args.join(", "));
         }
@@ -147,12 +141,12 @@ impl FunctionCall {
 
                 let clauses = clauses
                     .iter()
-                    .map(Clause::render)
+                    .map(|c| c.render(depth + 1))
                     .collect::<Result<Vec<_>, _>>()?;
 
                 clauses.iter().for_each(|c| result.push_str(&c));
 
-                result.extend(repeat_n('\t', self.depth + 1));
+                result.extend(repeat_n('\t', depth));
             }
 
             result.push(')');

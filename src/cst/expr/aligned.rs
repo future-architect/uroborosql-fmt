@@ -214,6 +214,11 @@ impl AlignedExpr {
         }
     }
 
+    /// 末尾コメントを持っている場合 true を返す。
+    pub(crate) fn has_trailing_comment(&self) -> bool {
+        self.trailing_comment.is_some() || self.lhs_trailing_comment.is_some()
+    }
+
     // 演算子から末尾コメントまでの長さを返す
     pub(crate) fn tab_num_to_comment(&self, max_tab_num_to_op: Option<usize>) -> Option<usize> {
         let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
@@ -238,14 +243,14 @@ impl AlignedExpr {
     }
 
     /// 演算子・コメントの縦ぞろえをせずにrenderする
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let tab_num_to_op = if self.has_rhs() {
             Some(self.lhs_tab_num())
         } else {
             None
         };
         self.render_align(
-            0,
+            depth,
             &AlignInfo::new(
                 self.op_tab_num(),
                 tab_num_to_op,
@@ -269,7 +274,7 @@ impl AlignedExpr {
         let max_tab_num_to_comment = align_info.max_tab_num_to_comment;
 
         //左辺をrender
-        let formatted = self.lhs.render()?;
+        let formatted = self.lhs.render(depth)?;
         result.push_str(&formatted);
 
         let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
@@ -279,12 +284,21 @@ impl AlignedExpr {
         match (&self.op, max_op_tab_num, max_tab_num_to_op) {
             (Some(op), Some(max_op_tab_num), Some(max_tab_num)) => {
                 if let Some(comment_str) = &self.lhs_trailing_comment {
+                    if depth < 1 {
+                        // 左辺に行末コメントがある場合、右辺の直前にタブ文字が挿入されるため、
+                        // インデントの深さ(depth)は1以上でなければならない。
+                        return Err(UroboroSQLFmtError::RenderingError(
+                            "AlignedExpr::render_align(): The depth must be bigger than 0"
+                                .to_owned(),
+                        ));
+                    }
+
                     result.push('\t');
                     result.push_str(comment_str);
                     result.push('\n');
 
                     // インデントを挿入
-                    result.extend(repeat_n('\t', depth));
+                    result.extend(repeat_n('\t', depth - 1));
                 }
 
                 let tab_num = max_tab_num - self.lhs_tab_num();
@@ -301,7 +315,7 @@ impl AlignedExpr {
 
                 //右辺をrender
                 if let Some(rhs) = &self.rhs {
-                    let formatted = rhs.render()?;
+                    let formatted = rhs.render(depth)?;
                     result.push_str(&formatted);
                 }
             }
@@ -322,7 +336,7 @@ impl AlignedExpr {
                     // エイリアス補完はすべての演算子が"AS"であるかないため、すべての演算子の長さ(op_tab_num())は等しい
                     result.push('\t');
 
-                    result.push_str(&alias_name.render()?);
+                    result.push_str(&alias_name.render(depth)?);
                 }
             }
             (_, _, _) => (),

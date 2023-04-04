@@ -8,14 +8,7 @@ pub(crate) const COMMENT: &str = "comment";
 
 use crate::cst::*;
 
-/// インデントの深さや位置をそろえるための情報を保持する構造体
-struct FormatterState {
-    pub(crate) depth: usize,
-}
-
-pub(crate) struct Formatter {
-    state: FormatterState,
-}
+pub(crate) struct Formatter {}
 
 impl Default for Formatter {
     fn default() -> Self {
@@ -25,9 +18,7 @@ impl Default for Formatter {
 
 impl Formatter {
     pub(crate) fn new() -> Formatter {
-        Formatter {
-            state: FormatterState { depth: 0 },
-        }
+        Formatter {}
     }
 
     /// sqlソースファイルをフォーマット用構造体に変形する
@@ -41,16 +32,6 @@ impl Formatter {
         let mut cursor = node.walk();
 
         self.format_source(&mut cursor, src)
-    }
-
-    // ネストを1つ深くする
-    fn nest(&mut self) {
-        self.state.depth += 1;
-    }
-
-    // ネストを1つ浅くする
-    fn unnest(&mut self) {
-        self.state.depth -= 1;
     }
 
     /// source_file
@@ -145,7 +126,7 @@ impl Formatter {
         src: &str,
         omit_as: bool,
     ) -> Result<Body, UroboroSQLFmtError> {
-        let mut separated_lines = SeparatedLines::new(self.state.depth, ",", omit_as);
+        let mut separated_lines = SeparatedLines::new(",", omit_as);
 
         // commaSep(_aliasable_expression)
         let alias = self.format_aliasable_expr(cursor, src)?;
@@ -240,10 +221,9 @@ fn create_clause(
     cursor: &mut TreeCursor,
     src: &str,
     keyword: &str,
-    depth: usize,
 ) -> Result<Clause, UroboroSQLFmtError> {
     ensure_kind(cursor, keyword)?;
-    let mut clause = Clause::new(cursor.node(), src, depth);
+    let mut clause = Clause::new(cursor.node(), src);
 
     for _ in 1..keyword.split('_').count() {
         cursor.goto_next_sibling();

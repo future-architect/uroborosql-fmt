@@ -23,13 +23,10 @@ impl Formatter {
         cursor.goto_next_sibling();
 
         ensure_kind(cursor, "(")?;
-        self.nest();
         let args = self.format_function_call_arguments(cursor, src)?;
         cursor.goto_next_sibling();
-        self.unnest();
 
-        let mut func_call =
-            FunctionCall::new(function_name, &args, function_call_loc, self.state.depth);
+        let mut func_call = FunctionCall::new(function_name, &args, function_call_loc);
 
         // TODO: filter
 
@@ -102,8 +99,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         ensure_kind(cursor, "(")?;
-        self.nest();
-        self.nest();
+
         cursor.goto_next_sibling();
 
         let mut clauses: Vec<Clause> = vec![];
@@ -130,8 +126,6 @@ impl Formatter {
             clauses.push(clause);
         }
 
-        self.unnest();
-        self.unnest();
         ensure_kind(cursor, ")")?;
 
         cursor.goto_parent();
@@ -141,5 +135,51 @@ impl Formatter {
         ensure_kind(cursor, "over_clause")?;
 
         Ok(clauses)
+    }
+
+    pub(crate) fn format_type_cast(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<FunctionCall, UroboroSQLFmtError> {
+        let cast_loc = Location::new(cursor.node().range());
+
+        cursor.goto_first_child();
+        // TODO: postgreSQLの::記法への対応
+
+        // CAST関数
+        ensure_kind(cursor, "CAST")?;
+        cursor.goto_next_sibling();
+        ensure_kind(cursor, "(")?;
+        cursor.goto_next_sibling();
+
+        // キャストされる式
+        // 注: キャスト関数の式は alias ノードになっていないので、
+        // format_aliasable_expr では対処できない。
+        let expr = self.format_expr(cursor, src)?;
+        cursor.goto_next_sibling();
+        ensure_kind(cursor, "AS")?;
+        cursor.goto_next_sibling();
+
+        ensure_kind(cursor, "type")?;
+        // 型は特殊な書き方をされていないことを想定し、ソースの文字列をそのまま PrimaryExpr に変換する。
+        // 例えば、"CHAR   ( 3    )" などのように、途中に空白を含むような特殊な書き方をした場合、フォーマット結果にもその空白が現れてしまう。
+        let type_name = Expr::Primary(Box::new(PrimaryExpr::with_node(cursor.node(), src)));
+        cursor.goto_next_sibling();
+
+        ensure_kind(cursor, ")")?;
+
+        // expr AS type を AlignedExpr にする。
+        // エイリアスのASとは意味が異なるので、is_alias には false を与える。
+        let mut aligned = AlignedExpr::new(expr, false);
+        aligned.add_rhs("AS", type_name);
+        let expr_as_type = Expr::Aligned(Box::new(aligned));
+
+        let function = FunctionCall::new("CAST", &[expr_as_type], cast_loc);
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "type_cast")?;
+
+        Ok(function)
     }
 }

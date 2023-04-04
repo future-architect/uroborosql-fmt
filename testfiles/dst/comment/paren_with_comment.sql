@@ -21,3 +21,6 @@ OR	(
 		)				-- comment7
 	-- end
 	)						-- comment8
+AND	(
+		TEST6	=	6	-- comment9
+	)

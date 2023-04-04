@@ -19,7 +19,7 @@ impl Formatter {
         //      [where_clause]
         //      [_combining_query]
 
-        let mut statement = Statement::new(self.state.depth);
+        let mut statement = Statement::new();
 
         // select_statementは必ずselect_clauseを子供に持つ
         cursor.goto_first_child();
@@ -49,7 +49,7 @@ impl Formatter {
                 }
                 "UNION" | "INTERSECT" | "EXCEPT" => {
                     // 演算(e.g., "INTERSECT", "UNION ALL", ...)
-                    let mut combining_clause = Clause::new(cursor.node(), src, self.state.depth);
+                    let mut combining_clause = Clause::new(cursor.node(), src);
 
                     cursor.goto_next_sibling();
                     // cursor -> (ALL | DISTINCT) | select_statement
@@ -108,12 +108,12 @@ impl Formatter {
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Statement, UroboroSQLFmtError> {
-        let mut statement = Statement::new(self.state.depth);
+        let mut statement = Statement::new();
 
         cursor.goto_first_child();
 
         // DELETE
-        let mut clause = create_clause(cursor, src, "DELETE", self.state.depth)?;
+        let mut clause = create_clause(cursor, src, "DELETE")?;
         cursor.goto_next_sibling();
         self.consume_sql_id(cursor, src, &mut clause);
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
@@ -161,10 +161,10 @@ impl Formatter {
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Statement, UroboroSQLFmtError> {
-        let mut statement = Statement::new(self.state.depth);
+        let mut statement = Statement::new();
         cursor.goto_first_child();
 
-        let mut update_clause = create_clause(cursor, src, "UPDATE", self.state.depth)?;
+        let mut update_clause = create_clause(cursor, src, "UPDATE")?;
         cursor.goto_next_sibling();
         self.consume_sql_id(cursor, src, &mut update_clause);
         self.consume_comment_in_clause(cursor, src, &mut update_clause)?;
@@ -176,7 +176,7 @@ impl Formatter {
 
         // update句を追加する
         // update句のエイリアスはASを省略するため、第三引数のis_omit_opをtrueにしてSeparatedLinesを生成する
-        let mut sep_lines = SeparatedLines::new(self.state.depth, ",", true);
+        let mut sep_lines = SeparatedLines::new(",", true);
         sep_lines.add_expr(table_name);
         update_clause.set_body(Body::SepLines(sep_lines));
         statement.add_clause(update_clause);
@@ -232,7 +232,7 @@ impl Formatter {
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Statement, UroboroSQLFmtError> {
-        let mut statement = Statement::new(self.state.depth);
+        let mut statement = Statement::new();
         let loc = Location::new(cursor.node().range());
 
         // コーディング規約では、INSERTとINTOの間に改行がある
@@ -241,7 +241,7 @@ impl Formatter {
 
         cursor.goto_first_child();
 
-        let mut insert = create_clause(cursor, src, "INSERT", self.state.depth)?;
+        let mut insert = create_clause(cursor, src, "INSERT")?;
         cursor.goto_next_sibling();
         // SQL_IDがあるかをチェック
         self.consume_sql_id(cursor, src, &mut insert);
@@ -249,7 +249,7 @@ impl Formatter {
 
         statement.add_clause(insert);
 
-        let mut clause = create_clause(cursor, src, "INTO", self.state.depth)?;
+        let mut clause = create_clause(cursor, src, "INTO")?;
         cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
@@ -258,7 +258,7 @@ impl Formatter {
         // table_nameは_aliasable_identifierであるが、CST上では_aliasable_expressionと等しいため、
         // format_aliasable_exprを使用する
         let table_name = self.format_aliasable_expr(cursor, src)?;
-        let mut insert_body = InsertBody::new(self.state.depth, loc, table_name);
+        let mut insert_body = InsertBody::new(loc, table_name);
 
         cursor.goto_next_sibling();
         // table_name直後のコメントを処理する
@@ -270,7 +270,7 @@ impl Formatter {
 
         // column_name
         if cursor.node().kind() == "(" {
-            let mut sep_lines = SeparatedLines::new(self.state.depth, ",", false);
+            let mut sep_lines = SeparatedLines::new(",", false);
             while cursor.goto_next_sibling() {
                 match cursor.node().kind() {
                     "identifier" | "dotted_name" => {
@@ -289,18 +289,6 @@ impl Formatter {
             }
         }
 
-        // values_clause_itemを処理するクロージャ
-        // ColumnList構造体で結果を返す
-        let mut format_values_clause_item =
-            |cursor: &mut TreeCursor| -> Result<ColumnList, UroboroSQLFmtError> {
-                cursor.goto_first_child();
-                let column_list = self.format_column_list(cursor, src)?;
-                cursor.goto_parent();
-                ensure_kind(cursor, "values_clause_item")?;
-
-                Ok(column_list)
-            };
-
         cursor.goto_next_sibling();
 
         // values句
@@ -313,7 +301,7 @@ impl Formatter {
             while cursor.goto_next_sibling() {
                 match cursor.node().kind() {
                     "values_clause_item" => {
-                        items.push(format_values_clause_item(cursor)?);
+                        items.push(self.format_values_clause_item(cursor, src)?);
                     }
                     "," => continue,
                     _ => {
@@ -324,6 +312,13 @@ impl Formatter {
                         )))
                     }
                 }
+            }
+
+            if items.len() == 1 {
+                // カラムリストが一つのみであるとき、複数行で描画する
+                items
+                    .iter_mut()
+                    .for_each(|col_list| col_list.set_is_multi_line(true));
             }
             insert_body.set_values_clause(&convert_keyword_case("VALUES"), items);
 
@@ -359,5 +354,20 @@ impl Formatter {
         ensure_kind(cursor, "insert_statement")?;
 
         Ok(statement)
+    }
+
+    /// values_clause_itemを処理する。
+    /// ColumnList構造体で結果を返す。
+    fn format_values_clause_item(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ColumnList, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+        let column_list = self.format_column_list(cursor, src)?;
+        cursor.goto_parent();
+        ensure_kind(cursor, "values_clause_item")?;
+
+        Ok(column_list)
     }
 }

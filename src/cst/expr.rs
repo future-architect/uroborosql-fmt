@@ -7,14 +7,14 @@ pub(crate) mod primary;
 
 use itertools::{repeat_n, Itertools};
 
-use crate::util::{convert_indentifier_case, tab_size, to_tab_num};
+use crate::util::{convert_indentifier_case, tab_size, to_tab_num, trim_bind_param};
 
 use self::{
     aligned::AlignedExpr, boolean::BooleanExpr, cond::CondExpr, function::FunctionCall,
     paren::ParenExpr, primary::PrimaryExpr,
 };
 
-use super::{Comment, Location, Position, Statement, UroboroSQLFmtError};
+use super::{AlignInfo, Comment, Location, Position, Statement, UroboroSQLFmtError};
 
 /// 式に対応した列挙体
 #[derive(Debug, Clone)]
@@ -60,22 +60,23 @@ impl Expr {
         }
     }
 
-    fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         match self {
             Expr::Aligned(aligned) => {
                 // 演算子を縦ぞろえしない場合は、ここでrender()が呼ばれる
-                aligned.render()
+                aligned.render(depth)
             }
+            // Primary式、アスタリスクは改行することがないので、depthを与える必要がない。
             Expr::Primary(primary) => primary.render(),
-            Expr::Boolean(boolean) => boolean.render(),
-            Expr::SelectSub(select_sub) => select_sub.render(),
-            Expr::ParenExpr(paren_expr) => paren_expr.render(),
             Expr::Asterisk(asterisk) => asterisk.render(),
-            Expr::Cond(cond) => cond.render(),
-            Expr::Unary(unary) => unary.render(),
-            Expr::ColumnList(cols) => cols.render(0, false),
-            Expr::FunctionCall(func_call) => func_call.render(),
-            Expr::ExprSeq(n_expr) => n_expr.render(),
+            Expr::Boolean(boolean) => boolean.render(depth),
+            Expr::SelectSub(select_sub) => select_sub.render(depth),
+            Expr::ParenExpr(paren_expr) => paren_expr.render(depth),
+            Expr::Cond(cond) => cond.render(depth),
+            Expr::Unary(unary) => unary.render(depth),
+            Expr::ColumnList(cols) => cols.render(depth),
+            Expr::FunctionCall(func_call) => func_call.render(depth),
+            Expr::ExprSeq(n_expr) => n_expr.render(depth),
         }
     }
 
@@ -106,7 +107,7 @@ impl Expr {
             Expr::Asterisk(asterisk) => asterisk.last_line_len(),
             Expr::Cond(_) => "END".len(), // "END"
             Expr::Unary(unary) => unary.last_line_len_from_left(acc),
-            Expr::ColumnList(cols) => cols.last_line_len(),
+            Expr::ColumnList(cols) => cols.last_line_len(acc),
             Expr::FunctionCall(func_call) => func_call.last_line_len_from_left(acc),
             Expr::Boolean(_) => unimplemented!(),
             Expr::ExprSeq(n_expr) => n_expr.last_line_len_from_left(acc),
@@ -120,10 +121,15 @@ impl Expr {
         match self {
             // aligned, primaryは上位のExpr, Bodyでset_trailing_comment()を通じてコメントを追加する
             Expr::Aligned(aligned) => {
-                return Err(UroboroSQLFmtError::UnimplementedError(format!(
-                    "add_comment_to_child(): unimplemented for aligned\nexpr: {:?}",
-                    aligned
-                )));
+                if aligned.loc().is_same_line(&comment.loc()) {
+                    aligned.set_trailing_comment(comment)?;
+                } else {
+                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                        "add_comment_to_child(): this comment is not trailing comment\nexpr: {:?}comment: {:?}\n",
+                        aligned,
+                        comment
+                    )));
+                }
             }
             Expr::Primary(primary) => {
                 return Err(UroboroSQLFmtError::UnimplementedError(format!(
@@ -165,6 +171,7 @@ impl Expr {
             Expr::Primary(primary) => primary.set_head_comment(comment),
             Expr::Aligned(aligned) => aligned.set_head_comment(comment),
             Expr::Boolean(boolean) => boolean.set_head_comment(comment),
+            Expr::ColumnList(col_list) => col_list.set_head_comment(comment),
             // primary, aligned, boolean以外の式は現状、バインドパラメータがつくことはない
             _ => unimplemented!(),
         }
@@ -179,7 +186,7 @@ impl Expr {
             Expr::Unary(unary) => unary.is_multi_line(),
             Expr::ParenExpr(paren) => paren.is_multi_line(),
             Expr::FunctionCall(func_call) => func_call.is_multi_line(),
-            Expr::ColumnList(_) => todo!(),
+            Expr::ColumnList(col_list) => col_list.is_multi_line(),
             Expr::ExprSeq(n_expr) => n_expr.is_multi_line(),
         }
     }
@@ -217,14 +224,13 @@ impl Expr {
 /// SELECTサブクエリに対応する構造体
 #[derive(Debug, Clone)]
 pub(crate) struct SelectSubExpr {
-    depth: usize,
     stmt: Statement,
     loc: Location,
 }
 
 impl SelectSubExpr {
-    pub(crate) fn new(stmt: Statement, loc: Location, depth: usize) -> SelectSubExpr {
-        SelectSubExpr { depth, stmt, loc }
+    pub(crate) fn new(stmt: Statement, loc: Location) -> SelectSubExpr {
+        SelectSubExpr { stmt, loc }
     }
 
     pub(crate) fn loc(&self) -> Location {
@@ -235,16 +241,16 @@ impl SelectSubExpr {
         unimplemented!()
     }
 
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         result.push_str("(\n");
 
-        let formatted = self.stmt.render()?;
+        let formatted = self.stmt.render(depth + 1)?;
 
         result.push_str(&formatted);
 
-        result.extend(repeat_n('\t', self.depth));
+        result.extend(repeat_n('\t', depth));
         result.push(')');
 
         Ok(result)
@@ -319,81 +325,139 @@ impl UnaryExpr {
     }
 
     /// フォーマットした文字列を返す
-    fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         result.push_str(&self.operator);
         result.push('\t');
-        result.push_str(&self.operand.render()?);
+        result.push_str(&self.operand.render(depth)?);
 
         Ok(result)
     }
 }
 
-/// 列リストを表す。
-/// VALUES句、SET句で使用する
+/// 列のリストを表す。
 #[derive(Debug, Clone)]
 pub(crate) struct ColumnList {
-    cols: Vec<Expr>,
+    cols: Vec<AlignedExpr>,
     loc: Location,
+    /// 複数行で出力するかを指定するフラグ。
+    /// デフォルトでは false (つまり、単一行で出力する) になっている。
+    is_multi_line: bool,
+    /// バインドパラメータ
+    head_comment: Option<String>,
 }
 
 impl ColumnList {
-    pub(crate) fn new(cols: Vec<Expr>, loc: Location) -> ColumnList {
-        ColumnList { cols, loc }
+    pub(crate) fn new(cols: Vec<AlignedExpr>, loc: Location) -> ColumnList {
+        ColumnList {
+            cols,
+            loc,
+            is_multi_line: false,
+            head_comment: None,
+        }
     }
 
-    fn loc(&self) -> Location {
+    pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }
 
-    fn last_line_len(&self) -> usize {
-        // かっこ、カンマを考慮していないため、正確な値ではない
-        self.cols
-            .iter()
-            .fold(0, |prev, e| prev + e.last_line_tab_num())
-            * tab_size()
+    fn last_line_len(&self, acc: usize) -> usize {
+        if self.is_multi_line() {
+            ")".len()
+        } else {
+            let mut current_len = acc + "(".len();
+            if let Some(param) = &self.head_comment {
+                current_len += param.len()
+            };
+
+            self.cols.iter().enumerate().for_each(|(i, col)| {
+                current_len += col.last_line_len_from_left(current_len);
+                if i != self.cols.len() - 1 {
+                    current_len += ", ".len()
+                }
+            });
+            current_len + ")".len()
+        }
     }
 
-    /// カラムリストをrenderする
-    /// VALUES句以外(SET句)で呼び出された場合、1行で出力する
-    /// depth: インデントの深さ。SET句では0が与えられる
-    /// is_one_row: VALUES句で指定される行が一つであればtrue、そうでなければfalseであるような値
-    pub(crate) fn render(
-        &self,
-        depth: usize,
-        is_one_row: bool,
-    ) -> Result<String, UroboroSQLFmtError> {
-        let mut result = String::new();
-        if is_one_row {
-            // ValuesItemが一つだけである場合、各列を複数行に出力する
+    pub(crate) fn set_head_comment(&mut self, comment: Comment) {
+        let Comment { text, mut loc } = comment;
 
-            result.push_str(" (\n");
+        let text = trim_bind_param(text);
+
+        self.head_comment = Some(text);
+        loc.append(self.loc());
+        self.loc = loc;
+    }
+
+    /// 列リストを複数行で描画するかを指定する。
+    /// true を与えたら必ず複数行で描画され、false を与えたらできるだけ単一行で描画する。
+    pub(crate) fn set_is_multi_line(&mut self, b: bool) {
+        self.is_multi_line = b
+    }
+
+    /// 複数行で描画するかどうかを bool 型の値で取得する。
+    /// 複数行で描画する場合は true を返す。
+    /// 自身の is_multi_line のオプションの値だけでなく、各列が単一行かどうか、末尾コメントを持つかどうかも考慮する。
+    pub(crate) fn is_multi_line(&self) -> bool {
+        self.is_multi_line
+            || self
+                .cols
+                .iter()
+                .any(|a| a.is_multi_line() || a.has_trailing_comment())
+    }
+
+    /// カラムリストをrenderする。
+    /// 自身の is_multi_line() が true になる場合には複数行で描画し、false になる場合単一行で描画する。
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        // depth は開きかっこを描画する行のインデントの深さ
+        let mut result = String::new();
+
+        // バインドパラメータがある場合、最初に描画
+        if let Some(bind_param) = &self.head_comment {
+            result.push_str(&bind_param);
+        }
+
+        if self.is_multi_line() {
+            // 各列を複数行に出力する
+
+            result.push_str("(\n");
 
             // 最初の行のインデント
-            result.extend(repeat_n('\t', depth));
+            result.extend(repeat_n('\t', depth + 1));
 
             // 各要素間の改行、カンマ、インデント
-            let mut separator = "\n,".to_string();
+            let mut separator = "\n".to_string();
             separator.extend(repeat_n('\t', depth));
+            separator.push_str(",\t");
+
+            // Vec<AlignedExpr> -> Vec<&AlignedExpr>
+            let aligned_exprs = self.cols.iter().collect_vec();
+            let align_info = AlignInfo::from(aligned_exprs);
 
             result.push_str(
                 &self
                     .cols
                     .iter()
-                    .filter_map(|e| e.render().ok())
+                    .map(|a| a.render_align(depth, &align_info, false))
+                    .collect::<Result<Vec<_>, _>>()?
                     .join(&separator),
             );
 
             result.push('\n');
-            result.extend(repeat_n('\t', depth - 1));
+            result.extend(repeat_n('\t', depth));
             result.push(')');
         } else {
-            // ValuesItemが複数ある場合、各行は1行に出力する
-
-            result.extend(repeat_n('\t', depth));
+            // ColumnListを単一行で描画する
             result.push('(');
-            result.push_str(&self.cols.iter().filter_map(|e| e.render().ok()).join(", "));
+            result.push_str(
+                &self
+                    .cols
+                    .iter()
+                    .filter_map(|e| e.render(depth + 1).ok())
+                    .join(", "),
+            );
             result.push(')');
         }
 
@@ -452,11 +516,11 @@ impl ExprSeq {
         current_len
     }
 
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         Ok(self
             .exprs
             .iter()
-            .map(Expr::render)
+            .map(|e| e.render(depth))
             .collect::<Result<Vec<_>, _>>()?
             .join("\t"))
     }

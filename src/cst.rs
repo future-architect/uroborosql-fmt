@@ -77,7 +77,12 @@ impl Location {
 
     // Locationのappend
     pub(crate) fn append(&mut self, loc: Location) {
-        self.end_position = loc.end_position;
+        if self.end_position.row < loc.end_position.row
+            || self.end_position.row == loc.end_position.row
+                && self.end_position.col < loc.end_position.col
+        {
+            self.end_position = loc.end_position;
+        }
     }
 
     /// Location が単一行を意味していれば true を返す
@@ -93,18 +98,16 @@ pub(crate) struct Statement {
     loc: Option<Location>,
     /// Statementの上に現れるコメント
     comments: Vec<Comment>,
-    depth: usize,
     /// 末尾にセミコロンがついているか
     has_semi: bool,
 }
 
 impl Statement {
-    pub(crate) fn new(depth: usize) -> Statement {
+    pub(crate) fn new() -> Statement {
         Statement {
             clauses: vec![] as Vec<Clause>,
             loc: None,
             comments: vec![] as Vec<Comment>,
-            depth,
             has_semi: false,
         }
     }
@@ -149,20 +152,20 @@ impl Statement {
         self.has_semi = has_semi;
     }
 
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         // clause1
         // ...
         // clausen
         let mut result = String::new();
 
         for comment in &self.comments {
-            result.push_str(&comment.render(self.depth)?);
+            result.push_str(&comment.render(depth)?);
             result.push('\n');
         }
 
         // 1つでもエラーの場合は全体もエラー
         for clause in &self.clauses {
-            result.push_str(&clause.render()?);
+            result.push_str(&clause.render(depth)?);
         }
 
         if self.has_semi {
@@ -262,7 +265,6 @@ pub(crate) struct Clause {
     keyword: String, // e.g., SELECT, FROM
     body: Option<Body>,
     loc: Location,
-    depth: usize,
     /// DML(, DDL)に付与できるsql_id
     sql_id: Option<Comment>,
     /// キーワードの下に現れるコメント
@@ -270,7 +272,7 @@ pub(crate) struct Clause {
 }
 
 impl Clause {
-    pub(crate) fn new(kw_node: Node, src: &str, depth: usize) -> Clause {
+    pub(crate) fn new(kw_node: Node, src: &str) -> Clause {
         // コーディング規約によると、キーワードは大文字で記述する
         let keyword = convert_keyword_case(kw_node.utf8_text(src.as_bytes()).unwrap());
         let loc = Location::new(kw_node.range());
@@ -278,7 +280,6 @@ impl Clause {
             keyword,
             body: None,
             loc,
-            depth,
             sql_id: None,
             comments: vec![],
         }
@@ -351,12 +352,12 @@ impl Clause {
         }
     }
 
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         // kw
         // body...
         let mut result = String::new();
 
-        result.extend(repeat_n('\t', self.depth));
+        result.extend(repeat_n('\t', depth));
         result.push_str(&self.keyword);
 
         if let Some(sql_id) = &self.sql_id {
@@ -367,17 +368,17 @@ impl Clause {
         // comments
         for comment in &self.comments {
             result.push('\n');
-            result.push_str(&comment.render(self.depth)?);
+            result.push_str(&comment.render(depth)?);
         }
 
         match &self.body {
             // 句と本体を同じ行に render する
             Some(Body::SingleLine(single_line)) => {
                 result.push('\t');
-                result.push_str(&single_line.render()?);
+                result.push_str(&single_line.render(depth)?);
             }
             Some(body) => {
-                let formatted_body = body.render()?;
+                let formatted_body = body.render(depth + 1)?;
                 result.push('\n');
                 result.push_str(&formatted_body);
             }

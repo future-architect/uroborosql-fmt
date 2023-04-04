@@ -20,3 +20,5 @@ or test5 = 5 --comment6
 ) --comment7
 -- end
 ) --comment8
+and (test6 = 6 -- comment9
+)

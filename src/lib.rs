@@ -44,7 +44,7 @@ pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, Urobor
 
     let result = stmts
         .iter()
-        .map(|stmt| stmt.render().expect("render: error"))
+        .map(|stmt| stmt.render(0).expect("render: error"))
         .collect();
 
     Ok(result)

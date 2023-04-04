@@ -36,3 +36,20 @@ pub(crate) fn to_tab_num(len: usize) -> usize {
 pub(crate) fn tab_size() -> usize {
     CONFIG.read().unwrap().tab_size
 }
+
+/// 設定の trim_bind_param が true であるとき、引数のバインドパラメータの空白をトリムして返す。
+/// 設定が false であるときは、引数をそのまま返す。
+pub(crate) fn trim_bind_param(text: String) -> String {
+    if CONFIG.read().unwrap().trim_bind_param {
+        // 1. /*を削除
+        // 2. *\を削除
+        // 3. 前後の空白文字を削除
+        // 4. /* */付与
+        format!(
+            "/*{}*/",
+            text.trim_start_matches("/*").trim_end_matches("*/").trim()
+        )
+    } else {
+        text
+    }
+}

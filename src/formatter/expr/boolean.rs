@@ -16,7 +16,7 @@ impl Formatter {
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Expr, UroboroSQLFmtError> {
-        let mut boolean_expr = BooleanExpr::new(self.state.depth, "-");
+        let mut boolean_expr = BooleanExpr::new("-");
 
         cursor.goto_first_child();
 
@@ -58,10 +58,16 @@ impl Formatter {
             cursor.goto_next_sibling();
             // cursor -> _expression
 
+            let mut comments = vec![];
+            while cursor.node().kind() == COMMENT {
+                comments.push(Comment::new(cursor.node(), src));
+                cursor.goto_next_sibling();
+            }
+
             let right = self.format_expr(cursor, src)?;
 
             // 左辺と同様の処理を行う
-            boolean_expr.add_expr(right);
+            boolean_expr.add_expr_with_preceding_comments(right, comments);
         }
         // cursorをboolean_expressionに戻す
         cursor.goto_parent();
@@ -101,7 +107,17 @@ impl Formatter {
 
         let from_expr = self.format_expr(cursor, src)?;
         cursor.goto_next_sibling();
-        // cursor -> AND
+
+        // AND の直前に現れる行末コメントを処理する
+        // 行末コメント以外のコメントは想定しない
+        // TODO: 左辺に行末コメントが現れた場合のコメント縦ぞろえ
+        let start_trailing_comment = if cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            cursor.goto_next_sibling();
+            Some(comment)
+        } else {
+            None
+        };
 
         ensure_kind(cursor, "AND")?;
         cursor.goto_next_sibling();
@@ -112,6 +128,10 @@ impl Formatter {
         // (from AND to)をAlignedExprにまとめる
         let mut rhs = AlignedExpr::new(from_expr, false);
         rhs.add_rhs(convert_keyword_case("AND"), to_expr);
+
+        if let Some(comment) = start_trailing_comment {
+            rhs.set_lhs_trailing_comment(comment)?;
+        }
 
         // (expr BETWEEN rhs)をAlignedExprにまとめる
         let mut aligned = AlignedExpr::new(expr, false);
