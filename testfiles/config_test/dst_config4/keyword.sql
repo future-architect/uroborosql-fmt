@@ -35,7 +35,7 @@ into
 	DID
 ,	DNAME
 ) VALUES (
-	DEFAULT
+	default
 ,	'XYZ Widgets'
 )
 RETURNING

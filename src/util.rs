@@ -7,7 +7,7 @@ pub(crate) fn convert_keyword_case(keyword: &str) -> String {
 
 /// 引数の文字列が識別子であれば設定ファイルに合わせて大文字小文字変換をして返す
 /// 文字列リテラル、または引用符付き識別子である場合はそのままの文字列を返す
-pub(crate) fn convert_indentifier_case(identifier: &str) -> String {
+pub(crate) fn convert_identifier_case(identifier: &str) -> String {
     if is_quoted(identifier) {
         identifier.to_owned()
     } else {
