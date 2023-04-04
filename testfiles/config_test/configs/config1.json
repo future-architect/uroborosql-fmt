@@ -3,5 +3,6 @@
   "tab_size": 4,
   "complement_as": false,
   "trim_bind_param": false,
-  "keyword_case": "upper"
+  "keyword_case": "upper",
+  "identifier_case": "upper"
 }

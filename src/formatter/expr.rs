@@ -6,7 +6,7 @@ mod subquery;
 
 use tree_sitter::TreeCursor;
 
-use crate::{cst::*, util::format_keyword};
+use crate::{cst::*, util::convert_keyword_case};
 
 use super::{ensure_kind, Formatter, COMMENT};
 
@@ -97,7 +97,10 @@ impl Formatter {
                     ensure_kind(cursor, "identifier")?;
 
                     let rhs_expr = PrimaryExpr::with_node(cursor.node(), src);
-                    aligned.add_rhs(format_keyword("AS"), Expr::Primary(Box::new(rhs_expr)));
+                    aligned.add_rhs(
+                        convert_keyword_case("AS"),
+                        Expr::Primary(Box::new(rhs_expr)),
+                    );
                 }
 
                 // cursorをalias に戻す

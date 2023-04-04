@@ -1,6 +1,6 @@
 select
-	IDENTIFIER
+	Identifier
 from
-	JAPANESE_STUDENT_TABLE
+	japanese_student_table
 where
-	SBJ.GRADE	>	/*grade*/50
+	SBJ.grade	>	/*grade*/50

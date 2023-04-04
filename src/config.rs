@@ -74,6 +74,9 @@ pub(crate) struct Config {
     /// キーワードを大文字・小文字にする
     #[serde(default = "Case::default")]
     pub(crate) keyword_case: Case,
+    /// 識別子を大文字・小文字にする
+    #[serde(default = "Case::default")]
+    pub(crate) identifier_case: Case,
 }
 
 impl Config {
@@ -86,6 +89,7 @@ impl Config {
             complement_as: default_complement_as(),
             trim_bind_param: default_trim_bind_param(),
             keyword_case: Case::default(),
+            identifier_case: Case::default(),
         }
     }
 }

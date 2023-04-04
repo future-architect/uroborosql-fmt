@@ -2,7 +2,7 @@ use itertools::repeat_n;
 
 use crate::{
     cst::{AlignedExpr, Clause, Comment, Location, UroboroSQLFmtError},
-    util::format_keyword,
+    util::convert_keyword_case,
 };
 
 use super::Expr;
@@ -76,7 +76,7 @@ impl CondExpr {
         let mut result = String::new();
 
         // CASEキーワードの行のインデントは呼び出し側が行う
-        result.push_str(&format_keyword("CASE"));
+        result.push_str(&convert_keyword_case("CASE"));
         result.push('\n');
 
         if let Some(expr) = &self.expr {
@@ -107,7 +107,7 @@ impl CondExpr {
         }
 
         result.extend(repeat_n('\t', self.depth + 1));
-        result.push_str(&format_keyword("END"));
+        result.push_str(&convert_keyword_case("END"));
 
         Ok(result)
     }

@@ -3,7 +3,7 @@ use itertools::repeat_n;
 use crate::{
     config::CONFIG,
     cst::{Comment, Location, UroboroSQLFmtError},
-    util::{format_keyword, tab_size, to_tab_num},
+    util::{convert_keyword_case, tab_size, to_tab_num},
 };
 
 use super::{primary::PrimaryExpr, Expr};
@@ -316,7 +316,7 @@ impl AlignedExpr {
 
                     if !is_from_body {
                         result.push('\t');
-                        result.push_str(&format_keyword("AS"));
+                        result.push_str(&convert_keyword_case("AS"));
                     }
 
                     // エイリアス補完はすべての演算子が"AS"であるかないため、すべての演算子の長さ(op_tab_num())は等しい

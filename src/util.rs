@@ -1,7 +1,26 @@
 use crate::config::CONFIG;
 
-pub(crate) fn format_keyword(key: &str) -> String {
-    CONFIG.read().unwrap().keyword_case.format(key)
+/// 設定ファイルに合わせて予約後の大文字・小文字を変換する
+pub(crate) fn convert_keyword_case(keyword: &str) -> String {
+    CONFIG.read().unwrap().keyword_case.format(keyword)
+}
+
+/// 引数の文字列が識別子であれば設定ファイルに合わせて大文字小文字変換をして返す
+/// 文字列リテラル、または引用符付き識別子である場合はそのままの文字列を返す
+pub(crate) fn convert_indentifier_case(identifier: &str) -> String {
+    if is_quoted(identifier) {
+        identifier.to_owned()
+    } else {
+        CONFIG.read().unwrap().identifier_case.format(identifier)
+    }
+}
+
+/// 引数の文字列が引用符付けされているかどうかを判定する。
+/// 引用符付けされている場合は true を返す。
+pub(crate) fn is_quoted(elem: &str) -> bool {
+    (elem.starts_with('"') && elem.ends_with('"'))
+        || (elem.starts_with('\'') && elem.ends_with('\''))
+        || (elem.starts_with('$') && elem.ends_with('$'))
 }
 
 /// 引数の文字列長をタブ数換算した長さを返す

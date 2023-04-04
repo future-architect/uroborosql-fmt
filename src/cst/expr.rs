@@ -7,7 +7,7 @@ pub(crate) mod primary;
 
 use itertools::{repeat_n, Itertools};
 
-use crate::util::{tab_size, to_tab_num};
+use crate::util::{convert_indentifier_case, tab_size, to_tab_num};
 
 use self::{
     aligned::AlignedExpr, boolean::BooleanExpr, cond::CondExpr, function::FunctionCall,
@@ -460,23 +460,4 @@ impl ExprSeq {
             .collect::<Result<Vec<_>, _>>()?
             .join("\t"))
     }
-}
-
-// TODO: 大文字/小文字を設定ファイルで定義できるようにする
-/// 引数の文字列が識別子であれば大文字にして返す
-/// 文字列リテラル、または引用符付き識別子である場合はそのままの文字列を返す
-pub(crate) fn to_uppercase_identifier(elem: &str) -> String {
-    if is_quoted(elem) {
-        elem.to_owned()
-    } else {
-        elem.to_uppercase()
-    }
-}
-
-/// 引数の文字列が引用符付けされているかどうかを判定する。
-/// 引用符付けされている場合は true を返す。
-pub(crate) fn is_quoted(elem: &str) -> bool {
-    (elem.starts_with('"') && elem.ends_with('"'))
-        || (elem.starts_with('\'') && elem.ends_with('\''))
-        || (elem.starts_with('$') && elem.ends_with('$'))
 }

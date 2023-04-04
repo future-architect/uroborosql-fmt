@@ -3,9 +3,10 @@ use tree_sitter::Node;
 use crate::{
     config::CONFIG,
     cst::{Comment, Location, UroboroSQLFmtError},
+    util::is_quoted,
 };
 
-use super::{is_quoted, to_uppercase_identifier};
+use super::convert_indentifier_case;
 
 /// 識別子、リテラルを表す。
 /// また、キーワードは式ではないが、便宜上PrimaryExprとして扱う場合がある。
@@ -92,7 +93,7 @@ impl PrimaryExpr {
     /// 大文字・小文字は to_uppercase_identifier() 関数の結果に依存する。
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         // 文字列リテラル以外の要素を大文字に変換して、出力する文字列を生成する
-        let element_str = to_uppercase_identifier(&self.element);
+        let element_str = convert_indentifier_case(&self.element);
 
         match self.head_comment.as_ref() {
             Some(comment) => Ok(format!("{}{}", comment, element_str)),

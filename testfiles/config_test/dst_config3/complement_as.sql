@@ -1,5 +1,5 @@
 select
-	IDENTIFIER		as	ID
-,	STUDENT_NAME	as	STUDENT_NAME
+	Identifier		as	id
+,	student_name	as	student_name
 from
-	JAPANESE_STUDENT_TABLE
+	japanese_student_table
