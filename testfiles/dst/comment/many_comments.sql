@@ -19,8 +19,10 @@ FROM
 ,	PROFESSOR	PROF
 WHERE
 /* conditions */
-	ID	=	5	-- check id
+	ID		=	5	-- check id
 /* others */
-AND	AGE	>=	18
+AND	AGE		>=	18
 /* hoge */
 /* huga */
+AND	-- this comment follows "AND"
+	GRADE	>	50

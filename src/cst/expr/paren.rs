@@ -6,7 +6,6 @@ use super::Expr;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ParenExpr {
-    depth: usize,
     expr: Expr,
     loc: Location,
     start_comments: Vec<Comment>,
@@ -14,9 +13,8 @@ pub(crate) struct ParenExpr {
 }
 
 impl ParenExpr {
-    pub(crate) fn new(expr: Expr, loc: Location, depth: usize) -> ParenExpr {
+    pub(crate) fn new(expr: Expr, loc: Location) -> ParenExpr {
         ParenExpr {
-            depth,
             expr,
             loc,
             start_comments: vec![],
@@ -58,9 +56,15 @@ impl ParenExpr {
     /// 複数行であるかどうかを bool 型の値で返す。
     /// くくられている式が複数行であるか、かっこ式にコメントが含まれる場合は true、そうでなければ false を返す。
     pub(crate) fn is_multi_line(&self) -> bool {
+        let has_trailing_comment = if let Expr::Aligned(aligned) = &self.expr {
+            aligned.has_trailing_comment()
+        } else {
+            false
+        };
         self.expr.is_multi_line()
             || !self.start_comments.is_empty()
             || !self.end_comments.is_empty()
+            || has_trailing_comment
     }
 
     /// 自身を描画した際に、最後の行のインデントからの文字列の長さを返す。
@@ -75,7 +79,8 @@ impl ParenExpr {
         }
     }
 
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        // depth は開きかっこを描画する行のインデントの深さ
         let mut result = String::new();
 
         result.push('(');
@@ -85,16 +90,16 @@ impl ParenExpr {
         }
 
         for comment in &self.start_comments {
-            result.push_str(&comment.render(self.depth)?);
+            result.push_str(&comment.render(depth)?);
             result.push('\n');
         }
 
-        let formatted = self.expr.render()?;
+        let formatted = self.expr.render(depth + 1)?;
 
         // bodyでない式は、最初の行のインデントを自分で行わない。
         // そのため、かっこのインデントの深さ + 1個分インデントを挿入する。
         if self.is_multi_line() && !self.expr.is_body() {
-            result.extend(repeat_n('\t', self.depth + 1));
+            result.extend(repeat_n('\t', depth + 1));
         }
 
         result.push_str(&formatted);
@@ -105,12 +110,12 @@ impl ParenExpr {
         }
 
         for comment in &self.end_comments {
-            result.push_str(&comment.render(self.depth)?);
+            result.push_str(&comment.render(depth)?);
             result.push('\n');
         }
 
         if self.is_multi_line() {
-            result.extend(repeat_n('\t', self.depth));
+            result.extend(repeat_n('\t', depth));
         }
 
         result.push(')');

@@ -23,8 +23,6 @@ impl Formatter {
 
         cursor.goto_first_child();
         // cursor -> (
-        // 将来的には、かっこの数を数えるかもしれない
-        self.nest();
 
         cursor.goto_next_sibling();
         // cursor -> comments | select_statement
@@ -55,11 +53,9 @@ impl Formatter {
         }
 
         // cursor -> )
-        self.unnest();
-
         cursor.goto_parent();
         ensure_kind(cursor, "select_subexpression")?;
 
-        Ok(SelectSubExpr::new(select_stmt, loc, self.state.depth))
+        Ok(SelectSubExpr::new(select_stmt, loc))
     }
 }

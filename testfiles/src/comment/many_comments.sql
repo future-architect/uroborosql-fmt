@@ -21,3 +21,5 @@ ID = 5 -- check id
 and age >= 18
 /* hoge */
 /* huga */
+and -- this comment follows "AND"
+    grade > 50

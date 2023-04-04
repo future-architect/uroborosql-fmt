@@ -18,12 +18,7 @@ impl Formatter {
         //     ("ELSE" expression)?
         //     "END"
 
-        let mut cond_expr = CondExpr::new(Location::new(cursor.node().range()), self.state.depth);
-
-        // CASE, WHEN(, THEN, ELSE)キーワードの分で2つネストが深くなる
-        // TODO: ネストの深さの計算をrender()メソッドで行う変更
-        self.nest();
-        self.nest();
+        let mut cond_expr = CondExpr::new(Location::new(cursor.node().range()));
 
         cursor.goto_first_child();
         // cursor -> "CASE"
@@ -34,37 +29,37 @@ impl Formatter {
 
             match kw_node.kind() {
                 "WHEN" => {
-                    let mut when_clause = create_clause(cursor, src, "WHEN", self.state.depth)?;
+                    let mut when_clause = create_clause(cursor, src, "WHEN")?;
                     cursor.goto_next_sibling();
                     self.consume_comment_in_clause(cursor, src, &mut when_clause)?;
 
                     // cursor -> _expression
                     let when_expr = self.format_expr(cursor, src)?;
-                    when_clause.set_body(Body::with_expr(when_expr, self.state.depth));
+                    when_clause.set_body(Body::with_expr(when_expr));
 
                     cursor.goto_next_sibling();
                     // cursor -> comment | "THEN"
                     self.consume_comment_in_clause(cursor, src, &mut when_clause)?;
 
                     // cursor -> "THEN"
-                    let mut then_clause = create_clause(cursor, src, "THEN", self.state.depth)?;
+                    let mut then_clause = create_clause(cursor, src, "THEN")?;
                     cursor.goto_next_sibling();
                     self.consume_comment_in_clause(cursor, src, &mut then_clause)?;
 
                     // cursor -> _expression
                     let then_expr = self.format_expr(cursor, src)?;
-                    then_clause.set_body(Body::with_expr(then_expr, self.state.depth));
+                    then_clause.set_body(Body::with_expr(then_expr));
 
                     cond_expr.add_when_then_clause(when_clause, then_clause);
                 }
                 "ELSE" => {
-                    let mut else_clause = create_clause(cursor, src, "ELSE", self.state.depth)?;
+                    let mut else_clause = create_clause(cursor, src, "ELSE")?;
                     cursor.goto_next_sibling();
                     self.consume_comment_in_clause(cursor, src, &mut else_clause)?;
 
                     // cursor -> _expression
                     let else_expr = self.format_expr(cursor, src)?;
-                    else_clause.set_body(Body::with_expr(else_expr, self.state.depth));
+                    else_clause.set_body(Body::with_expr(else_expr));
 
                     cond_expr.set_else_clause(else_clause);
                 }
@@ -100,9 +95,6 @@ impl Formatter {
                 }
             }
         }
-
-        self.unnest();
-        self.unnest();
 
         cursor.goto_parent();
         ensure_kind(cursor, "conditional_expression")?;

@@ -180,9 +180,7 @@ impl Formatter {
                 Expr::Primary(Box::new(primary))
             }
             "select_subexpression" => {
-                self.nest();
                 let select_subexpr = self.format_select_subexpr(cursor, src)?;
-                self.unnest();
                 Expr::SelectSub(Box::new(select_subexpr))
             }
             "parenthesized_expression" => {
@@ -208,6 +206,9 @@ impl Formatter {
                 let primary = PrimaryExpr::with_node(cursor.node(), src);
                 Expr::Primary(Box::new(primary))
             }
+            "is_expression" => Expr::Aligned(Box::new(self.format_is_expr(cursor, src)?)),
+            "in_expression" => Expr::Aligned(Box::new(self.format_in_expr(cursor, src)?)),
+            "type_cast" => Expr::FunctionCall(Box::new(self.format_type_cast(cursor, src)?)),
             _ => {
                 // todo
                 return Err(UroboroSQLFmtError::UnimplementedError(format!(
@@ -266,13 +267,6 @@ impl Formatter {
 
         // cursor -> expr
 
-        // exprがparen_exprならネストしない
-        let is_nest = !matches!(cursor.node().kind(), "parenthesized_expression");
-
-        if is_nest {
-            self.nest();
-        }
-
         let expr = self.format_expr(cursor, src)?;
 
         let mut paren_expr = match expr {
@@ -281,8 +275,7 @@ impl Formatter {
                 *paren_expr
             }
             _ => {
-                let paren_expr = ParenExpr::new(expr, loc, self.state.depth);
-                self.unnest();
+                let paren_expr = ParenExpr::new(expr, loc);
                 paren_expr
             }
         };
@@ -311,36 +304,166 @@ impl Formatter {
     }
 
     /// カラムリストをColumnListで返す
-    /// カラムリストはVALUES句、SET句で現れ、"(" 式 ["," 式 ...] ")"という構造になっている
+    /// カラムリストは "(" 式 ["," 式 ...] ")"という構造になっている
     pub(crate) fn format_column_list(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<ColumnList, UroboroSQLFmtError> {
         ensure_kind(cursor, "(")?;
+
+        // ColumnListの位置
         let mut loc = Location::new(cursor.node().range());
 
-        let mut exprs = vec![];
-        // commaSep1(_expression)
+        cursor.goto_next_sibling();
+
+        let mut exprs = vec![self.format_expr(cursor, src)?.to_aligned()];
+
+        // カンマ区切りの式
         while cursor.goto_next_sibling() {
             loc.append(Location::new(cursor.node().range()));
             match cursor.node().kind() {
-                "," => continue,
+                "," => {
+                    cursor.goto_next_sibling();
+                    exprs.push(self.format_expr(cursor, src)?.to_aligned());
+                }
                 ")" => break,
                 COMMENT => {
-                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
-                        "format_column_list(): Unexpected comment\nnode_kind: {}\n{:#?}",
-                        cursor.node().kind(),
-                        cursor.node().range(),
-                    )))
+                    // 末尾コメントを想定する
+
+                    let comment = Comment::new(cursor.node(), src);
+
+                    // exprs は必ず1つ以上要素を持っている
+                    let last = exprs.last_mut().unwrap();
+                    if last.loc().is_same_line(&comment.loc()) {
+                        last.set_trailing_comment(comment)?;
+                    } else {
+                        // バインドパラメータ、末尾コメント以外のコメントは想定していない
+                        return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                            "format_column_list(): Unexpected comment\nnode_kind: {}\n{:#?}",
+                            cursor.node().kind(),
+                            cursor.node().range(),
+                        )));
+                    }
                 }
                 _ => {
-                    exprs.push(self.format_expr(cursor, src)?);
+                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                        "format_column_list(): Unexpected node\nnode_kind: {}\n{:#?}",
+                        cursor.node().kind(),
+                        cursor.node().range(),
+                    )));
                 }
             }
         }
 
         Ok(ColumnList::new(exprs, loc))
+    }
+
+    /// IS式のフォーマットを行う。
+    /// 結果を AlignedExpr で返す。
+    fn format_is_expr(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+
+        let lhs = self.format_expr(cursor, src)?;
+
+        cursor.goto_next_sibling();
+        ensure_kind(cursor, "IS")?;
+        let op = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
+        cursor.goto_next_sibling();
+
+        // 右辺は "NOT" から始まる場合がある。
+        // TODO: tree-sitter-sql では、右辺に distinct_from が現れるケースがあり、それには対応していない。
+        let rhs = if cursor.node().kind() == "NOT" {
+            let not_str = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
+            let mut loc = Location::new(cursor.node().range());
+            cursor.goto_next_sibling();
+
+            let operand = self.format_expr(cursor, src)?;
+            loc.append(operand.loc());
+            Expr::Unary(Box::new(UnaryExpr::new(not_str, operand, loc)))
+        } else {
+            self.format_expr(cursor, src)?
+        };
+
+        let mut aligned = AlignedExpr::new(lhs, false);
+        aligned.add_rhs(op, rhs);
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "is_expression")?;
+
+        Ok(aligned)
+    }
+
+    /// IN式に対して、AlignedExprを返す。
+    /// IN式は、(expr NOT? IN tuple) という構造をしている。
+    fn format_in_expr(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+
+        let lhs = self.format_expr(cursor, src)?;
+        cursor.goto_next_sibling();
+
+        // NOT IN または、IN
+        let mut op = String::new();
+        if cursor.node().kind() == "NOT" {
+            op.push_str(&convert_keyword_case(
+                cursor.node().utf8_text(src.as_bytes()).unwrap(),
+            ));
+            op.push(' ');
+            cursor.goto_next_sibling();
+        }
+
+        ensure_kind(cursor, "IN")?;
+        op.push_str(&convert_keyword_case(
+            cursor.node().utf8_text(src.as_bytes()).unwrap(),
+        ));
+        cursor.goto_next_sibling();
+
+        let bind_param = if cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            cursor.goto_next_sibling();
+            Some(comment)
+        } else {
+            None
+        };
+
+        ensure_kind(cursor, "tuple")?;
+        // body のネスト分と、開きかっこのネストで、二重にネストさせる。
+        // TODO: body の走査に入った時点で、ネストするべきかもしれない。
+
+        cursor.goto_first_child();
+        let mut column_list = self.format_column_list(cursor, src)?;
+        cursor.goto_parent();
+
+        ensure_kind(cursor, "tuple")?;
+
+        if let Some(comment) = bind_param {
+            if comment.is_multi_line_comment() && comment.loc().is_next_to(&column_list.loc()) {
+                column_list.set_head_comment(comment);
+            } else {
+                return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    "format_in_expr(): unexpected comment\n{:?}",
+                    comment
+                )));
+            }
+        }
+
+        let rhs = Expr::ColumnList(Box::new(column_list));
+
+        let mut aligned = AlignedExpr::new(lhs, false);
+        aligned.add_rhs(op, rhs);
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "in_expression")?;
+
+        Ok(aligned)
     }
 }
 

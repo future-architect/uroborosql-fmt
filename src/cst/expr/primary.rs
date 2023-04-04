@@ -1,9 +1,8 @@
 use tree_sitter::Node;
 
 use crate::{
-    config::CONFIG,
     cst::{Comment, Location, UroboroSQLFmtError},
-    util::is_quoted,
+    util::{is_quoted, trim_bind_param},
 };
 
 use super::convert_indentifier_case;
@@ -65,26 +64,11 @@ impl PrimaryExpr {
 
     /// バインドパラメータをセットする
     pub(crate) fn set_head_comment(&mut self, comment: Comment) {
-        let Comment {
-            text: mut comment,
-            mut loc,
-        } = comment;
+        let Comment { text, mut loc } = comment;
 
-        if CONFIG.read().unwrap().trim_bind_param {
-            // 1. /*を削除
-            // 2. *\を削除
-            // 3. 前後の空白文字を削除
-            // 4. /* */付与
-            comment = format!(
-                "/*{}*/",
-                comment
-                    .trim_start_matches("/*")
-                    .trim_end_matches("*/")
-                    .trim()
-            );
-        }
+        let text = trim_bind_param(text);
 
-        self.head_comment = Some(comment);
+        self.head_comment = Some(text);
         loc.append(self.loc.clone());
         self.loc = loc;
     }

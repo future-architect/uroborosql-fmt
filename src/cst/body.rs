@@ -23,12 +23,12 @@ impl Body {
         }
     }
 
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         match self {
-            Body::SepLines(sep_lines) => sep_lines.render(),
-            Body::BooleanExpr(bool_expr) => bool_expr.render(),
-            Body::Insert(insert) => insert.render(),
-            Body::SingleLine(single_line) => single_line.render(),
+            Body::SepLines(sep_lines) => sep_lines.render(depth),
+            Body::BooleanExpr(bool_expr) => bool_expr.render(depth),
+            Body::Insert(insert) => insert.render(depth),
+            Body::SingleLine(single_line) => single_line.render(depth),
         }
     }
 
@@ -57,7 +57,7 @@ impl Body {
     }
 
     /// 一つのExprからなるBodyを生成し返す
-    pub(crate) fn with_expr(expr: Expr, depth: usize) -> Body {
+    pub(crate) fn with_expr(expr: Expr) -> Body {
         if expr.is_body() {
             // Bodyである場合はそのまま返せばよい
             if let Expr::Boolean(boolean) = expr {
@@ -68,15 +68,15 @@ impl Body {
             }
         } else {
             // Bodyでない場合、SeparatedLinesにして返す
-            let mut sep_lines = SeparatedLines::new(depth, "", false);
+            let mut sep_lines = SeparatedLines::new("", false);
             sep_lines.add_expr(expr.to_aligned());
             Body::SepLines(sep_lines)
         }
     }
 
     /// 単一行の Clause の Body となる SingleLineを生成する
-    pub(crate) fn to_single_line(expr: Expr, depth: usize) -> Body {
-        Body::SingleLine(Box::new(SingleLine::new(expr, depth)))
+    pub(crate) fn to_single_line(expr: Expr) -> Body {
+        Body::SingleLine(Box::new(SingleLine::new(expr)))
     }
 
     /// Body に含まれる最初の式にバインドパラメータをセットすることを試みる。
@@ -94,8 +94,6 @@ impl Body {
 /// 句の本体にあたる部分である、あるseparatorで区切られた式の集まり
 #[derive(Debug, Clone)]
 pub(crate) struct SeparatedLines {
-    /// インデントの深さ
-    depth: usize,
     /// セパレータ(e.g., ',', AND)
     separator: String,
     /// 各行の情報。式と直後に来るコメントのペアのベクトルとして保持する
@@ -108,10 +106,9 @@ pub(crate) struct SeparatedLines {
 }
 
 impl SeparatedLines {
-    pub(crate) fn new(depth: usize, sep: impl Into<String>, is_omit_op: bool) -> SeparatedLines {
+    pub(crate) fn new(sep: impl Into<String>, is_omit_op: bool) -> SeparatedLines {
         let separator = sep.into();
         SeparatedLines {
-            depth,
             separator,
             contents: vec![] as Vec<(AlignedExpr, Vec<Comment>)>,
             loc: None,
@@ -186,7 +183,14 @@ impl SeparatedLines {
     }
 
     /// AS句で揃えたものを返す
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        if depth < 1 {
+            // ','の後にタブ文字を挿入するので、インデントの深さ(depth)は1以上でなければならない。
+            return Err(UroboroSQLFmtError::RenderingError(
+                "SeparatedLines::render(): The depth must be bigger than 0".to_owned(),
+            ));
+        }
+
         let mut result = String::new();
 
         // 演算子自体の長さ
@@ -194,7 +198,7 @@ impl SeparatedLines {
         let mut is_first_line = true;
 
         for (aligned, comments) in &self.contents {
-            result.extend(repeat_n('\t', self.depth));
+            result.extend(repeat_n('\t', depth - 1));
 
             if is_first_line {
                 is_first_line = false;
@@ -204,13 +208,13 @@ impl SeparatedLines {
             result.push('\t');
 
             // alignedに演算子までの最長の長さを与えてフォーマット済みの文字列をもらう
-            let formatted = aligned.render_align(self.depth, &align_info, self.is_from_body)?;
+            let formatted = aligned.render_align(depth, &align_info, self.is_from_body)?;
             result.push_str(&formatted);
             result.push('\n');
 
             // commentsのrender
             for comment in comments {
-                result.push_str(&comment.render(self.depth)?);
+                result.push_str(&comment.render(depth - 1)?);
                 result.push('\n');
             }
         }
@@ -222,33 +226,38 @@ impl SeparatedLines {
 /// INSERT文の本体。
 /// テーブル名、対象のカラム名、VALUES句を含む
 #[derive(Debug, Clone)]
-pub(crate) struct InsertBody(
-    usize,
-    Location,
-    AlignedExpr,
-    Option<SeparatedLines>,
-    Option<String>,
-    Vec<ColumnList>,
-);
+pub(crate) struct InsertBody {
+    loc: Location,
+    table_name: AlignedExpr,
+    columns: Option<SeparatedLines>,
+    values_kw: Option<String>,
+    values_rows: Vec<ColumnList>,
+}
 
 impl InsertBody {
-    pub(crate) fn new(depth: usize, loc: Location, table_name: AlignedExpr) -> InsertBody {
-        InsertBody(depth, loc, table_name, None, None, vec![])
+    pub(crate) fn new(loc: Location, table_name: AlignedExpr) -> InsertBody {
+        InsertBody {
+            loc,
+            table_name,
+            columns: None,
+            values_kw: None,
+            values_rows: vec![],
+        }
     }
 
     pub(crate) fn loc(&self) -> Location {
-        self.1.clone()
+        self.loc.clone()
     }
 
     /// カラム名をセットする
     pub(crate) fn set_column_name(&mut self, cols: SeparatedLines) {
-        self.3 = Some(cols);
+        self.columns = Some(cols);
     }
 
     /// VALUES句をセットする
     pub(crate) fn set_values_clause(&mut self, kw: &str, body: Vec<ColumnList>) {
-        self.4 = Some(kw.to_string());
-        self.5 = body;
+        self.values_kw = Some(kw.to_string());
+        self.values_rows = body;
     }
 
     /// 子供にコメントを追加する
@@ -268,54 +277,70 @@ impl InsertBody {
         // 下から順番に見ていく
 
         // table_nameの直後に現れる
-        if comment.is_multi_line_comment() || !self.2.loc().is_same_line(&comment.loc()) {
+        if comment.is_multi_line_comment() || !self.table_name.loc().is_same_line(&comment.loc()) {
             // 行末コメントではない場合は未対応
             unimplemented!()
         } else {
             // 行末コメントである場合、table_nameに追加する
-            self.2.set_trailing_comment(comment)?;
+            self.table_name.set_trailing_comment(comment)?;
         }
 
         Ok(())
     }
 
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        // depth は INSERT が描画される行のインデントの深さ + 1 (つまり、テーブル名が描画される行の深さ)
+        if depth < 1 {
+            // インデントの深さ(depth)は1以上でなければならない。
+            return Err(UroboroSQLFmtError::RenderingError(
+                "InsertBody::render(): The depth must be bigger than 0".to_owned(),
+            ));
+        }
+
         let mut result = String::new();
 
         // テーブル名
-        result.extend(repeat_n('\t', self.0 + 1));
-        result.push_str(&self.2.render()?);
+        result.extend(repeat_n('\t', depth));
+        result.push_str(&self.table_name.render(depth)?);
         result.push('\n');
 
         // カラム名
-        if let Some(sep_lines) = &self.3 {
-            result.extend(repeat_n('\t', self.0));
+        if let Some(sep_lines) = &self.columns {
+            result.extend(repeat_n('\t', depth - 1));
             result.push_str("(\n");
-            result.push_str(&sep_lines.render()?);
+            result.push_str(&sep_lines.render(depth)?);
             result.push(')');
         }
 
         // VALUES句
-        if let Some(kw) = &self.4 {
+        if let Some(kw) = &self.values_kw {
             result.push(' ');
             result.push_str(kw);
 
             // 要素が一つか二つ以上かでフォーマット方針が異なる
-            let is_one_row = self.5.len() == 1;
+            let is_one_row = self.values_rows.len() == 1;
 
             if !is_one_row {
                 result.push('\n');
+                result.extend(repeat_n('\t', depth));
+            } else {
+                // "VALUES" と "(" の間の空白
+                result.push(' ');
             }
+
+            let mut separator = String::from('\n');
+            separator.extend(repeat_n('\t', depth - 1));
+            separator.push_str(",\t");
 
             result.push_str(
                 &self
-                    .5
+                    .values_rows
                     .iter()
-                    .filter_map(|cols| cols.render(self.0 + 1, is_one_row).ok())
-                    .join("\n,"),
+                    .filter_map(|cols| cols.render(depth - 1).ok())
+                    .join(&separator),
             );
             result.push('\n');
-        } else if self.3.is_some() {
+        } else {
             // VALUES句があるときは、改行を入れずに`VALUES`キーワードを出力している
             // そのため、VALUES句がない場合はここで改行
             result.push('\n');
@@ -327,18 +352,16 @@ impl InsertBody {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SingleLine {
-    depth: usize,
     expr: AlignedExpr,
     loc: Location,
     comments: Vec<Comment>,
 }
 
 impl SingleLine {
-    pub(crate) fn new(expr: Expr, depth: usize) -> SingleLine {
+    pub(crate) fn new(expr: Expr) -> SingleLine {
         let expr = expr.to_aligned();
         let loc = expr.loc();
         SingleLine {
-            depth,
             expr,
             loc,
             comments: vec![],
@@ -374,11 +397,11 @@ impl SingleLine {
     }
 
     /// 先頭にインデントを挿入せずに render する。
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
         // 式は一つのみであるため、縦ぞろえはしない
-        result.push_str(&self.expr.render()?);
+        result.push_str(&self.expr.render(depth)?);
 
         result.push('\n');
         if !self.comments.is_empty() {
@@ -386,7 +409,7 @@ impl SingleLine {
                 &self
                     .comments
                     .iter()
-                    .map(|c| c.render(self.depth))
+                    .map(|c| c.render(depth))
                     .collect::<Result<Vec<_>, _>>()?
                     .join("\n"),
             );

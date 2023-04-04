@@ -10,7 +10,6 @@ use super::Expr;
 /// 条件式(CASE式)を表す
 #[derive(Debug, Clone)]
 pub(crate) struct CondExpr {
-    depth: usize,
     expr: Option<AlignedExpr>,
     when_then_clause: Vec<(Clause, Clause)>,
     else_clause: Option<Clause>,
@@ -20,9 +19,8 @@ pub(crate) struct CondExpr {
 }
 
 impl CondExpr {
-    pub(crate) fn new(loc: Location, depth: usize) -> CondExpr {
+    pub(crate) fn new(loc: Location) -> CondExpr {
         CondExpr {
-            depth,
             expr: None,
             when_then_clause: vec![],
             else_clause: None,
@@ -72,7 +70,8 @@ impl CondExpr {
         Ok(())
     }
 
-    pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        // depth は CASE キーワードが描画される行のインデントの深さ
         let mut result = String::new();
 
         // CASEキーワードの行のインデントは呼び出し側が行う
@@ -80,33 +79,32 @@ impl CondExpr {
         result.push('\n');
 
         if let Some(expr) = &self.expr {
-            result.extend(repeat_n('\t', self.depth + 2));
-            result.push_str(&expr.render()?);
+            result.extend(repeat_n('\t', depth + 1));
+            result.push_str(&expr.render(depth + 1)?);
             result.push('\n');
         }
 
         for comment in &self.comments {
-            // when, then, elseはcaseと2つネストがずれている
-            result.push_str(&comment.render(self.depth + 2)?);
+            result.push_str(&comment.render(depth + 1)?);
             result.push('\n');
         }
 
         // when then
         for (when_clause, then_clause) in &self.when_then_clause {
-            let formatted = when_clause.render()?;
+            let formatted = when_clause.render(depth + 1)?;
             result.push_str(&formatted);
 
-            let formatted = then_clause.render()?;
+            let formatted = then_clause.render(depth + 1)?;
             result.push_str(&formatted);
         }
 
         // else
         if let Some(else_clause) = &self.else_clause {
-            let formatted = else_clause.render()?;
+            let formatted = else_clause.render(depth + 1)?;
             result.push_str(&formatted);
         }
 
-        result.extend(repeat_n('\t', self.depth + 1));
+        result.extend(repeat_n('\t', depth));
         result.push_str(&convert_keyword_case("END"));
 
         Ok(result)

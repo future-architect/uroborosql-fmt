@@ -24,7 +24,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         // cursor -> SELECT
-        let mut clause = create_clause(cursor, src, "SELECT", self.state.depth)?;
+        let mut clause = create_clause(cursor, src, "SELECT")?;
         cursor.goto_next_sibling();
 
         // SQL_IDとコメントを消費
@@ -76,7 +76,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         // cursor -> FROM
-        let mut clause = create_clause(cursor, src, "FROM", self.state.depth)?;
+        let mut clause = create_clause(cursor, src, "FROM")?;
         cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
@@ -102,7 +102,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         // cursor -> WHERE
-        let mut clause = create_clause(cursor, src, "WHERE", self.state.depth)?;
+        let mut clause = create_clause(cursor, src, "WHERE")?;
         cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
@@ -110,7 +110,7 @@ impl Formatter {
         let expr = self.format_expr(cursor, src)?;
 
         // 結果として得られた式をBodyに変換する
-        let body = Body::with_expr(expr, self.state.depth);
+        let body = Body::with_expr(expr);
 
         clause.set_body(body);
 
@@ -141,12 +141,12 @@ impl Formatter {
 
             clause
         } else {
-            create_clause(cursor, src, "JOIN", self.state.depth)?
+            create_clause(cursor, src, "JOIN")?
         };
         cursor.goto_next_sibling();
 
         let table = self.format_aliasable_expr(cursor, src)?;
-        let body = Body::with_expr(Expr::Aligned(Box::new(table)), self.state.depth);
+        let body = Body::with_expr(Expr::Aligned(Box::new(table)));
         join_clause.set_body(body);
 
         if cursor.goto_next_sibling() {
@@ -176,11 +176,13 @@ impl Formatter {
     ) -> Result<Clause, UroboroSQLFmtError> {
         match cursor.node().kind() {
             "ON" => {
-                let mut on_clause = create_clause(cursor, src, "ON", self.state.depth)?;
+                let mut on_clause = create_clause(cursor, src, "ON")?;
                 cursor.goto_next_sibling();
 
+                self.consume_comment_in_clause(cursor, src, &mut on_clause)?;
+
                 let expr = self.format_expr(cursor, src)?;
-                let body = Body::with_expr(expr, self.state.depth);
+                let body = Body::with_expr(expr);
                 on_clause.set_body(body);
 
                 Ok(on_clause)
@@ -228,7 +230,7 @@ impl Formatter {
             )));
         }
 
-        let mut clause = create_clause(cursor, src, cursor.node().kind(), self.state.depth)?;
+        let mut clause = create_clause(cursor, src, cursor.node().kind())?;
 
         while cursor.goto_next_sibling() {
             if !matches!(
@@ -258,11 +260,11 @@ impl Formatter {
 
         cursor.goto_first_child();
 
-        let mut clause = create_clause(cursor, src, "GROUP_BY", self.state.depth)?;
+        let mut clause = create_clause(cursor, src, "GROUP_BY")?;
         cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
-        let mut sep_lines = SeparatedLines::new(self.state.depth, ",", false);
+        let mut sep_lines = SeparatedLines::new(",", false);
         let first = self.format_group_expression(cursor, src)?;
         sep_lines.add_expr(first.to_aligned());
 
@@ -331,13 +333,13 @@ impl Formatter {
         cursor.goto_first_child();
 
         // "ORDER_BY"
-        let mut clause = create_clause(cursor, src, "ORDER_BY", self.state.depth)?;
+        let mut clause = create_clause(cursor, src, "ORDER_BY")?;
         cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         // order_expression は、左辺をカラム名、右辺をオプションとしており、演算子は常に空になる
         // そのため、is_omit_op (第3引数)に true をセットする
-        let mut sep_lines = SeparatedLines::new(self.state.depth, ",", true);
+        let mut sep_lines = SeparatedLines::new(",", true);
         let first = self.format_order_expression(cursor, src)?;
         sep_lines.add_expr(first);
 
@@ -448,50 +450,16 @@ impl Formatter {
         cursor.goto_first_child();
 
         ensure_kind(cursor, "SET")?;
-        let mut set_clause = Clause::new(cursor.node(), src, self.state.depth);
+        let mut set_clause = Clause::new(cursor.node(), src);
         cursor.goto_next_sibling();
 
         ensure_kind(cursor, "set_clause_body")?;
         cursor.goto_first_child();
 
-        let mut sep_lines = SeparatedLines::new(self.state.depth, ",", false);
-
-        let mut format_set_clause_item = |cursor: &mut TreeCursor| {
-            if cursor.node().kind() == "assigment_expression" {
-                // tree-sitter-sqlのタイポでnが抜けている点に注意
-                let aligned = self.format_assign_expr(cursor, src)?;
-                Ok(aligned)
-            } else if cursor.node().kind() == "(" {
-                let lhs = Expr::ColumnList(Box::new(self.format_column_list(cursor, src)?));
-                cursor.goto_next_sibling();
-                ensure_kind(cursor, "=")?;
-
-                cursor.goto_next_sibling();
-
-                let rhs = if cursor.node().kind() == "select_subexpression" {
-                    self.nest();
-                    let expr = Expr::SelectSub(Box::new(self.format_select_subexpr(cursor, src)?));
-                    self.unnest();
-                    expr
-                } else {
-                    Expr::ColumnList(Box::new(self.format_column_list(cursor, src)?))
-                };
-
-                let mut aligned = AlignedExpr::new(lhs, false);
-                aligned.add_rhs("=", rhs);
-
-                Ok(aligned)
-            } else {
-                Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
-                    r#"format_set_clause(): expected node is assigment_expression, "(" or select_subexpression, but actual {}\n{:#?}"#,
-                    cursor.node().kind(),
-                    cursor.node().range()
-                )))
-            }
-        };
+        let mut sep_lines = SeparatedLines::new(",", false);
 
         // commaSep1(set_clause_item)
-        let aligned = format_set_clause_item(cursor)?;
+        let aligned = self.format_set_clause_item(cursor, src)?;
         sep_lines.add_expr(aligned);
 
         while cursor.goto_next_sibling() {
@@ -502,11 +470,12 @@ impl Formatter {
                 }
                 "," => continue,
                 _ => {
-                    let aligned = format_set_clause_item(cursor)?;
+                    let aligned = self.format_set_clause_item(cursor, src)?;
                     sep_lines.add_expr(aligned);
                 }
             }
         }
+
         cursor.goto_parent();
         ensure_kind(cursor, "set_clause_body")?;
 
@@ -517,6 +486,42 @@ impl Formatter {
         ensure_kind(cursor, "set_clause")?;
 
         Ok(set_clause)
+    }
+
+    fn format_set_clause_item(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
+        if cursor.node().kind() == "assigment_expression" {
+            // tree-sitter-sqlのタイポでnが抜けている点に注意
+            let aligned = self.format_assign_expr(cursor, src)?;
+            Ok(aligned)
+        } else if cursor.node().kind() == "(" {
+            let lhs = Expr::ColumnList(Box::new(self.format_column_list(cursor, src)?));
+
+            cursor.goto_next_sibling();
+            ensure_kind(cursor, "=")?;
+
+            cursor.goto_next_sibling();
+
+            let rhs = if cursor.node().kind() == "select_subexpression" {
+                Expr::SelectSub(Box::new(self.format_select_subexpr(cursor, src)?))
+            } else {
+                Expr::ColumnList(Box::new(self.format_column_list(cursor, src)?))
+            };
+
+            let mut aligned = AlignedExpr::new(lhs, false);
+            aligned.add_rhs("=", rhs);
+
+            Ok(aligned)
+        } else {
+            Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                r#"format_set_clause(): expected node is assigment_expression, "(" or select_subexpression, but actual {}\n{:#?}"#,
+                cursor.node().kind(),
+                cursor.node().range()
+            )))
+        }
     }
 
     pub(crate) fn format_assign_expr(
@@ -551,7 +556,7 @@ impl Formatter {
         cursor.goto_first_child();
 
         // RANGE | ROWS | GROUPS
-        let mut clause = create_clause(cursor, src, cursor.node().kind(), self.state.depth)?;
+        let mut clause = create_clause(cursor, src, cursor.node().kind())?;
 
         cursor.goto_parent();
 
@@ -606,10 +611,7 @@ impl Formatter {
         let n_expr = ExprSeq::new(&exprs);
 
         // 単一行に描画するため、SingleLineを生成する
-        clause.set_body(Body::to_single_line(
-            Expr::ExprSeq(Box::new(n_expr)),
-            self.state.depth,
-        ));
+        clause.set_body(Body::to_single_line(Expr::ExprSeq(Box::new(n_expr))));
 
         cursor.goto_parent();
         ensure_kind(cursor, "frame_clause")?;
@@ -676,7 +678,7 @@ impl Formatter {
     ) -> Result<Clause, UroboroSQLFmtError> {
         cursor.goto_first_child();
 
-        let mut clause = create_clause(cursor, src, clause_keyword, self.state.depth)?;
+        let mut clause = create_clause(cursor, src, clause_keyword)?;
         cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
