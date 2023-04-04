@@ -272,7 +272,7 @@ pub(crate) struct Clause {
 impl Clause {
     pub(crate) fn new(kw_node: Node, src: &str, depth: usize) -> Clause {
         // コーディング規約によると、キーワードは大文字で記述する
-        let keyword = format_keyword(kw_node.utf8_text(src.as_bytes()).unwrap());
+        let keyword = convert_keyword_case(kw_node.utf8_text(src.as_bytes()).unwrap());
         let loc = Location::new(kw_node.range());
         Clause {
             keyword,
@@ -293,8 +293,9 @@ impl Clause {
         let loc = Location::new(node.range());
         self.loc.append(loc);
         self.keyword.push(' ');
-        self.keyword
-            .push_str(&format_keyword(node.utf8_text(src.as_bytes()).unwrap()));
+        self.keyword.push_str(&convert_keyword_case(
+            node.utf8_text(src.as_bytes()).unwrap(),
+        ));
     }
 
     // bodyをセットする

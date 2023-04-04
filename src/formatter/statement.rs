@@ -1,6 +1,6 @@
 use tree_sitter::TreeCursor;
 
-use crate::{cst::*, util::format_keyword};
+use crate::{cst::*, util::convert_keyword_case};
 
 use super::{create_clause, ensure_kind, Formatter, COMMENT};
 
@@ -325,7 +325,7 @@ impl Formatter {
                     }
                 }
             }
-            insert_body.set_values_clause(&format_keyword("VALUES"), items);
+            insert_body.set_values_clause(&convert_keyword_case("VALUES"), items);
 
             cursor.goto_parent();
             ensure_kind(cursor, "values_clause")?;

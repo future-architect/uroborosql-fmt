@@ -1,43 +1,43 @@
 SELECT
 	CASE
 		WHEN
-			A	=	1
+			a	=	1
 		THEN
 			'one'
 		ELSE
 			'other'
-	END	AS	GRADE
+	END	AS	grade
 FROM
-	STUDENT	STD
+	student	std
 WHERE
-	GRADE	BETWEEN		/*start1*/60	AND	/*end1*/100
-AND	GRADE	NOT BETWEEN	/*start2*/70	AND	/*end2*/80
+	grade	BETWEEN		/*start1*/60	AND	/*end1*/100
+AND	grade	NOT BETWEEN	/*start2*/70	AND	/*end2*/80
 ;
 UPDATE
-	WEATHER
+	weather
 SET
-	(TEMP_LO, TEMP_HI, PRCP)	=	(TEMP_LO	+	1, TEMP_LO	+	15, DEFAULT)
+	(temp_lo, temp_hi, prcp)	=	(temp_lo	+	1, temp_lo	+	15, default)
 WHERE
-	CITY	=	'San Francisco'
+	city	=	'San Francisco'
 ;
 DELETE
 FROM
-	PRODUCTS
+	products
 WHERE
-	OBSOLETION_DATE	=	'today'
+	obsoletion_date	=	'today'
 RETURNING
 	*
 ;
 INSERT
 INTO
-	DISTRIBUTORS
+	distributors
 (
-	DID
-,	DNAME
+	did
+,	dname
 ) VALUES (
-	DEFAULT
+	default
 ,	'XYZ Widgets'
 )
 RETURNING
-	DID
+	did
 ;

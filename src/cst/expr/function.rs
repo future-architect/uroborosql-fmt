@@ -2,10 +2,10 @@ use itertools::repeat_n;
 
 use crate::{
     cst::{Clause, Location, UroboroSQLFmtError},
-    util::{format_keyword, tab_size, to_tab_num},
+    util::{convert_keyword_case, tab_size, to_tab_num},
 };
 
-use super::{to_uppercase_identifier, Expr};
+use super::{convert_indentifier_case, Expr};
 
 /// 関数呼び出しを表す
 #[derive(Debug, Clone)]
@@ -101,7 +101,7 @@ impl FunctionCall {
     /// 引数が単一行に収まる場合は単一行の文字列を、複数行になる場合は引数ごとに改行を挿入した文字列を返す
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
-        let func_name = to_uppercase_identifier(&self.name);
+        let func_name = convert_indentifier_case(&self.name);
 
         result.push_str(&func_name);
         result.push('(');
@@ -139,7 +139,7 @@ impl FunctionCall {
         // OVER句
         if let Some(clauses) = &self.over_window_definition {
             result.push(' ');
-            result.push_str(&format_keyword("OVER"));
+            result.push_str(&convert_keyword_case("OVER"));
             result.push('(');
 
             if !clauses.is_empty() {

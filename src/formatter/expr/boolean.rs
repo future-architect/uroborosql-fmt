@@ -5,7 +5,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     formatter::{ensure_kind, Formatter, COMMENT},
-    util::format_keyword,
+    util::convert_keyword_case,
 };
 
 impl Formatter {
@@ -31,7 +31,7 @@ impl Formatter {
             // (NOT expr)のソースコード上の位置を計算
             loc.append(expr.loc());
 
-            let not_expr = UnaryExpr::new(&format_keyword("NOT"), expr, loc);
+            let not_expr = UnaryExpr::new(&convert_keyword_case("NOT"), expr, loc);
 
             cursor.goto_parent();
             ensure_kind(cursor, "boolean_expression")?;
@@ -53,7 +53,7 @@ impl Formatter {
             }
 
             let sep = cursor.node().kind();
-            boolean_expr.set_default_separator(format_keyword(sep));
+            boolean_expr.set_default_separator(convert_keyword_case(sep));
 
             cursor.goto_next_sibling();
             // cursor -> _expression
@@ -89,13 +89,13 @@ impl Formatter {
         let mut operator = String::new();
 
         if cursor.node().kind() == "NOT" {
-            operator += &format_keyword("NOT");
+            operator += &convert_keyword_case("NOT");
             operator += " "; // betweenの前に空白を入れる
             cursor.goto_next_sibling();
         }
 
         ensure_kind(cursor, "BETWEEN")?;
-        operator += &format_keyword("BETWEEN");
+        operator += &convert_keyword_case("BETWEEN");
         cursor.goto_next_sibling();
         // cursor -> _expression
 
@@ -111,7 +111,7 @@ impl Formatter {
 
         // (from AND to)をAlignedExprにまとめる
         let mut rhs = AlignedExpr::new(from_expr, false);
-        rhs.add_rhs(format_keyword("AND"), to_expr);
+        rhs.add_rhs(convert_keyword_case("AND"), to_expr);
 
         // (expr BETWEEN rhs)をAlignedExprにまとめる
         let mut aligned = AlignedExpr::new(expr, false);
