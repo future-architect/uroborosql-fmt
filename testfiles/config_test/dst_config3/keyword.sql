@@ -6,7 +6,8 @@ select
 			'one'
 		else
 			'other'
-	end	as	GRADE
+	end
+		as	GRADE
 from
 	student	std
 where

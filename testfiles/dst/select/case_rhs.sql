@@ -22,7 +22,17 @@ SELECT
 FROM
 	TBL
 WHERE
-	TBL.COL	=	CASE
+	TBL.COL	=
+		CASE
+			WHEN
+				COL	IS	NULL
+			THEN
+				0
+			ELSE
+				1
+		END
+AND
+	CASE
 		WHEN
 			COL	IS	NULL
 		THEN
@@ -30,11 +40,4 @@ WHERE
 		ELSE
 			1
 	END
-AND	CASE
-		WHEN
-			COL	IS	NULL
-		THEN
-			0
-		ELSE
-			1
-	END		>	FUNC(HOGE)
+			>	FUNC(HOGE)
