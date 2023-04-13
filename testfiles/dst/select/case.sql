@@ -17,7 +17,8 @@ SELECT
 			'C'
 		ELSE
 			'D'
-	END	AS	GRADE
+	END
+		AS	GRADE
 FROM
 	RISYU
 WHERE
@@ -41,7 +42,8 @@ SELECT
 			3
 		ELSE
 			0
-	END	AS	P
+	END
+		AS	P
 FROM
 	RISYU
 WHERE

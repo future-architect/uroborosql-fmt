@@ -74,7 +74,7 @@ impl CondExpr {
         // depth は CASE キーワードが描画される行のインデントの深さ
         let mut result = String::new();
 
-        // CASEキーワードの行のインデントは呼び出し側が行う
+        // CASEキーワードのインデントは外部で行う
         result.push_str(&convert_keyword_case("CASE"));
         result.push('\n');
 

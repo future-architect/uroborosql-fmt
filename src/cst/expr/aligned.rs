@@ -273,7 +273,7 @@ impl AlignedExpr {
         let max_tab_num_to_op = align_info.max_tab_num_to_op;
         let max_tab_num_to_comment = align_info.max_tab_num_to_comment;
 
-        //左辺をrender
+        // 左辺をrender
         let formatted = self.lhs.render(depth)?;
         result.push_str(&formatted);
 
@@ -301,21 +301,39 @@ impl AlignedExpr {
                     result.extend(repeat_n('\t', depth - 1));
                 }
 
+                // 左辺がCASE文の場合はopの前に改行してdepthだけタブを挿入
+                if matches!(self.lhs, Expr::Cond(_)) {
+                    result.push_str("\n");
+                    result.extend(repeat_n('\t', depth));
+                }
+
                 let tab_num = max_tab_num - self.lhs_tab_num();
                 result.extend(repeat_n('\t', tab_num));
-
                 result.push('\t');
 
                 // from句以外はopを挿入
                 if !is_from_body {
                     result.push_str(op);
-                    let tab_num = max_op_tab_num - self.op_tab_num().unwrap(); // self.op != Noneならop_tab_num != None
-                    result.extend(repeat_n('\t', tab_num + 1));
+
+                    // 右辺が存在してCASE文ではない場合はタブを挿入
+                    // CASE文の場合はopの直後で改行するため、opの後にはタブを挿入しない
+                    if self.rhs.is_some() && !matches!(&self.rhs, Some(Expr::Cond(_))) {
+                        let tab_num = max_op_tab_num - self.op_tab_num().unwrap(); // self.op != Noneならop_tab_num != None
+                        result.extend(repeat_n('\t', tab_num + 1));
+                    }
                 }
 
                 //右辺をrender
                 if let Some(rhs) = &self.rhs {
-                    let formatted = rhs.render(depth)?;
+                    let formatted = if matches!(rhs, Expr::Cond(_)) {
+                        // 右辺がCASE文の場合は改行してタブを挿入
+                        result.push('\n');
+                        result.extend(repeat_n('\t', depth + 1));
+                        // 1つ深いところでrender
+                        rhs.render(depth + 1)?
+                    } else {
+                        rhs.render(depth)?
+                    };
                     result.push_str(&formatted);
                 }
             }
@@ -393,6 +411,11 @@ impl AlignedExpr {
         }
 
         Ok(result)
+    }
+
+    /// 左辺がCASE文であればtrueを返す
+    pub(crate) fn is_lhs_cond(&self) -> bool {
+        matches!(&self.lhs, Expr::Cond(_))
     }
 }
 

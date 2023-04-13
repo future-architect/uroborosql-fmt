@@ -76,9 +76,11 @@ impl BooleanExprContent {
         let mut result = String::new();
         result.extend(repeat_n('\t', depth - 1));
 
+        // 最初の行でなければ演算子を挿入
         if !is_first_line {
             result.push_str(&self.op);
         }
+
         result.push('\t');
 
         // AND/OR と式の間に現れるコメント
@@ -93,6 +95,23 @@ impl BooleanExprContent {
                 }
                 result.push('\n');
             }
+
+            if self.expr.is_lhs_cond() {
+                // CASE文である場合この後の処理で改行を挿入するため、ここでは最後の改行を削除する
+                result.pop();
+            } else {
+                // コメントの挿入後に改行をしたので、タブを挿入
+                result.extend(repeat_n('\t', depth));
+            }
+        } else if self.expr.is_lhs_cond() {
+            // コメントがない場合、現在のresultの末尾はop\tとなっている
+            // CASE文の場合はopの直後に改行を行うため、演算子の直後のタブを削除
+            result.pop();
+        }
+
+        // CASE文である場合、改行してインデントを挿入
+        if self.expr.is_lhs_cond() {
+            result.push('\n');
             result.extend(repeat_n('\t', depth));
         }
 

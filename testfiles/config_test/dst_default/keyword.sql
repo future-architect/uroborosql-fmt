@@ -6,7 +6,8 @@ SELECT
 			'one'
 		ELSE
 			'other'
-	END	AS	GRADE
+	END
+		AS	GRADE
 FROM
 	STUDENT	STD
 WHERE
