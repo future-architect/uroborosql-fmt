@@ -282,6 +282,12 @@ impl Formatter {
                     let comment = Comment::new(cursor.node(), src);
                     sep_lines.add_comment_to_child(comment)?;
                 }
+                "ERROR" => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                        "format_group_by_clause: ERROR node appeared \n{:?}",
+                        cursor.node().range()
+                    )));
+                }
                 _ => {
                     break;
                 }
