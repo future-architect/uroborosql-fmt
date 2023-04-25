@@ -6,7 +6,7 @@ use crate::{
     util::{convert_keyword_case, tab_size, to_tab_num},
 };
 
-use super::{primary::PrimaryExpr, Expr};
+use super::{primary::PrimaryExpr, primary::PrimaryExprKind, Expr};
 
 /// AlignedExprの演算子、コメントを縦ぞろえする際に使用する情報を含む構造体
 #[derive(Debug)]
@@ -313,7 +313,7 @@ impl AlignedExpr {
 
                 // from句以外はopを挿入
                 if !is_from_body {
-                    result.push_str(op);
+                    result.push_str(&convert_keyword_case(op));
 
                     // 右辺が存在してCASE文ではない場合はタブを挿入
                     // CASE文の場合はopの直後で改行するため、opの後にはタブを挿入しない
@@ -429,10 +429,13 @@ fn create_alias(lhs: &Expr) -> Option<Expr> {
         Expr::Primary(prim) if prim.is_identifier() => {
             // Primary式であり、さらに識別子である場合のみ、エイリアス名を作成する
             let element = prim.element();
-            element
-                .split(".")
-                .last()
-                .and_then(|s| Some(Expr::Primary(Box::new(PrimaryExpr::new(s, loc)))))
+            element.split(".").last().and_then(|s| {
+                Some(Expr::Primary(Box::new(PrimaryExpr::new(
+                    s,
+                    loc,
+                    PrimaryExprKind::Expr,
+                ))))
+            })
         }
         _ => None,
     }

@@ -8,9 +8,11 @@ select id, case grade
     when 'A' then 5
     when 'B' then 4
     when 'C' then 3
-    else 0 as p
+    else 0 end as p
+
 from risyu
 where subject_number = '006';
 select case /*param*/a -- simple case cond
     when /*a*/'a' then 'A'
     else 'B'
+    end

@@ -15,9 +15,9 @@ where
 and	grade	not between	/*start2*/70	and	/*end2*/80
 ;
 update
-	weather
+	weAther
 set
-	(temp_lo, temp_hi, prcp)	=	(temp_lo	+	1, temp_lo	+	15, default)
+	(temp_lo, temp_hi, prcp)	=	(tEmp_lo	+	1, temp_lo	+	15, default)
 where
 	city	=	'San Francisco'
 ;

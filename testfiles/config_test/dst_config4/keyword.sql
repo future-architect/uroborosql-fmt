@@ -10,33 +10,33 @@ select
 		AS	GRADE
 from
 	STUDENT	STD
-where
+whEre
 	GRADE	BETWEEN		/*start1*/60	AND	/*end1*/100
 AND	GRADE	NOT BETWEEN	/*start2*/70	AND	/*end2*/80
 ;
 UPDATE
 	WEATHER
 SET
-	(TEMP_LO, TEMP_HI, PRCP)	=	(TEMP_LO	+	1, TEMP_LO	+	15, DEFAULT)
-WHERE
+	(TEMP_LO, TEMP_HI, PRCP)	=	(TEMP_LO	+	1, TEMP_LO	+	15, DEfAULT)
+WHeRE
 	CITY	=	'San Francisco'
 ;
-DELETE
+DELeTE
 from
 	PRODUCTS
-WHERE
+WHeRE
 	OBSOLETION_DATE	=	'today'
 RETURNING
 	*
 ;
-INSERT
+INSeRT
 into
 	DISTRIBUTORS
 (
 	DID
 ,	DNAME
 ) VALUES (
-	default
+	deFault
 ,	'XYZ Widgets'
 )
 RETURNING

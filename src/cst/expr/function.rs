@@ -5,7 +5,14 @@ use crate::{
     util::{convert_keyword_case, tab_size, to_tab_num},
 };
 
-use super::{convert_identifier_case, Expr};
+use super::Expr;
+
+/// FunctionCallがユーザ定義関数か組み込み関数か示すEnum
+#[derive(Debug, Clone)]
+pub(crate) enum FunctionCallKind {
+    UserDefined,
+    BuiltIn,
+}
 
 /// 関数呼び出しを表す
 #[derive(Debug, Clone)]
@@ -15,16 +22,27 @@ pub(crate) struct FunctionCall {
     /// OVER句が持つ句 (PARTITION BY、ORDER BY)
     /// None であるならば OVER句自体がない
     over_window_definition: Option<Vec<Clause>>,
+    over_keyword: String,
+    /// ユーザ定義関数か組み込み関数かを表すフィールド
+    /// 現状では使用していないが、将来的に関数呼び出しの大文字小文字ルールを変更する際に使用する可能性があるためフィールドに保持している
+    _kind: FunctionCallKind,
     loc: Location,
 }
 
 impl FunctionCall {
-    pub(crate) fn new(name: impl Into<String>, args: &[Expr], loc: Location) -> FunctionCall {
+    pub(crate) fn new(
+        name: impl Into<String>,
+        args: &[Expr],
+        kind: FunctionCallKind,
+        loc: Location,
+    ) -> FunctionCall {
         let name = name.into();
         FunctionCall {
             name,
             args: args.to_vec(),
             over_window_definition: None,
+            over_keyword: "OVER".to_string(),
+            _kind: kind,
             loc,
         }
     }
@@ -37,6 +55,10 @@ impl FunctionCall {
             window_definiton.push(c.clone())
         });
         self.over_window_definition = Some(window_definiton);
+    }
+
+    pub(crate) fn set_over_keyword(&mut self, over_keyword: &str) {
+        self.over_keyword = over_keyword.to_string();
     }
 
     /// 関数呼び出しの最後の行のインデントからの文字数を返す。
@@ -94,7 +116,12 @@ impl FunctionCall {
     /// 引数が単一行に収まる場合は単一行の文字列を、複数行になる場合は引数ごとに改行を挿入した文字列を返す
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
-        let func_name = convert_identifier_case(&self.name);
+
+        // 現状はどのような関数名の場合でも全て予約語の大文字小文字ルールを適用する
+        // 将来的には以下の機能を追加する可能性あり
+        // 1. ユーザ定義関数、組み込み関数で変換ルールを変更する
+        // 2. 定義ファイルに関数の大文字小文字ルールを追加する
+        let func_name = convert_keyword_case(&self.name);
 
         result.push_str(&func_name);
         result.push('(');
@@ -133,7 +160,7 @@ impl FunctionCall {
         // OVER句
         if let Some(clauses) = &self.over_window_definition {
             result.push(' ');
-            result.push_str(&convert_keyword_case("OVER"));
+            result.push_str(&convert_keyword_case(&self.over_keyword));
             result.push('(');
 
             if !clauses.is_empty() {

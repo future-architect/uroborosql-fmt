@@ -96,7 +96,8 @@ impl Formatter {
                     // identifier
                     ensure_kind(cursor, "identifier")?;
 
-                    let rhs_expr = PrimaryExpr::with_node(cursor.node(), src);
+                    let rhs_expr =
+                        PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Expr);
                     aligned.add_rhs(
                         convert_keyword_case("AS"),
                         Expr::Primary(Box::new(rhs_expr)),
@@ -161,7 +162,8 @@ impl Formatter {
                     };
                 }
 
-                let primary = PrimaryExpr::new(dotted_name, Location::new(range));
+                let primary =
+                    PrimaryExpr::new(dotted_name, Location::new(range), PrimaryExprKind::Expr);
 
                 // cursorをdotted_nameに戻す
                 cursor.goto_parent();
@@ -176,7 +178,14 @@ impl Formatter {
             "boolean_expression" => self.format_bool_expr(cursor, src)?,
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
-                let primary = PrimaryExpr::with_node(cursor.node(), src);
+                // defaultの場合はキーワードとして扱う
+                let primary = if "default"
+                    .eq_ignore_ascii_case(cursor.node().utf8_text(src.as_bytes()).unwrap())
+                {
+                    PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword)
+                } else {
+                    PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Expr)
+                };
                 Expr::Primary(Box::new(primary))
             }
             "select_subexpression" => {
@@ -203,7 +212,7 @@ impl Formatter {
                 Expr::FunctionCall(Box::new(func_call))
             }
             "TRUE" | "FALSE" | "NULL" => {
-                let primary = PrimaryExpr::with_node(cursor.node(), src);
+                let primary = PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
                 Expr::Primary(Box::new(primary))
             }
             "is_expression" => Expr::Aligned(Box::new(self.format_is_expr(cursor, src)?)),

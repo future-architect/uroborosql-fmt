@@ -10,6 +10,8 @@ use super::Expr;
 /// 条件式(CASE式)を表す
 #[derive(Debug, Clone)]
 pub(crate) struct CondExpr {
+    case_keyword: String,
+    end_keyword: String,
     expr: Option<AlignedExpr>,
     when_then_clause: Vec<(Clause, Clause)>,
     else_clause: Option<Clause>,
@@ -21,6 +23,8 @@ pub(crate) struct CondExpr {
 impl CondExpr {
     pub(crate) fn new(loc: Location) -> CondExpr {
         CondExpr {
+            case_keyword: "CASE".to_string(),
+            end_keyword: "END".to_string(),
             expr: None,
             when_then_clause: vec![],
             else_clause: None,
@@ -44,6 +48,14 @@ impl CondExpr {
 
     pub(crate) fn set_else_clause(&mut self, else_clause: Clause) {
         self.else_clause = Some(else_clause);
+    }
+
+    pub(crate) fn set_case_keyword(&mut self, case_keyword: &str) {
+        self.case_keyword = case_keyword.to_string();
+    }
+
+    pub(crate) fn set_end_keyword(&mut self, end_keyword: &str) {
+        self.end_keyword = end_keyword.to_string();
     }
 
     /// 最後の式にコメントを追加する。
@@ -74,8 +86,8 @@ impl CondExpr {
         // depth は CASE キーワードが描画される行のインデントの深さ
         let mut result = String::new();
 
-        // CASEキーワードのインデントは外部で行う
-        result.push_str(&convert_keyword_case("CASE"));
+        // CASEキーワードの行のインデントは呼び出し側が行う
+        result.push_str(&convert_keyword_case(&self.case_keyword));
         result.push('\n');
 
         if let Some(expr) = &self.expr {
@@ -105,7 +117,7 @@ impl CondExpr {
         }
 
         result.extend(repeat_n('\t', depth));
-        result.push_str(&convert_keyword_case("END"));
+        result.push_str(&convert_keyword_case(&self.end_keyword));
 
         Ok(result)
     }
