@@ -90,6 +90,12 @@ impl Formatter {
                 COMMENT => {
                     statement.add_comment_to_child(Comment::new(cursor.node(), src))?;
                 }
+                "ERROR" => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                        "format_select_stmt: ERROR node appeared \n{:?}",
+                        cursor.node().range()
+                    )));
+                }
                 _ => {
                     break;
                 }
@@ -283,6 +289,12 @@ impl Formatter {
                     COMMENT => {
                         let comment = Comment::new(cursor.node(), src);
                         sep_lines.add_comment_to_child(comment)?;
+                    }
+                    "ERROR" => {
+                        return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                            "format_insert_stmt: ERROR node appeared \n{:?}",
+                            cursor.node().range()
+                        )));
                     }
                     _ => continue,
                 }

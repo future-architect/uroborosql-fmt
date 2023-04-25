@@ -158,6 +158,12 @@ impl Formatter {
                     // cursor -> . または cursor -> identifier
                     match cursor.node().kind() {
                         "." => dotted_name.push('.'),
+                        "ERROR" => {
+                            return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                                "format_expr: ERROR node appeared \n{:?}",
+                                cursor.node().range()
+                            )));
+                        }
                         _ => dotted_name.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
                     };
                 }
