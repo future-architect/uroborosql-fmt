@@ -26,11 +26,26 @@ impl Formatter {
         let args = self.format_function_call_arguments(cursor, src)?;
         cursor.goto_next_sibling();
 
-        let mut func_call = FunctionCall::new(function_name, &args, function_call_loc);
+        let mut func_call = FunctionCall::new(
+            function_name,
+            &args,
+            FunctionCallKind::UserDefined,
+            function_call_loc,
+        );
 
         // TODO: filter
 
         if cursor.node().kind() == "over_clause" {
+            // 大文字小文字情報を保持するために、出現した"OVER"文字列を保持
+            // over_clauseの1つ目の子供が"OVER"であるはずなので取得
+            let over_keyword = cursor
+                .node()
+                .child(0)
+                .unwrap()
+                .utf8_text(src.as_bytes())
+                .unwrap();
+            func_call.set_over_keyword(over_keyword);
+
             func_call.set_over_window_definition(&self.format_over_clause(cursor, src)?);
             cursor.goto_next_sibling();
         }
@@ -149,6 +164,8 @@ impl Formatter {
 
         // CAST関数
         ensure_kind(cursor, "CAST")?;
+        let cast_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
         cursor.goto_next_sibling();
         ensure_kind(cursor, "(")?;
         cursor.goto_next_sibling();
@@ -159,12 +176,18 @@ impl Formatter {
         let expr = self.format_expr(cursor, src)?;
         cursor.goto_next_sibling();
         ensure_kind(cursor, "AS")?;
+        let as_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
         cursor.goto_next_sibling();
 
         ensure_kind(cursor, "type")?;
         // 型は特殊な書き方をされていないことを想定し、ソースの文字列をそのまま PrimaryExpr に変換する。
         // 例えば、"CHAR   ( 3    )" などのように、途中に空白を含むような特殊な書き方をした場合、フォーマット結果にもその空白が現れてしまう。
-        let type_name = Expr::Primary(Box::new(PrimaryExpr::with_node(cursor.node(), src)));
+        let type_name = Expr::Primary(Box::new(PrimaryExpr::with_node(
+            cursor.node(),
+            src,
+            PrimaryExprKind::Keyword,
+        )));
         cursor.goto_next_sibling();
 
         ensure_kind(cursor, ")")?;
@@ -172,10 +195,15 @@ impl Formatter {
         // expr AS type を AlignedExpr にする。
         // エイリアスのASとは意味が異なるので、is_alias には false を与える。
         let mut aligned = AlignedExpr::new(expr, false);
-        aligned.add_rhs("AS", type_name);
+        aligned.add_rhs(as_keyword, type_name);
         let expr_as_type = Expr::Aligned(Box::new(aligned));
 
-        let function = FunctionCall::new("CAST", &[expr_as_type], cast_loc);
+        let function = FunctionCall::new(
+            cast_keyword,
+            &[expr_as_type],
+            FunctionCallKind::BuiltIn,
+            cast_loc,
+        );
 
         cursor.goto_parent();
         ensure_kind(cursor, "type_cast")?;

@@ -48,7 +48,7 @@ impl Formatter {
             // 比較演算子でない(算術演算等)ならば、ExprSeq に
 
             // 実装の都合上、演算子を PrimaryExpr として扱う
-            let op_prim = PrimaryExpr::with_node(op_node, src);
+            let op_prim = PrimaryExpr::with_node(op_node, src, PrimaryExprKind::Expr);
             let op_expr = Expr::Primary(Box::new(op_prim));
 
             let bin_expr = ExprSeq::new(&vec![lhs_expr, op_expr, rhs_expr]);

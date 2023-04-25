@@ -1,8 +1,8 @@
 use tree_sitter::TreeCursor;
 
 use crate::cst::{
-    AlignedExpr, Body, Clause, Comment, Expr, ExprSeq, Location, PrimaryExpr, SeparatedLines,
-    UroboroSQLFmtError,
+    AlignedExpr, Body, Clause, Comment, Expr, ExprSeq, Location, PrimaryExpr, PrimaryExprKind,
+    SeparatedLines, UroboroSQLFmtError,
 };
 
 use super::{create_clause, ensure_kind, Formatter, COMMENT};
@@ -408,6 +408,7 @@ impl Formatter {
         // オプションの Location
         let mut order_loc = vec![];
 
+        // ASC | DESC
         if matches!(cursor.node().kind(), "ASC" | "DESC") {
             let asc_or_desc = cursor.node().utf8_text(src.as_bytes()).unwrap();
             order.push(asc_or_desc);
@@ -416,6 +417,7 @@ impl Formatter {
             cursor.goto_next_sibling();
         }
 
+        // NULLS FIRST | NULLS LAST
         if matches!(cursor.node().kind(), "NULLS") {
             let nulls = cursor.node().utf8_text(src.as_bytes()).unwrap();
             order.push(nulls);
@@ -433,7 +435,7 @@ impl Formatter {
             let mut loc = order_loc[0].clone();
             order_loc.into_iter().for_each(|l| loc.append(l));
 
-            let order = PrimaryExpr::new(order.join(" "), loc);
+            let order = PrimaryExpr::new(order.join(" "), loc, PrimaryExprKind::Keyword);
             order_expr.add_rhs("", Expr::Primary(Box::new(order)));
         }
 
@@ -566,7 +568,7 @@ impl Formatter {
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
                 "BETWEEN" | "AND" => {
-                    let prim = PrimaryExpr::with_node(cursor.node(), src);
+                    let prim = PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
                     exprs.push(Expr::Primary(Box::new(prim)));
                 }
                 "frame_bound" => {
@@ -589,7 +591,8 @@ impl Formatter {
                                 cursor.node().range()
                             )));
                         }
-                        let prim = PrimaryExpr::with_node(cursor.node(), src);
+                        let prim =
+                            PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
                         exprs.push(Expr::Primary(Box::new(prim)));
 
                         if !cursor.goto_next_sibling() {
@@ -629,11 +632,11 @@ impl Formatter {
         cursor.goto_first_child();
         match cursor.node().kind() {
             "UNBOUNDED_PRECEDING" | "CURRENT_ROW" | "UNBOUNDED_FOLLOWING" => {
-                let prim = PrimaryExpr::with_node(cursor.node(), src);
+                let prim = PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
                 exprs.push(Expr::Primary(Box::new(prim)));
                 cursor.goto_next_sibling();
 
-                let prim = PrimaryExpr::with_node(cursor.node(), src);
+                let prim = PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
                 exprs.push(Expr::Primary(Box::new(prim)));
                 cursor.goto_next_sibling();
             }
@@ -649,7 +652,7 @@ impl Formatter {
                     )));
                 }
 
-                let prim = PrimaryExpr::with_node(cursor.node(), src);
+                let prim = PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
                 exprs.push(Expr::Primary(Box::new(prim)));
             }
         }

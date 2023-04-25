@@ -7,6 +7,13 @@ use crate::{
 
 use super::convert_identifier_case;
 
+/// PrimaryExprがKeywordかExprか示すEnum
+#[derive(Clone, Debug)]
+pub(crate) enum PrimaryExprKind {
+    Expr,
+    Keyword,
+}
+
 /// 識別子、リテラルを表す。
 /// また、キーワードは式ではないが、便宜上PrimaryExprとして扱う場合がある。
 #[derive(Clone, Debug)]
@@ -15,23 +22,30 @@ pub(crate) struct PrimaryExpr {
     loc: Location,
     /// バインドパラメータ
     head_comment: Option<String>,
+    kind: PrimaryExprKind,
 }
 
 impl PrimaryExpr {
-    pub(crate) fn new(element: impl Into<String>, loc: Location) -> PrimaryExpr {
+    pub(crate) fn new(
+        element: impl Into<String>,
+        loc: Location,
+        kind: PrimaryExprKind,
+    ) -> PrimaryExpr {
         PrimaryExpr {
             element: element.into(),
             loc,
             head_comment: None,
+            kind,
         }
     }
 
     /// tree_sitter::Node から PrimaryExpr を生成する。
     /// キーワードをPrimaryExprとして扱う場合があり、その際はこのメソッドで生成する。
-    pub(crate) fn with_node(node: Node, src: &str) -> PrimaryExpr {
+    pub(crate) fn with_node(node: Node, src: &str, kind: PrimaryExprKind) -> PrimaryExpr {
         PrimaryExpr::new(
             node.utf8_text(src.as_bytes()).unwrap(),
             Location::new(node.range()),
+            kind,
         )
     }
 
@@ -76,8 +90,7 @@ impl PrimaryExpr {
     /// フォーマット後の文字列に変換する。
     /// 大文字・小文字は to_uppercase_identifier() 関数の結果に依存する。
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
-        // "default"であるかチェック
-        let element_str = if "default".eq_ignore_ascii_case(&self.element) {
+        let element_str = if matches!(self.kind, PrimaryExprKind::Keyword) {
             // キーワードの大文字小文字設定を適用した文字列
             convert_keyword_case(&self.element)
         } else {

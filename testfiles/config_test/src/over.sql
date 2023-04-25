@@ -1,0 +1,13 @@
+SELECt
+	DEpNAME
+,	EMPNo
+,	SALARY
+,	RANK() OVeR(
+		PARtITiON By
+			DEPNAME
+		ORDeR By
+			SALARY	DESc
+	)
+FROm
+	EMPSALARY
+;

@@ -23,6 +23,10 @@ impl Formatter {
         cursor.goto_first_child();
         // cursor -> "CASE"
 
+        // 大文字小文字情報を保持するために、出現した"CASE"文字列を保持
+        let case_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        cond_expr.set_case_keyword(case_keyword);
+
         while cursor.goto_next_sibling() {
             // cursor -> "WHEN" || "ELSE" || "END"
             let kw_node = cursor.node();
@@ -64,6 +68,17 @@ impl Formatter {
                     cond_expr.set_else_clause(else_clause);
                 }
                 "END" => {
+                    // 大文字小文字情報を保持するために、出現した"END"文字列を保持
+                    let end_keyword = {
+                        let tmp_end_keyword = kw_node.utf8_text(src.as_bytes()).unwrap();
+                        if tmp_end_keyword.len() == 0 {
+                            "END"
+                        } else {
+                            tmp_end_keyword
+                        }
+                    };
+
+                    cond_expr.set_end_keyword(end_keyword);
                     break;
                 }
                 COMMENT => {
