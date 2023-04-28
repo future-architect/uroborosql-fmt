@@ -22,6 +22,9 @@ impl Formatter {
 
         if cursor.node().kind() == "NOT" {
             let mut loc = Location::new(cursor.node().range());
+
+            let not_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
             cursor.goto_next_sibling();
             // cursor -> _expr
 
@@ -31,7 +34,7 @@ impl Formatter {
             // (NOT expr)のソースコード上の位置を計算
             loc.append(expr.loc());
 
-            let not_expr = UnaryExpr::new(&convert_keyword_case("NOT"), expr, loc);
+            let not_expr = UnaryExpr::new(&convert_keyword_case(not_keyword), expr, loc);
 
             cursor.goto_parent();
             ensure_kind(cursor, "boolean_expression")?;
@@ -52,8 +55,9 @@ impl Formatter {
                 cursor.goto_next_sibling();
             }
 
-            let sep = cursor.node().kind();
-            boolean_expr.set_default_separator(convert_keyword_case(sep));
+            let sep = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
+            boolean_expr.set_default_separator(sep);
 
             cursor.goto_next_sibling();
             // cursor -> _expression

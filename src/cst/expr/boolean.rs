@@ -1,6 +1,9 @@
 use itertools::{repeat_n, Itertools};
 
-use crate::cst::{AlignInfo, Comment, Location, UroboroSQLFmtError};
+use crate::{
+    cst::{AlignInfo, Comment, Location, UroboroSQLFmtError},
+    util::convert_keyword_case,
+};
 
 use super::{aligned::AlignedExpr, Expr};
 
@@ -78,7 +81,7 @@ impl BooleanExprContent {
 
         // 最初の行でなければ演算子を挿入
         if !is_first_line {
-            result.push_str(&self.op);
+            result.push_str(&convert_keyword_case(&self.op));
         }
 
         result.push('\t');
