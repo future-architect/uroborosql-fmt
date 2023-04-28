@@ -8,6 +8,7 @@ pub(crate) use expr::*;
 pub(crate) use function::*;
 pub(crate) use paren::*;
 pub(crate) use primary::*;
+pub(crate) use subquery::*;
 
 pub(crate) use body::*;
 

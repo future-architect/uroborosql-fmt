@@ -4,6 +4,7 @@ pub(crate) mod cond;
 pub(crate) mod function;
 pub(crate) mod paren;
 pub(crate) mod primary;
+pub(crate) mod subquery;
 
 use itertools::{repeat_n, Itertools};
 
@@ -11,10 +12,10 @@ use crate::util::{convert_identifier_case, tab_size, to_tab_num, trim_bind_param
 
 use self::{
     aligned::AlignedExpr, boolean::BooleanExpr, cond::CondExpr, function::FunctionCall,
-    paren::ParenExpr, primary::PrimaryExpr,
+    paren::ParenExpr, primary::PrimaryExpr, subquery::SelectSubExpr,
 };
 
-use super::{AlignInfo, Comment, Location, Position, Statement, UroboroSQLFmtError};
+use super::{AlignInfo, Comment, ExistsSubquery, Location, Position, UroboroSQLFmtError};
 
 /// 式に対応した列挙体
 #[derive(Debug, Clone)]
@@ -27,6 +28,8 @@ pub(crate) enum Expr {
     Boolean(Box<BooleanExpr>),
     /// SELECTサブクエリ
     SelectSub(Box<SelectSubExpr>),
+    /// EXISTSサブクエリ
+    ExistsSubquery(Box<ExistsSubquery>),
     /// かっこでくくられた式
     ParenExpr(Box<ParenExpr>),
     /// アスタリスク*
@@ -50,6 +53,7 @@ impl Expr {
             Expr::Primary(primary) => primary.loc(),
             Expr::Boolean(sep_lines) => sep_lines.loc().unwrap(),
             Expr::SelectSub(select_sub) => select_sub.loc(),
+            Expr::ExistsSubquery(exists_sub) => exists_sub.loc(),
             Expr::ParenExpr(paren_expr) => paren_expr.loc(),
             Expr::Asterisk(asterisk) => asterisk.loc(),
             Expr::Cond(cond) => cond.loc(),
@@ -71,6 +75,7 @@ impl Expr {
             Expr::Asterisk(asterisk) => asterisk.render(),
             Expr::Boolean(boolean) => boolean.render(depth),
             Expr::SelectSub(select_sub) => select_sub.render(depth),
+            Expr::ExistsSubquery(exists_sub) => exists_sub.render(depth),
             Expr::ParenExpr(paren_expr) => paren_expr.render(depth),
             Expr::Cond(cond) => cond.render(depth),
             Expr::Unary(unary) => unary.render(depth),
@@ -102,7 +107,8 @@ impl Expr {
         match self {
             Expr::Primary(primary) => primary.last_line_len_from_left(acc),
             Expr::Aligned(aligned) => aligned.last_line_len_from_left(acc),
-            Expr::SelectSub(_) => ")".len(), // 必ずかっこ
+            Expr::SelectSub(_) => ")".len(),      // 必ずかっこ
+            Expr::ExistsSubquery(_) => ")".len(), // 必ずかっこ
             Expr::ParenExpr(paren) => paren.last_line_len_from_left(acc),
             Expr::Asterisk(asterisk) => asterisk.last_line_len(),
             Expr::Cond(_) => "END".len(), // "END"
@@ -180,7 +186,7 @@ impl Expr {
     /// 複数行の式であればtrueを返す
     fn is_multi_line(&self) -> bool {
         match self {
-            Expr::Boolean(_) | Expr::SelectSub(_) | Expr::Cond(_) => true,
+            Expr::Boolean(_) | Expr::SelectSub(_) | Expr::ExistsSubquery(_) | Expr::Cond(_) => true,
             Expr::Primary(_) | Expr::Asterisk(_) => false,
             Expr::Aligned(aligned) => aligned.is_multi_line(),
             Expr::Unary(unary) => unary.is_multi_line(),
@@ -199,6 +205,7 @@ impl Expr {
             Expr::Aligned(_)
             | Expr::Primary(_)
             | Expr::SelectSub(_)
+            | Expr::ExistsSubquery(_)
             | Expr::ParenExpr(_)
             | Expr::Asterisk(_)
             | Expr::Cond(_)
@@ -218,42 +225,6 @@ impl Expr {
         } else {
             AlignedExpr::new(self.clone(), false)
         }
-    }
-}
-
-/// SELECTサブクエリに対応する構造体
-#[derive(Debug, Clone)]
-pub(crate) struct SelectSubExpr {
-    stmt: Statement,
-    loc: Location,
-}
-
-impl SelectSubExpr {
-    pub(crate) fn new(stmt: Statement, loc: Location) -> SelectSubExpr {
-        SelectSubExpr { stmt, loc }
-    }
-
-    pub(crate) fn loc(&self) -> Location {
-        self.loc.clone()
-    }
-
-    pub(crate) fn add_comment_to_child(&mut self, _comment: Comment) {
-        unimplemented!()
-    }
-
-    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
-        let mut result = String::new();
-
-        result.push_str("(\n");
-
-        let formatted = self.stmt.render(depth + 1)?;
-
-        result.push_str(&formatted);
-
-        result.extend(repeat_n('\t', depth));
-        result.push(')');
-
-        Ok(result)
     }
 }
 

@@ -224,6 +224,15 @@ impl Formatter {
             "is_expression" => Expr::Aligned(Box::new(self.format_is_expr(cursor, src)?)),
             "in_expression" => Expr::Aligned(Box::new(self.format_in_expr(cursor, src)?)),
             "type_cast" => Expr::FunctionCall(Box::new(self.format_type_cast(cursor, src)?)),
+            "exists_subquery_expression" => {
+                Expr::ExistsSubquery(Box::new(self.format_exists_subquery(cursor, src)?))
+            }
+            "in_subquery_expression" => {
+                Expr::Aligned(Box::new(self.format_in_subquery(cursor, src)?))
+            }
+            "all_some_any_subquery_expression" => {
+                Expr::Aligned(Box::new(self.format_all_some_any_subquery(cursor, src)?))
+            }
             _ => {
                 // todo
                 return Err(UroboroSQLFmtError::UnimplementedError(format!(
