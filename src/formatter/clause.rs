@@ -18,7 +18,7 @@ impl Formatter {
         // SELECT句の定義
         //    select_clause =
         //        "SELECT"
-        //        select_clause_body
+        //        [select_clause_body]
 
         // select_clauseは必ずSELECTを子供に持っているはずである
         cursor.goto_first_child();
@@ -32,9 +32,10 @@ impl Formatter {
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         // cursor -> select_caluse_body
-
-        let body = self.format_select_clause_body(cursor, src)?;
-        clause.set_body(body);
+        if cursor.node().kind() == "select_clause_body" {
+            let body = self.format_select_clause_body(cursor, src)?;
+            clause.set_body(body);
+        }
 
         // cursorをselect_clauseに戻す
         cursor.goto_parent();
