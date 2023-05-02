@@ -2,7 +2,7 @@ use itertools::repeat_n;
 
 use crate::{
     cst::{Clause, Location, UroboroSQLFmtError},
-    util::{convert_keyword_case, tab_size, to_tab_num},
+    util::{convert_keyword_case, is_line_overflow, tab_size, to_tab_num},
 };
 
 use super::Expr;
@@ -134,7 +134,11 @@ impl FunctionCall {
             .map(|arg| arg.render(depth + 1))
             .collect::<Result<Vec<_>, _>>()?;
 
-        if self.has_multi_line_arguments() {
+        // 1行に描画した場合の文字数
+        let func_char_len = format!("{}({})", func_name, args.join(", ")).len();
+
+        // 複数行の引数がある、または、定義ファイルで設定した1行の文字列上限を超える場合、複数行で描画
+        if self.has_multi_line_arguments() || is_line_overflow(func_char_len) {
             result.push('\n');
 
             let mut is_first = true;

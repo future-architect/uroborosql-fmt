@@ -53,3 +53,16 @@ pub(crate) fn trim_bind_param(text: String) -> String {
         text
     }
 }
+
+/// 引数が定義ファイルで設定した1行の文字数上限を超えていた場合 true を返す
+pub(crate) fn is_line_overflow(char_len: usize) -> bool {
+    // 1行当たりの上限文字数
+    let max_char_per_line = CONFIG.read().unwrap().max_char_per_line;
+
+    if max_char_per_line < 0 {
+        // 負の数値が設定されている場合は改行しない
+        false
+    } else {
+        char_len >= max_char_per_line as usize
+    }
+}

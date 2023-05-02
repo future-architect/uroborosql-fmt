@@ -31,6 +31,11 @@ fn default_trim_bind_param() -> bool {
     false
 }
 
+/// max_char_per_lineのデフォルト値(50)
+fn default_max_char_per_line() -> isize {
+    50
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Case {
@@ -77,6 +82,9 @@ pub(crate) struct Config {
     /// 識別子を大文字・小文字にする
     #[serde(default = "Case::default")]
     pub(crate) identifier_case: Case,
+    /// 1行当たりの文字数上限 (タブを含まない)
+    #[serde(default = "default_max_char_per_line")]
+    pub(crate) max_char_per_line: isize,
 }
 
 impl Config {
@@ -90,6 +98,7 @@ impl Config {
             trim_bind_param: default_trim_bind_param(),
             keyword_case: Case::default(),
             identifier_case: Case::default(),
+            max_char_per_line: default_max_char_per_line(),
         }
     }
 }

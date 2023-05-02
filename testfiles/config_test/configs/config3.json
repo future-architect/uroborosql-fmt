@@ -4,5 +4,6 @@
   "complement_as": true,
   "trim_bind_param": true,
   "keyword_case": "lower",
-  "identifier_case": "preserve"
+  "identifier_case": "preserve",
+  "max_char_per_line": 50
 }
