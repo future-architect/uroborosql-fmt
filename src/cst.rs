@@ -300,6 +300,16 @@ impl Clause {
         ));
     }
 
+    /// タブ文字でキーワードを延長する
+    pub(crate) fn extend_kw_by_tab(&mut self, node: Node, src: &str) {
+        let loc = Location::new(node.range());
+        self.loc.append(loc);
+        self.keyword.push('\t');
+        self.keyword.push_str(&convert_keyword_case(
+            node.utf8_text(src.as_bytes()).unwrap(),
+        ));
+    }
+
     // bodyをセットする
     pub(crate) fn set_body(&mut self, body: Body) {
         if !body.is_empty() {
