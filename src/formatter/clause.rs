@@ -2,7 +2,7 @@ use tree_sitter::TreeCursor;
 
 use crate::cst::{
     AlignedExpr, Body, Clause, Comment, Expr, ExprSeq, Location, PrimaryExpr, PrimaryExprKind,
-    SeparatedLines, UroboroSQLFmtError,
+    SeparatedLines, SingleLine, UroboroSQLFmtError,
 };
 
 use super::{create_clause, ensure_kind, Formatter, COMMENT};
@@ -447,6 +447,76 @@ impl Formatter {
         }
 
         Ok(order_expr)
+    }
+
+    /// LIMIT句をClause構造体で返す
+    /// SELECT文で使用する
+    pub(crate) fn format_limit_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+        ensure_kind(cursor, "LIMIT")?;
+        let mut limit_clause = Clause::new(cursor.node(), src);
+
+        cursor.goto_next_sibling();
+        // cursor -> number | ALL
+
+        match cursor.node().kind() {
+            "number" => {
+                // numberをExprに格納
+                let number = self.format_expr(cursor, src)?;
+                // numberからBody::SingleLineを作成
+                let body = Body::SingleLine(Box::new(SingleLine::new(number)));
+                limit_clause.set_body(body);
+            }
+            "ALL" => {
+                // "LIMIT ALL"というキーワードと捉えて構造体に格納
+                limit_clause.extend_kw_by_tab(cursor.node(), src);
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    r#"format_limit_clause(): expected node is number or ALL, but actual {}\n{:#?}"#,
+                    cursor.node().kind(),
+                    cursor.node().range()
+                )));
+            }
+        }
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "limit_clause")?;
+
+        Ok(limit_clause)
+    }
+
+    /// OFFSET句をClause構造体で返す
+    /// SELECT文で使用する
+    pub(crate) fn format_offset_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+        ensure_kind(cursor, "OFFSET")?;
+
+        let mut offset_clause = Clause::new(cursor.node(), src);
+
+        cursor.goto_next_sibling();
+        // cursor -> number
+
+        // numberをExprに格納
+        let number = self.format_expr(cursor, src)?;
+
+        // numberからBody::SingleLineを作成
+        let body = Body::SingleLine(Box::new(SingleLine::new(number)));
+
+        offset_clause.set_body(body);
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "offset_clause")?;
+
+        Ok(offset_clause)
     }
 
     /// SET句をClause構造体で返す

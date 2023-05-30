@@ -87,6 +87,14 @@ impl Formatter {
                     let clause = self.format_order_by_clause(cursor, src)?;
                     statement.add_clause(clause);
                 }
+                "limit_clause" => {
+                    let clause = self.format_limit_clause(cursor, src)?;
+                    statement.add_clause(clause);
+                }
+                "offset_clause" => {
+                    let clause = self.format_offset_clause(cursor, src)?;
+                    statement.add_clause(clause);
+                }
                 COMMENT => {
                     statement.add_comment_to_child(Comment::new(cursor.node(), src))?;
                 }
