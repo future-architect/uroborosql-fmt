@@ -348,7 +348,14 @@ impl Formatter {
             cursor.goto_next_sibling();
         }
 
-        // InsertBodyに含めるのは、テーブル名、カラム名、VALUES句である
+        // on_conflict句
+        if cursor.node().kind() == "on_conflict_clause" {
+            let on_conflict = self.format_on_conflict(cursor, src)?;
+            insert_body.set_on_conflict(on_conflict);
+            cursor.goto_next_sibling();
+        }
+
+        // InsertBodyに含めるのは、テーブル名、カラム名、VALUES句, ON CONFLICT句である
         // そのため、ここでstatementに追加する
         clause.set_body(Body::Insert(Box::new(insert_body)));
         statement.add_clause(clause);
@@ -361,7 +368,6 @@ impl Formatter {
             }
             cursor.goto_next_sibling();
         }
-
         // returning句
         if cursor.node().kind() == "returning_clause" {
             let returning =
@@ -374,6 +380,102 @@ impl Formatter {
         ensure_kind(cursor, "insert_statement")?;
 
         Ok(statement)
+    }
+
+    /// ON CONFLICT句をOnConflict構造体で返す
+    fn format_on_conflict(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<OnConflict, UroboroSQLFmtError> {
+        // on_conflict_clause =
+        //      ON CONFLICT
+        //      [ conflict_target ]
+        //      conflict_action
+
+        cursor.goto_first_child();
+
+        // cursor -> "ON_CONFLICT"
+        ensure_kind(cursor, "ON_CONFLICT")?;
+        let on_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
+        cursor.goto_next_sibling();
+        // cursor -> "ON_CONFLICT"
+        ensure_kind(cursor, "ON_CONFLICT")?;
+        let conflict_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        let on_conflict_keyword = (on_keyword.to_string(), conflict_keyword.to_string());
+
+        cursor.goto_next_sibling();
+
+        // conflict_target =
+        //      ( index_column_name  [ COLLATE collation ] [ op_class ] [, ...] ) [ WHERE index_predicate ]
+        //      ON CONSTRAINT constraint_name
+        let conflict_target = if cursor.node().kind() == "conflict_target" {
+            let conflict_target = self.format_conflict_target(cursor, src)?;
+
+            cursor.goto_next_sibling();
+            // cursor -> conflict_action
+
+            Some(conflict_target)
+        } else {
+            None
+        };
+
+        ensure_kind(cursor, "conflict_action")?;
+
+        cursor.goto_first_child();
+
+        // conflict_action =
+        //      DO NOTHING
+        //      DO UPDATE SET { column_name = { expression | DEFAULT } |
+        //                      ( column_name [, ...] ) = [ ROW ] ( { expression | DEFAULT } [, ...] ) |
+        //                      ( column_name [, ...] ) = ( sub-SELECT )
+        //                    } [, ...]
+        //                [ WHERE condition ]
+        let conflict_action = match cursor.node().kind() {
+            "DO_NOTHING" => {
+                let do_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
+                cursor.goto_next_sibling();
+                ensure_kind(cursor, "DO_NOTHING")?;
+
+                let nothing_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
+                let do_nothing_keyword = (do_keyword.to_string(), nothing_keyword.to_string());
+            
+                ConflictAction::DoNothing(DoNothing::new(do_nothing_keyword))
+            }
+            "DO_UPDATE" => {
+                let do_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
+                cursor.goto_next_sibling();
+                ensure_kind(cursor, "DO_UPDATE")?;
+
+                let update_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+                let do_update_keyword = (do_keyword.to_string(), update_keyword.to_string());
+                cursor.goto_next_sibling();
+
+                let set_clause = self.format_set_clause(cursor, src)?;
+
+                ConflictAction::DoUpdate(DoUpdate::new(do_update_keyword, set_clause))
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    "format_on_conflict: expected node is 'DO_NOTHING' or 'DO_UPDATE', but actual {}\n{:?}",
+                    cursor.node().kind(),
+                    cursor.node().range()
+                )))
+            }
+        };
+        cursor.goto_parent();
+        ensure_kind(cursor, "conflict_action")?;
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "on_conflict_clause")?;
+
+        let on_conflict = OnConflict::new(on_conflict_keyword, conflict_target, conflict_action);
+
+        Ok(on_conflict)
     }
 
     /// values_clause_itemを処理する。

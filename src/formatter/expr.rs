@@ -327,6 +327,126 @@ impl Formatter {
         Ok(paren_expr)
     }
 
+    /// conflict_targetをフォーマットする
+    pub(crate) fn format_conflict_target(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ConflictTarget, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+
+        // conflict_target =
+        //      ( index_column_name  [ COLLATE collation ] [ op_class ] [, ...] ) [ WHERE index_predicate ]
+        //      ON CONSTRAINT constraint_name
+
+        if cursor.node().kind() == "ON_CONSTRAINT" {
+            //      ON CONSTRAINT constraint_name
+
+            let on_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
+            cursor.goto_next_sibling();
+            // cursor -> "ON_CONSTRAINT"
+
+            ensure_kind(cursor, "ON_CONSTRAINT")?;
+            let constraint_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
+            cursor.goto_next_sibling();
+            // cursor -> constraint_name
+
+            ensure_kind(cursor, "identifier")?;
+
+            let constraint_name = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
+            cursor.goto_parent();
+            ensure_kind(cursor, "conflict_target")?;
+
+            Ok(ConflictTarget::OnConstraint(OnConstraint::new(
+                (on_keyword.to_string(), constraint_keyword.to_string()),
+                constraint_name.to_string(),
+            )))
+        } else {
+            //      ( index_column_name  [ COLLATE collation ] [ op_class ] [, ...] ) [ WHERE index_predicate ]
+            let index_column_name = self.format_conflict_target_column_list(cursor, src)?;
+            let mut specify_index_column = SpecifyIndexColumn::new(index_column_name);
+
+            cursor.goto_next_sibling();
+
+            // where句がある場合
+            if cursor.node().kind() == "where_clause" {
+                let where_clause = self.format_where_clause(cursor, src)?;
+                specify_index_column.set_where_clause(where_clause);
+            }
+            cursor.goto_parent();
+            ensure_kind(cursor, "conflict_target")?;
+
+            Ok(ConflictTarget::SpecifyIndexColumn(specify_index_column))
+        }
+    }
+
+    /// conflict_targetにおけるカラムリストをフォーマットする
+    /// "(" カラム名 [COLLATE collation] [op_class] [, ...] ")" という構造になっている
+    pub(crate) fn format_conflict_target_column_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ConflictTargetColumnList, UroboroSQLFmtError> {
+        ensure_kind(cursor, "(")?;
+
+        // ConflictTargetColumnListの位置
+        let mut loc = Location::new(cursor.node().range());
+        // ConflictTargetColumnListの要素
+        let mut elements = vec![];
+
+        // カラム名 [COLLATE collation] [op_class] [, ...]
+        while cursor.goto_next_sibling() {
+            loc.append(Location::new(cursor.node().range()));
+            match cursor.node().kind() {
+                "identifier" => {
+                    let column = cursor.node().utf8_text(src.as_bytes()).unwrap().to_string();
+                    let element = ConflictTargetElement::new(column);
+                    elements.push(element);
+                }
+                "," => {
+                    continue;
+                }
+                "COLLATE" => {
+                    let collate_keyword =
+                        cursor.node().utf8_text(src.as_bytes()).unwrap().to_string();
+                    cursor.goto_next_sibling();
+                    ensure_kind(cursor, "collation")?;
+                    cursor.goto_first_child();
+                    ensure_kind(cursor, "identifier")?;
+                    let collation = cursor.node().utf8_text(src.as_bytes()).unwrap().to_string();
+
+                    // elementsの最後の要素にCOLLATEをセット
+                    elements
+                        .last_mut()
+                        .unwrap()
+                        .set_collate(Collate::new(collate_keyword, collation));
+                    cursor.goto_parent();
+                }
+                "op_class" => {
+                    cursor.goto_first_child();
+                    ensure_kind(cursor, "identifier")?;
+                    let op_class = cursor.node().utf8_text(src.as_bytes()).unwrap().to_string();
+
+                    // elementsの最後の要素にop_classをセット
+                    elements.last_mut().unwrap().set_op_class(op_class);
+                    cursor.goto_parent();
+                }
+                ")" => break,
+                _ => {
+                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                        "format_conflict_target_column_list(): Unexpected node\nnode_kind: {}\n{:#?}",
+                        cursor.node().kind(),
+                        cursor.node().range(),
+                    )));
+                }
+            }
+        }
+        Ok(ConflictTargetColumnList::new(elements, loc))
+    }
+
     /// カラムリストをColumnListで返す
     /// カラムリストは "(" 式 ["," 式 ...] ")"という構造になっている
     pub(crate) fn format_column_list(
