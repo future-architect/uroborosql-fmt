@@ -1,0 +1,72 @@
+INSERT
+INTO
+	DISTRIBUTORS	AS	D
+(
+	DID
+,	DNAME
+) VALUES (
+	8
+,	'Anvil Distribution'
+)
+ON
+	CONFLICT	(
+		DID
+	)
+DO
+	UPDATE
+	SET
+		DNAME	=	EXCLUDED.DNAME	||	' (formerly '	||	D.DNAME	||	')'
+;
+INSERT
+INTO
+	DISTRIBUTORS
+(
+	DID
+,	DNAME
+) VALUES (
+	9
+,	'Antwerp Design'
+)
+ON
+	CONFLICT
+ON
+	CONSTRAINT	DISTRIBUTORS_PKEY
+DO
+	NOTHING
+;
+INSERT
+INTO
+	DISTRIBUTORS
+(
+	DID
+,	DNAME
+) VALUES (
+	9
+,	'Antwerp Design'
+)
+ON
+	CONFLICT	(
+		DID1
+	,	DID2
+	,	DID3
+	)
+DO
+	NOTHING
+;
+INSERT
+INTO
+	DISTRIBUTORS
+(
+	DID
+,	DNAME
+) VALUES (
+	9
+,	'Antwerp Design'
+)
+ON
+	CONFLICT	(
+		DID1	COLLATE	"x"	INT4_OPS
+	,	DID2	COLLATE	"x"	INT4_OPS
+	)
+DO
+	NOTHING
