@@ -34,6 +34,10 @@ impl Clause {
         self.loc.clone()
     }
 
+    pub(crate) fn keyword(&self) -> String {
+        self.keyword.clone()
+    }
+
     /// キーワードを延長する
     pub(crate) fn extend_kw(&mut self, node: Node, src: &str) {
         let loc = Location::new(node.range());
@@ -44,8 +48,14 @@ impl Clause {
         ));
     }
 
+    /// 文字列を受け取ってキーワードを延長する
+    pub(crate) fn extend_kw_with_string(&mut self, kw: &str) {
+        self.keyword.push(' ');
+        self.keyword.push_str(&convert_keyword_case(kw));
+    }
+
     /// タブ文字でキーワードを延長する
-    pub(crate) fn extend_kw_by_tab(&mut self, node: Node, src: &str) {
+    pub(crate) fn extend_kw_with_tab(&mut self, node: Node, src: &str) {
         let loc = Location::new(node.range());
         self.loc.append(loc);
         self.keyword.push('\t');
