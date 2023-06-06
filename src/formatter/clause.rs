@@ -244,6 +244,18 @@ impl Formatter {
             }
             clause.extend_kw(cursor.node(), src);
         }
+
+        // 省略可能であるOUTERを明示的に記載する
+        //  LEFT JOIN   ->  LEFT OUTER JOIN
+        //  RIGHT JOIN  ->  RIGHT OUTER JOIN
+        //  FULL JOIN   ->  FULL OUTER JOIN
+        if clause.keyword().eq_ignore_ascii_case("LEFT")
+            || clause.keyword().eq_ignore_ascii_case("RIGHT")
+            || clause.keyword().eq_ignore_ascii_case("FULL")
+        {
+            clause.extend_kw_with_string("OUTER");
+        }
+
         cursor.goto_parent();
         ensure_kind(cursor, "join_type")?;
 
@@ -473,7 +485,7 @@ impl Formatter {
             }
             "ALL" => {
                 // "LIMIT ALL"というキーワードと捉えて構造体に格納
-                limit_clause.extend_kw_by_tab(cursor.node(), src);
+                limit_clause.extend_kw_with_tab(cursor.node(), src);
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
