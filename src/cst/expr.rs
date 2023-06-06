@@ -14,7 +14,7 @@ use crate::util::{
 
 use self::{
     aligned::AlignedExpr, boolean::BooleanExpr, cond::CondExpr, function::FunctionCall,
-    paren::ParenExpr, primary::PrimaryExpr, subquery::SelectSubExpr,
+    paren::ParenExpr, primary::PrimaryExpr, subquery::SubExpr,
 };
 
 use super::{AlignInfo, Comment, ExistsSubquery, Location, Position, UroboroSQLFmtError};
@@ -28,8 +28,8 @@ pub(crate) enum Expr {
     Primary(Box<PrimaryExpr>),
     /// bool式
     Boolean(Box<BooleanExpr>),
-    /// SELECTサブクエリ
-    SelectSub(Box<SelectSubExpr>),
+    /// サブクエリ
+    Sub(Box<SubExpr>),
     /// EXISTSサブクエリ
     ExistsSubquery(Box<ExistsSubquery>),
     /// かっこでくくられた式
@@ -54,7 +54,7 @@ impl Expr {
             Expr::Aligned(aligned) => aligned.loc(),
             Expr::Primary(primary) => primary.loc(),
             Expr::Boolean(sep_lines) => sep_lines.loc().unwrap(),
-            Expr::SelectSub(select_sub) => select_sub.loc(),
+            Expr::Sub(sub) => sub.loc(),
             Expr::ExistsSubquery(exists_sub) => exists_sub.loc(),
             Expr::ParenExpr(paren_expr) => paren_expr.loc(),
             Expr::Asterisk(asterisk) => asterisk.loc(),
@@ -76,7 +76,7 @@ impl Expr {
             Expr::Primary(primary) => primary.render(),
             Expr::Asterisk(asterisk) => asterisk.render(),
             Expr::Boolean(boolean) => boolean.render(depth),
-            Expr::SelectSub(select_sub) => select_sub.render(depth),
+            Expr::Sub(sub) => sub.render(depth),
             Expr::ExistsSubquery(exists_sub) => exists_sub.render(depth),
             Expr::ParenExpr(paren_expr) => paren_expr.render(depth),
             Expr::Cond(cond) => cond.render(depth),
@@ -109,7 +109,7 @@ impl Expr {
         match self {
             Expr::Primary(primary) => primary.last_line_len_from_left(acc),
             Expr::Aligned(aligned) => aligned.last_line_len_from_left(acc),
-            Expr::SelectSub(_) => ")".len(),      // 必ずかっこ
+            Expr::Sub(_) => ")".len(),            // 必ずかっこ
             Expr::ExistsSubquery(_) => ")".len(), // 必ずかっこ
             Expr::ParenExpr(paren) => paren.last_line_len_from_left(acc),
             Expr::Asterisk(asterisk) => asterisk.last_line_len(),
@@ -150,7 +150,7 @@ impl Expr {
             Expr::Boolean(boolean) => {
                 boolean.add_comment_to_child(comment)?;
             }
-            Expr::SelectSub(select_sub) => select_sub.add_comment_to_child(comment),
+            Expr::Sub(sub) => sub.add_comment_to_child(comment),
             Expr::ParenExpr(paren_expr) => {
                 paren_expr.add_comment_to_child(comment)?;
             }
@@ -188,7 +188,7 @@ impl Expr {
     /// 複数行の式であればtrueを返す
     fn is_multi_line(&self) -> bool {
         match self {
-            Expr::Boolean(_) | Expr::SelectSub(_) | Expr::ExistsSubquery(_) | Expr::Cond(_) => true,
+            Expr::Boolean(_) | Expr::Sub(_) | Expr::ExistsSubquery(_) | Expr::Cond(_) => true,
             Expr::Primary(_) | Expr::Asterisk(_) => false,
             Expr::Aligned(aligned) => aligned.is_multi_line(),
             Expr::Unary(unary) => unary.is_multi_line(),
@@ -206,7 +206,7 @@ impl Expr {
             Expr::Boolean(_) => true,
             Expr::Aligned(_)
             | Expr::Primary(_)
-            | Expr::SelectSub(_)
+            | Expr::Sub(_)
             | Expr::ExistsSubquery(_)
             | Expr::ParenExpr(_)
             | Expr::Asterisk(_)

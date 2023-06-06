@@ -196,7 +196,7 @@ impl Formatter {
             }
             "select_subexpression" => {
                 let select_subexpr = self.format_select_subexpr(cursor, src)?;
-                Expr::SelectSub(Box::new(select_subexpr))
+                Expr::Sub(Box::new(select_subexpr))
             }
             "parenthesized_expression" => {
                 let paren_expr = self.format_paren_expr(cursor, src)?;

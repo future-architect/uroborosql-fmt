@@ -5,16 +5,16 @@ use crate::{
     util::convert_keyword_case,
 };
 
-/// SELECTサブクエリに対応する構造体
+/// SELECTサブクエリ、DELETEサブクエリ、INSERTサブクエリ、UPDATEサブクエリに対応する構造体
 #[derive(Debug, Clone)]
-pub(crate) struct SelectSubExpr {
+pub(crate) struct SubExpr {
     stmt: Statement,
     loc: Location,
 }
 
-impl SelectSubExpr {
-    pub(crate) fn new(stmt: Statement, loc: Location) -> SelectSubExpr {
-        SelectSubExpr { stmt, loc }
+impl SubExpr {
+    pub(crate) fn new(stmt: Statement, loc: Location) -> SubExpr {
+        SubExpr { stmt, loc }
     }
 
     pub(crate) fn loc(&self) -> Location {
@@ -45,14 +45,14 @@ impl SelectSubExpr {
 #[derive(Debug, Clone)]
 pub(crate) struct ExistsSubquery {
     exists_keyword: String,
-    select_sub_expr: SelectSubExpr,
+    select_sub_expr: SubExpr,
     loc: Location,
 }
 
 impl ExistsSubquery {
     pub(crate) fn new(
         exists_keyword: &str,
-        select_sub_expr: SelectSubExpr,
+        select_sub_expr: SubExpr,
         loc: Location,
     ) -> ExistsSubquery {
         ExistsSubquery {

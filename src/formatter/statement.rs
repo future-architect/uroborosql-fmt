@@ -14,6 +14,7 @@ impl Formatter {
     ) -> Result<Statement, UroboroSQLFmtError> {
         // SELECT文の定義
         // select_statement =
+        //      [with_clause]
         //      select_clause
         //      [from_clause]
         //      [where_clause]
@@ -21,10 +22,21 @@ impl Formatter {
 
         let mut statement = Statement::new();
 
-        // select_statementは必ずselect_clauseを子供に持つ
         cursor.goto_first_child();
+        // cusor -> with_clause?
+
+        if cursor.node().kind() == "with_clause" {
+            // with句を追加する
+            let mut with_clause = self.format_with_clause(cursor, src)?;
+            cursor.goto_next_sibling();
+            // with句の後に続くコメントを消費する
+            self.consume_comment_in_clause(cursor, src, &mut with_clause)?;
+
+            statement.add_clause(with_clause);
+        }
 
         // cursor -> select_clause
+        ensure_kind(cursor, "select_clause")?;
 
         // select句を追加する
         statement.add_clause(self.format_select_clause(cursor, src)?);
@@ -125,6 +137,20 @@ impl Formatter {
         let mut statement = Statement::new();
 
         cursor.goto_first_child();
+        // cusor -> with_clause?
+
+        if cursor.node().kind() == "with_clause" {
+            // with句を追加する
+            let mut with_clause = self.format_with_clause(cursor, src)?;
+            cursor.goto_next_sibling();
+            // with句の後に続くコメントを消費する
+            self.consume_comment_in_clause(cursor, src, &mut with_clause)?;
+
+            statement.add_clause(with_clause);
+        }
+
+        // cursor -> delete_clause
+        ensure_kind(cursor, "DELETE")?;
 
         // DELETE
         let mut clause = create_clause(cursor, src, "DELETE")?;
@@ -177,6 +203,20 @@ impl Formatter {
     ) -> Result<Statement, UroboroSQLFmtError> {
         let mut statement = Statement::new();
         cursor.goto_first_child();
+        // cusor -> with_clause?
+
+        if cursor.node().kind() == "with_clause" {
+            // with句を追加する
+            let mut with_clause = self.format_with_clause(cursor, src)?;
+            cursor.goto_next_sibling();
+            // with句の後に続くコメントを消費する
+            self.consume_comment_in_clause(cursor, src, &mut with_clause)?;
+
+            statement.add_clause(with_clause);
+        }
+
+        // cursor -> update_clause
+        ensure_kind(cursor, "UPDATE")?;
 
         let mut update_clause = create_clause(cursor, src, "UPDATE")?;
         cursor.goto_next_sibling();
@@ -254,6 +294,20 @@ impl Formatter {
         // 本体をINTOがキーワードであるClauseに追加することで実現する
 
         cursor.goto_first_child();
+        // cusor -> with_clause?
+
+        if cursor.node().kind() == "with_clause" {
+            // with句を追加する
+            let mut with_clause = self.format_with_clause(cursor, src)?;
+            cursor.goto_next_sibling();
+            // with句の後に続くコメントを消費する
+            self.consume_comment_in_clause(cursor, src, &mut with_clause)?;
+
+            statement.add_clause(with_clause);
+        }
+        
+        // cursor -> INSERT
+        ensure_kind(cursor, "INSERT")?;
 
         let mut insert = create_clause(cursor, src, "INSERT")?;
         cursor.goto_next_sibling();

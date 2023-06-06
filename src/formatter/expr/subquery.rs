@@ -15,7 +15,7 @@ impl Formatter {
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
-    ) -> Result<SelectSubExpr, UroboroSQLFmtError> {
+    ) -> Result<SubExpr, UroboroSQLFmtError> {
         // select_subexpression -> "(" select_statement ")"
 
         let loc = Location::new(cursor.node().range());
@@ -57,7 +57,7 @@ impl Formatter {
         cursor.goto_parent();
         ensure_kind(cursor, "select_subexpression")?;
 
-        Ok(SelectSubExpr::new(select_stmt, loc))
+        Ok(SubExpr::new(select_stmt, loc))
     }
 
     /// EXISTSサブクエリをフォーマットする
@@ -129,7 +129,7 @@ impl Formatter {
         // cursor -> select_subexpression
 
         ensure_kind(cursor, "select_subexpression")?;
-        let rhs = Expr::SelectSub(Box::new(self.format_select_subexpr(cursor, src)?));
+        let rhs = Expr::Sub(Box::new(self.format_select_subexpr(cursor, src)?));
 
         let mut in_sub = AlignedExpr::new(lhs, false);
         in_sub.add_rhs(op, rhs);
@@ -181,7 +181,7 @@ impl Formatter {
 
         all_some_any_sub.add_rhs(
             format!("{op}\t{all_some_any_keyword}"),
-            Expr::SelectSub(Box::new(select_subexpr)),
+            Expr::Sub(Box::new(select_subexpr)),
         );
 
         cursor.goto_parent();
