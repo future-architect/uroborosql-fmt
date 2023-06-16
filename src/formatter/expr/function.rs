@@ -23,12 +23,12 @@ impl Formatter {
         cursor.goto_next_sibling();
 
         ensure_kind(cursor, "(")?;
-        let args = self.format_function_call_arguments(cursor, src)?;
+        let args = self.format_column_list(cursor, src)?;
         cursor.goto_next_sibling();
 
         let mut func_call = FunctionCall::new(
             function_name,
-            &args,
+            args,
             FunctionCallKind::UserDefined,
             function_call_loc,
         );
@@ -54,49 +54,6 @@ impl Formatter {
         ensure_kind(cursor, "function_call")?;
 
         Ok(func_call)
-    }
-
-    /// 関数呼び出しの引数をフォーマット
-    /// 引数の前に現れるALL/DISTINCTと、引数の後に現れるorder byには未対応
-    pub(crate) fn format_function_call_arguments(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<Vec<Expr>, UroboroSQLFmtError> {
-        let mut args: Vec<Expr> = vec![];
-        loop {
-            if !cursor.goto_next_sibling() {
-                return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
-                    "format_function_call_arguments(): expected '('\nnode kind{}\n{:?}",
-                    cursor.node().kind(),
-                    cursor.node().range()
-                )));
-            }
-
-            match cursor.node().kind() {
-                ")" => {
-                    break;
-                }
-                "," => {
-                    continue;
-                }
-                // TODO: 引数のORDER BY句、ALL、DISTINCTに対応する
-                "order_by_clause" | "ALL" | "DISTINCT" => {
-                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
-                        "format_function_call_arguments():  unimplemented node\nnode kind{}\n{:?}",
-                        cursor.node().kind(),
-                        cursor.node().range()
-                    )))
-                }
-                _ => {
-                    // TODO: 関数呼び出しの引数の部分に、コメントを許容できるようにする
-                    let expr = self.format_expr(cursor, src)?;
-                    args.push(expr);
-                }
-            }
-        }
-
-        Ok(args)
     }
 
     fn format_over_clause(
@@ -196,14 +153,11 @@ impl Formatter {
         // エイリアスのASとは意味が異なるので、is_alias には false を与える。
         let mut aligned = AlignedExpr::new(expr, false);
         aligned.add_rhs(as_keyword, type_name);
-        let expr_as_type = Expr::Aligned(Box::new(aligned));
+        let loc = aligned.loc();
 
-        let function = FunctionCall::new(
-            cast_keyword,
-            &[expr_as_type],
-            FunctionCallKind::BuiltIn,
-            cast_loc,
-        );
+        let args = ColumnList::new(vec![aligned], loc);
+
+        let function = FunctionCall::new(cast_keyword, args, FunctionCallKind::BuiltIn, cast_loc);
 
         cursor.goto_parent();
         ensure_kind(cursor, "type_cast")?;
