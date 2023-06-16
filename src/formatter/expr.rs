@@ -461,6 +461,11 @@ impl Formatter {
 
         cursor.goto_next_sibling();
 
+        // カラムリストが空の場合
+        if cursor.node().kind() == ")" {
+            return Ok(ColumnList::new(vec![], loc));
+        }
+
         let mut exprs = vec![self.format_expr(cursor, src)?.to_aligned()];
 
         // カンマ区切りの式

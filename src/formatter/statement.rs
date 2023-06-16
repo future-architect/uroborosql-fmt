@@ -392,7 +392,7 @@ impl Formatter {
                 // カラムリストが一つのみであるとき、複数行で描画する
                 items
                     .iter_mut()
-                    .for_each(|col_list| col_list.set_is_multi_line(true));
+                    .for_each(|col_list| col_list.set_force_multi_line(true));
             }
             insert_body.set_values_clause(&convert_keyword_case("VALUES"), items);
 

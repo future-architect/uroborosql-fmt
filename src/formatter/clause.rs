@@ -830,7 +830,7 @@ impl Formatter {
             let mut column_list = self.format_column_list(cursor, src)?;
 
             // WITH句のカラム名指定は複数行で描画する
-            column_list.set_is_multi_line(true);
+            column_list.set_force_multi_line(true);
 
             cursor.goto_next_sibling();
 

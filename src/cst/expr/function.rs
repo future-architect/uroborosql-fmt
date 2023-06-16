@@ -5,7 +5,7 @@ use crate::{
     util::{convert_keyword_case, is_line_overflow, tab_size, to_tab_num},
 };
 
-use super::Expr;
+use super::ColumnList;
 
 /// FunctionCallがユーザ定義関数か組み込み関数か示すEnum
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ pub(crate) enum FunctionCallKind {
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionCall {
     name: String,
-    args: Vec<Expr>,
+    args: ColumnList,
     /// OVER句が持つ句 (PARTITION BY、ORDER BY)
     /// None であるならば OVER句自体がない
     over_window_definition: Option<Vec<Clause>>,
@@ -32,14 +32,28 @@ pub(crate) struct FunctionCall {
 impl FunctionCall {
     pub(crate) fn new(
         name: impl Into<String>,
-        args: &[Expr],
+        args: ColumnList,
         kind: FunctionCallKind,
         loc: Location,
     ) -> FunctionCall {
         let name = name.into();
+
+        // argsが単一行で描画する設定になっている場合
+        // レンダリング後の文字列の長さが定義ファイルにおける「各行の最大長」を超えないかチェックする
+        let mut args = args.clone();
+        if !args.force_multi_line {
+            // 関数名と引数部分をレンダリングした際の合計文字数を計算
+            let func_char_len = args.last_line_len(name.len());
+
+            // オーバーフローしている場合はargsを複数行で描画するように変更する
+            if is_line_overflow(func_char_len) {
+                args.set_force_multi_line(true);
+            }
+        }
+
         FunctionCall {
             name,
-            args: args.to_vec(),
+            args,
             over_window_definition: None,
             over_keyword: "OVER".to_string(),
             _kind: kind,
@@ -65,19 +79,7 @@ impl FunctionCall {
     /// 引数が複数行に及ぶ場合や、OVER句の有無を考慮する。
     /// 引数 acc には、自身の左側の式の文字列の長さを与える。
     pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
-        let arguments_last_len = if self.has_multi_line_arguments() {
-            ")".len()
-        } else {
-            let mut current_len = acc + self.name.len() + "(".len();
-            for (i, arg) in self.args.iter().enumerate() {
-                current_len = arg.last_line_len_from_left(current_len);
-                if i < self.args.len() - 1 {
-                    // 最後以外の要素なら、"," と " " が挿入される。
-                    current_len = current_len + ", ".len();
-                }
-            }
-            current_len + ")".len()
-        };
+        let arguments_last_len = self.args.last_line_len(acc + self.name.len());
 
         match &self.over_window_definition {
             // OVER句があるが内容が空である場合、最後の行は "...) OVER()"
@@ -96,7 +98,7 @@ impl FunctionCall {
 
     /// 引数が複数行になる場合 true を返す
     fn has_multi_line_arguments(&self) -> bool {
-        self.args.iter().any(|expr| expr.is_multi_line())
+        self.args.is_multi_line()
     }
 
     /// window定義を持つ場合 true を返す
@@ -124,42 +126,11 @@ impl FunctionCall {
         let func_name = convert_keyword_case(&self.name);
 
         result.push_str(&func_name);
-        result.push('(');
 
-        // 引数の描画を行う。
-        // インデントの深さは、関数呼び出しのインデントの深さ + ",\t" として、depth + 1 を与える。
-        let args = self
-            .args
-            .iter()
-            .map(|arg| arg.render(depth + 1))
-            .collect::<Result<Vec<_>, _>>()?;
+        // 引数の描画
+        let args = self.args.render(depth)?;
 
-        // 1行に描画した場合の文字数
-        let func_char_len = format!("{}({})", func_name, args.join(", ")).len();
-
-        // 複数行の引数がある、または、定義ファイルで設定した1行の文字列上限を超える場合、複数行で描画
-        if self.has_multi_line_arguments() || is_line_overflow(func_char_len) {
-            result.push('\n');
-
-            let mut is_first = true;
-            for arg in &args {
-                // 関数呼び出しの深さ分インデントを挿入する
-                result.extend(repeat_n('\t', depth));
-                if is_first {
-                    is_first = false;
-                } else {
-                    result.push(',');
-                }
-                result.push('\t');
-                result.push_str(arg);
-                result.push('\n');
-            }
-            result.extend(repeat_n('\t', depth));
-        } else {
-            result.push_str(&args.join(", "));
-        }
-
-        result.push(')');
+        result.push_str(&args);
 
         // OVER句
         if let Some(clauses) = &self.over_window_definition {

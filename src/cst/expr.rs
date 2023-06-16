@@ -435,7 +435,7 @@ pub(crate) struct ColumnList {
     loc: Location,
     /// 複数行で出力するかを指定するフラグ。
     /// デフォルトでは false (つまり、単一行で出力する) になっている。
-    is_multi_line: bool,
+    force_multi_line: bool,
     /// バインドパラメータ
     head_comment: Option<String>,
 }
@@ -445,7 +445,7 @@ impl ColumnList {
         ColumnList {
             cols,
             loc,
-            is_multi_line: false,
+            force_multi_line: false,
             head_comment: None,
         }
     }
@@ -485,15 +485,15 @@ impl ColumnList {
 
     /// 列リストを複数行で描画するかを指定する。
     /// true を与えたら必ず複数行で描画され、false を与えたらできるだけ単一行で描画する。
-    pub(crate) fn set_is_multi_line(&mut self, b: bool) {
-        self.is_multi_line = b
+    pub(crate) fn set_force_multi_line(&mut self, b: bool) {
+        self.force_multi_line = b
     }
 
     /// 複数行で描画するかどうかを bool 型の値で取得する。
     /// 複数行で描画する場合は true を返す。
     /// 自身の is_multi_line のオプションの値だけでなく、各列が単一行かどうか、末尾コメントを持つかどうかも考慮する。
     pub(crate) fn is_multi_line(&self) -> bool {
-        self.is_multi_line
+        self.force_multi_line
             || self
                 .cols
                 .iter()
@@ -532,7 +532,7 @@ impl ColumnList {
                 &self
                     .cols
                     .iter()
-                    .map(|a| a.render_align(depth, &align_info, false))
+                    .map(|a| a.render_align(depth + 1, &align_info, false))
                     .collect::<Result<Vec<_>, _>>()?
                     .join(&separator),
             );

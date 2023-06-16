@@ -7,7 +7,11 @@ GROUP BY
 	ID
 ;
 SELECT
-	CONCAT_LOWER_OR_UPPER('Hello', 'World', TRUE)
+	CONCAT_LOWER_OR_UPPER(
+		'Hello'	-- hello
+	,	'World'	-- world
+	,	TRUE	-- true
+	)
 ;
 SELECT
 	FUNC(
