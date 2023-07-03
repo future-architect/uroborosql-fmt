@@ -16,6 +16,8 @@ DO
 	UPDATE
 	SET
 		DNAME	=	EXCLUDED.DNAME	||	' (formerly '	||	D.DNAME	||	')'
+	WHERE
+		D.ZIPCODE	!=	'21201'
 ;
 INSERT
 INTO

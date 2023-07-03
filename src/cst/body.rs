@@ -341,13 +341,19 @@ pub(crate) struct DoUpdate {
     /// (DO, UPDATE)
     keyword: (String, String),
     set_clause: Clause,
+    where_clause: Option<Clause>,
 }
 
 impl DoUpdate {
-    pub(crate) fn new(keyword: (String, String), set_clause: Clause) -> DoUpdate {
+    pub(crate) fn new(
+        keyword: (String, String),
+        set_clause: Clause,
+        where_clause: Option<Clause>,
+    ) -> DoUpdate {
         DoUpdate {
             keyword,
             set_clause,
+            where_clause,
         }
     }
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
@@ -358,9 +364,15 @@ impl DoUpdate {
         result.push_str(&convert_keyword_case(&self.keyword.0));
         result.push('\n');
         result.extend(repeat_n('\t', depth));
+        // UPDATE
         result.push_str(&convert_keyword_case(&self.keyword.1));
         result.push('\n');
+        // SET句
         result.push_str(&self.set_clause.render(depth)?);
+        // WHERE句
+        if let Some(where_clause) = &self.where_clause {
+            result.push_str(&where_clause.render(depth)?);
+        }
 
         Ok(result)
     }
