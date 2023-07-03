@@ -511,7 +511,14 @@ impl Formatter {
 
                 let set_clause = self.format_set_clause(cursor, src)?;
 
-                ConflictAction::DoUpdate(DoUpdate::new(do_update_keyword, set_clause))
+                cursor.goto_next_sibling();
+
+                let mut where_clause = None;
+                if cursor.node().kind() == "where_clause"{
+                    where_clause = Some(self.format_where_clause(cursor, src)?)
+                }
+
+                ConflictAction::DoUpdate(DoUpdate::new(do_update_keyword, set_clause, where_clause))
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
@@ -521,6 +528,7 @@ impl Formatter {
                 )))
             }
         };
+
         cursor.goto_parent();
         ensure_kind(cursor, "conflict_action")?;
 
