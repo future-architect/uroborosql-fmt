@@ -1,13 +1,16 @@
 mod config;
 mod cst;
 mod formatter;
+mod re;
+mod two_way_sql;
 mod util;
 
 use config::*;
 use cst::UroboroSQLFmtError;
 use formatter::Formatter;
 
-use tree_sitter::Node;
+use tree_sitter::{Language, Node};
+use two_way_sql::{format_two_way_sql, is_two_way_sql};
 
 /// 引数のSQLをフォーマットして返す
 pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, UroboroSQLFmtError> {
@@ -15,9 +18,27 @@ pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, Urobor
     if let Some(path) = config_path {
         load_settings(path)?
     }
-
     // tree-sitter-sqlの言語を取得
     let language = tree_sitter_sql::language();
+
+    if is_two_way_sql(src) {
+        // 2way-sqlモード
+        if CONFIG.read().unwrap().debug {
+            eprintln!("\n{} 2way-sql mode {}\n", "=".repeat(20), "=".repeat(20));
+        }
+
+        format_two_way_sql(src, language)
+    } else {
+        // ノーマルモード
+        if CONFIG.read().unwrap().debug {
+            eprintln!("\n{} normal mode {}\n", "=".repeat(20), "=".repeat(20));
+        }
+
+        format(src, language)
+    }
+}
+
+pub(crate) fn format(src: &str, language: Language) -> Result<String, UroboroSQLFmtError> {
     // パーサオブジェクトを生成
     let mut parser = tree_sitter::Parser::new();
     // tree-sitter-sqlの言語をパーサにセットする
@@ -28,7 +49,7 @@ pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, Urobor
     let root_node = tree.root_node();
 
     if CONFIG.read().unwrap().debug {
-        dfs(root_node, 0);
+        print_cst(root_node, 0);
         eprintln!();
     }
 
@@ -50,22 +71,8 @@ pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, Urobor
     Ok(result)
 }
 
-// cstを表示する関数(デバッグ用)
-// fn print_cst(src: &str) {
-//     // tree-sitter-sqlの言語を取得
-//     let language = tree_sitter_sql::language();
-//     // パーサオブジェクトを生成
-//     let mut parser = tree_sitter::Parser::new();
-//     // tree-sitter-sqlの言語をパーサにセットする
-//     parser.set_language(language).unwrap();
-
-//     // srcをパースし、結果のTreeを取得
-//     let tree = parser.parse(&src, None).unwrap();
-//     // Treeのルートノードを取得
-//     let root_node = tree.root_node();
-// }
-
-fn dfs(node: Node, depth: usize) {
+/// CSTを出力 (デバッグ用)
+fn print_cst(node: Node, depth: usize) {
     for _ in 0..depth {
         eprint!("\t");
     }
@@ -80,7 +87,7 @@ fn dfs(node: Node, depth: usize) {
     if cursor.goto_first_child() {
         loop {
             eprintln!();
-            dfs(cursor.node(), depth + 1);
+            print_cst(cursor.node(), depth + 1);
             //次の兄弟ノードへカーソルを移動
             if !cursor.goto_next_sibling() {
                 break;
