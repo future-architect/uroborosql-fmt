@@ -51,7 +51,7 @@ impl Formatter {
             let op_prim = PrimaryExpr::with_node(op_node, src, PrimaryExprKind::Expr);
             let op_expr = Expr::Primary(Box::new(op_prim));
 
-            let bin_expr = ExprSeq::new(&vec![lhs_expr, op_expr, rhs_expr]);
+            let bin_expr = ExprSeq::new(&[lhs_expr, op_expr, rhs_expr]);
             Ok(Expr::ExprSeq(Box::new(bin_expr)))
         }
     }

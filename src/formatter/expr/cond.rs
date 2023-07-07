@@ -71,7 +71,7 @@ impl Formatter {
                     // 大文字小文字情報を保持するために、出現した"END"文字列を保持
                     let end_keyword = {
                         let tmp_end_keyword = kw_node.utf8_text(src.as_bytes()).unwrap();
-                        if tmp_end_keyword.len() == 0 {
+                        if tmp_end_keyword.is_empty() {
                             "END"
                         } else {
                             tmp_end_keyword

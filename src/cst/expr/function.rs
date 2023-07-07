@@ -40,7 +40,7 @@ impl FunctionCall {
 
         // argsが単一行で描画する設定になっている場合
         // レンダリング後の文字列の長さが定義ファイルにおける「各行の最大長」を超えないかチェックする
-        let mut args = args.clone();
+        let mut args = args;
         if !args.force_multi_line {
             // 関数名と引数部分をレンダリングした際の合計文字数を計算
             let func_char_len = args.last_line_len(name.len());
@@ -146,7 +146,7 @@ impl FunctionCall {
                     .map(|c| c.render(depth + 1))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                clauses.iter().for_each(|c| result.push_str(&c));
+                clauses.iter().for_each(|c| result.push_str(c));
 
                 result.extend(repeat_n('\t', depth));
             }

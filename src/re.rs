@@ -13,10 +13,8 @@ pub(crate) struct Re {
 
 /// コンパイル済み正規表現を保持するグローバル変数
 pub(crate) static RE: Lazy<Re> = Lazy::new(|| Re {
-    if_re: Regex::new(r"(\/\*IF).*(\*\/)").unwrap(),
-    elif_re: Regex::new(r"(\/\*ELIF).*(\*\/)").unwrap(),
-    branching_keyword_re: Regex::new(
-        r"(\/\*IF).*(\*\/)|(\/\*ELIF).*(\*\/)|\/\*(ELSE|END|BEGIN)\*\/",
-    )
-    .unwrap(),
+    if_re: Regex::new(r"(/\*IF).*(\*/)").unwrap(),
+    elif_re: Regex::new(r"(/\*ELIF).*(\*/)").unwrap(),
+    branching_keyword_re: Regex::new(r"(/\*IF).*(\*/)|(/\*ELIF).*(\*/)|/\*(ELSE|END|BEGIN)\*/")
+        .unwrap(),
 });

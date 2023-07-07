@@ -71,7 +71,7 @@ impl BooleanExprContent {
     ) -> Result<String, UroboroSQLFmtError> {
         if depth < 1 {
             // 'AND'\'OR'の後にタブ文字を挿入するので、インデントの深さ(depth)は1以上でなければならない。
-            return Err(UroboroSQLFmtError::RenderingError(
+            return Err(UroboroSQLFmtError::Rendering(
                 "BooleanExprContent::render(): The depth must be bigger than 0".to_owned(),
             ));
         }

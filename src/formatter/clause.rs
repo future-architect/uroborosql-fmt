@@ -156,7 +156,7 @@ impl Formatter {
                     with_body.add_comment_to_child(comment)?;
                 }
                 "ERROR" => {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "format_with_clause: ERROR node appeared \n{:?}",
                         cursor.node().range()
                     )));
@@ -245,19 +245,15 @@ impl Formatter {
 
                 Ok(on_clause)
             }
-            "USING" => {
-                return Err(UroboroSQLFmtError::UnimplementedError(format!(
-                    "format_join_clause(): JOIN USING(...) is unimplemented\n{:?}",
-                    cursor.node().range(),
-                )))
-            }
-            _ => {
-                return Err(UroboroSQLFmtError::UnimplementedError(format!(
-                    "format_join_condition(): unimplemented node {}\n{:?}",
-                    cursor.node().kind(),
-                    cursor.node().range(),
-                )))
-            }
+            "USING" => Err(UroboroSQLFmtError::Unimplemented(format!(
+                "format_join_clause(): JOIN USING(...) is unimplemented\n{:?}",
+                cursor.node().range(),
+            ))),
+            _ => Err(UroboroSQLFmtError::Unimplemented(format!(
+                "format_join_condition(): unimplemented node {}\n{:?}",
+                cursor.node().kind(),
+                cursor.node().range(),
+            ))),
         }
     }
 
@@ -283,7 +279,7 @@ impl Formatter {
             cursor.node().kind(),
             "CROSS" | "NATURAL" | "INNER" | "OUTER" | "LEFT" | "RIGHT" | "FULL"
         ) {
-            return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                 "format_join_type(): expected node is NATURAL, INNER, OUTER, LEFT , RIGHT or FULL, but actual {}\n{:?}", cursor.node().kind(), cursor.node().range()
             )));
         }
@@ -295,7 +291,7 @@ impl Formatter {
                 cursor.node().kind(),
                 "INNER" | "OUTER" | "LEFT" | "RIGHT" | "FULL"
             ) {
-                return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "format_join_type(): expected node is INNER, OUTER, LEFT, RIGHT or FULL, but actual {}\n{:?}", cursor.node().kind(), cursor.node().range()
                     )));
             }
@@ -353,7 +349,7 @@ impl Formatter {
                     sep_lines.add_comment_to_child(comment)?;
                 }
                 "ERROR" => {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "format_group_by_clause: ERROR node appeared \n{:?}",
                         cursor.node().range()
                     )));
@@ -386,7 +382,7 @@ impl Formatter {
 
         let ret_value = match cursor.node().kind() {
             "grouping_sets_clause" | "rollup_clause" | "cube_clause" => {
-                Err(UroboroSQLFmtError::UnimplementedError(format!(
+                Err(UroboroSQLFmtError::Unimplemented(format!(
                     "format_group_expression(): unimplemented node\nnode kind: {}\n{:?}",
                     cursor.node().kind(),
                     cursor.node().range()
@@ -431,7 +427,7 @@ impl Formatter {
                     sep_lines.add_comment_to_child(comment)?;
                 }
                 _ => {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "format_order_by_clause(): unexpected node\nnode kind: {}\n{:?}",
                         cursor.node().kind(),
                         cursor.node().range()
@@ -545,7 +541,7 @@ impl Formatter {
                 limit_clause.extend_kw_with_tab(cursor.node(), src);
             }
             _ => {
-                return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     r#"format_limit_clause(): expected node is number or ALL, but actual {}\n{:#?}"#,
                     cursor.node().kind(),
                     cursor.node().range()
@@ -664,7 +660,7 @@ impl Formatter {
 
             Ok(aligned)
         } else {
-            Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+            Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                 r#"format_set_clause(): expected node is assigment_expression, "(" or select_subexpression, but actual {}\n{:#?}"#,
                 cursor.node().kind(),
                 cursor.node().range()
@@ -731,7 +727,7 @@ impl Formatter {
                                 | "EXCLUDE_TIES"
                                 | "EXCLUDE_NO_OTHERS"
                         ) {
-                            return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                                 "format_frame_clause(): expected EXCLUDE_{{CULLENT_ROW | GROUP | TIES | NO_OTHERS}}, but actual {}\n{:?}",
                                 cursor.node().kind(),
                                 cursor.node().range()
@@ -749,7 +745,7 @@ impl Formatter {
                     ensure_kind(cursor, "frame_exclusion")?;
                 }
                 _ => {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "format_frame_clause(): unexpected node {:?}",
                         cursor.node()
                     )))
@@ -792,7 +788,7 @@ impl Formatter {
                 cursor.goto_next_sibling();
 
                 if !matches!(cursor.node().kind(), "PRECEDING" | "FOLLOWING") {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         r##"format_frame_clause(): exprect "PRECEDING" or "FOLLOWING", but actual  {:?}"##,
                         cursor.node()
                     )));
@@ -866,7 +862,7 @@ impl Formatter {
 
             if let Some(materialized_keyword) = &mut materialized_keyword {
                 // NOTがある場合にしかこの分岐に入らないのでMATERIALIZEDの前に空白を付与して挿入する
-                materialized_keyword.push_str(&format!(" {}", materialized).to_string());
+                materialized_keyword.push_str(&format!(" {}", materialized));
             } else {
                 // NOTがない場合
                 materialized_keyword = Some(materialized.to_string());
@@ -895,7 +891,7 @@ impl Formatter {
             "insert_statement" => self.format_insert_stmt(cursor, src)?,
             "update_statement" => self.format_update_stmt(cursor, src)?,
             _ => {
-                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "format_cte(): Unimplemented statement\nnode_kind: {}\n{:#?}",
                     cursor.node().kind(),
                     cursor.node().range(),

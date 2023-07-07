@@ -71,7 +71,7 @@ impl ExistsSubquery {
         let mut result = String::new();
         let exists_keyword = &convert_keyword_case(&self.exists_keyword);
 
-        result.push_str(&exists_keyword);
+        result.push_str(exists_keyword);
         result += &self.select_sub_expr.render(depth)?;
 
         Ok(result)

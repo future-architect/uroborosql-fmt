@@ -111,7 +111,7 @@ impl Formatter {
                     statement.add_comment_to_child(Comment::new(cursor.node(), src))?;
                 }
                 "ERROR" => {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "format_select_stmt: ERROR node appeared \n{:?}",
                         cursor.node().range()
                     )));
@@ -180,7 +180,7 @@ impl Formatter {
                     statement.add_comment_to_child(comment)?;
                 }
                 _ => {
-                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "format_delete_stmt(): unimplemented delete_statement\nnode_kind: {}\n{:#?}",
                     cursor.node().kind(),
                     cursor.node().range(),
@@ -265,7 +265,7 @@ impl Formatter {
                     statement.add_comment_to_child(comment)?;
                 }
                 _ => {
-                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "format_update_stmt(): unimplemented update_statement\nnode_kind: {}\n{:#?}",
                     cursor.node().kind(),
                     cursor.node().range(),
@@ -353,7 +353,7 @@ impl Formatter {
                         sep_lines.add_comment_to_child(comment)?;
                     }
                     "ERROR" => {
-                        return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "format_insert_stmt: ERROR node appeared \n{:?}",
                             cursor.node().range()
                         )));
@@ -379,7 +379,7 @@ impl Formatter {
                     }
                     "," => continue,
                     _ => {
-                        return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "format_insert_stmt(): unexpected token {}\n{:#?}",
                             cursor.node().kind(),
                             cursor.node().range()
@@ -521,7 +521,7 @@ impl Formatter {
                 ConflictAction::DoUpdate(DoUpdate::new(do_update_keyword, set_clause, where_clause))
             }
             _ => {
-                return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "format_on_conflict: expected node is 'DO_NOTHING' or 'DO_UPDATE', but actual {}\n{:?}",
                     cursor.node().kind(),
                     cursor.node().range()

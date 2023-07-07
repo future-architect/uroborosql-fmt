@@ -9,39 +9,39 @@ use crate::re::RE;
 #[derive(Debug, Clone)]
 pub(crate) enum Kind {
     /// 通常のテキスト
-    PLAIN,
+    Plain,
 
     /// /*IF ...*/から/*ELSE*/または/*END*/の上までに対応するノード
-    IF,
+    If,
 
     /// /*ELIF*/から/*ELSE*/または/*END*/の上までに対応するノード
-    ELIF,
+    Elif,
 
     /// /*ELSE*/から/*END*/の上までに対応するノード
-    ELSE,
+    Else,
 
     /// /*END*/に対応するノード
-    END,
+    End,
 
     /// /*BEGIN*/から/*IF*/, /*BEGIN*/または/*END*/の上までに対応するノード
-    BEGIN,
+    Begin,
 }
 
 impl Kind {
     /// 引数がどのKindに対応するかを返す
     pub(crate) fn guess_from_str(src: &str) -> Self {
         if src.contains("/*END*/") {
-            Self::END
+            Self::End
         } else if src.contains("/*ELSE*/") {
-            Self::ELSE
+            Self::Else
         } else if src.contains("/*BEGIN*/") {
-            Self::BEGIN
+            Self::Begin
         } else if RE.if_re.find(src).is_some() {
-            Self::IF
+            Self::If
         } else if RE.elif_re.find(src).is_some() {
-            Self::ELIF
+            Self::Elif
         } else {
-            Self::PLAIN
+            Self::Plain
         }
     }
 }
@@ -97,7 +97,7 @@ impl From<&str> for DAGNodes {
 
         res.generate(src);
 
-        return res;
+        res
     }
 }
 
@@ -111,7 +111,7 @@ impl DAGNodes {
     fn get(&self, index: usize) -> Result<&DAGNode, UroboroSQLFmtError> {
         match self.nodes.get(index) {
             Some(item) => Ok(item),
-            None => Err(UroboroSQLFmtError::RuntimeError(
+            None => Err(UroboroSQLFmtError::Runtime(
                 "DAGNodes::get(): index out of range".to_string(),
             )),
         }
@@ -128,18 +128,17 @@ impl DAGNodes {
         let splitted_src = Self::split_before_and_after_keyword(src);
 
         // 空文字列のノードを根とする
-        let root_node = DAGNode::new(self.current_available_id(), Kind::PLAIN, "", indexset![]);
+        let root_node = DAGNode::new(self.current_available_id(), Kind::Plain, "", indexset![]);
         let mut pre_node: Option<DAGNode> = Some(root_node);
 
         // IF、PLAINの順に出現した場合はIFのsrcにPLAINのsrcを追加する、などの処理をここで行う
-        for i in 0..splitted_src.len() {
-            let current_src = splitted_src[i];
+        for current_src in splitted_src {
             let current_kind = Kind::guess_from_str(current_src);
 
             match &mut pre_node {
                 // pre_nodeがある場合
                 Some(pre) => match current_kind {
-                    Kind::PLAIN => {
+                    Kind::Plain => {
                         pre.push_str(current_src);
                     }
                     _ => {
@@ -153,7 +152,7 @@ impl DAGNodes {
                             indexset![],
                         );
 
-                        if matches!(current_kind, Kind::END) {
+                        if matches!(current_kind, Kind::End) {
                             self.nodes.push(node);
                             // ENDの場合はsrcを持たないのでpre_nodeに追加しない
                             pre_node = None;
@@ -171,7 +170,7 @@ impl DAGNodes {
                         indexset![],
                     );
 
-                    if matches!(current_kind, Kind::END) {
+                    if matches!(current_kind, Kind::End) {
                         // ENDならsrcを持たないのでpre_nodeに追加しない
                         self.nodes.push(node);
                     } else {
@@ -229,7 +228,7 @@ impl DAGNodes {
             let spl2 = spl1.1.split_at(end - start);
 
             // [キーワードより手前、キーワード、キーワードの後]を追加
-            for s in vec![spl1.0, spl2.0, spl2.1] {
+            for s in &[spl1.0, spl2.0, spl2.1] {
                 if !s.is_empty() {
                     res.push(s);
                 }
@@ -242,16 +241,16 @@ impl DAGNodes {
     }
 }
 
-pub(crate) struct DAG {
+pub(crate) struct Dag {
     dag: HashMap<usize, DAGNode>,
 }
 
-impl TryFrom<DAGNodes> for DAG {
+impl TryFrom<DAGNodes> for Dag {
     type Error = UroboroSQLFmtError;
 
     /// `DAGNodes`からDAGを作成
     fn try_from(nodes: DAGNodes) -> Result<Self, Self::Error> {
-        let mut res = DAG::new();
+        let mut res = Dag::new();
 
         res.generate(&nodes, None, &mut 0)?;
 
@@ -259,9 +258,9 @@ impl TryFrom<DAGNodes> for DAG {
     }
 }
 
-impl DAG {
+impl Dag {
     fn new() -> Self {
-        DAG {
+        Dag {
             dag: HashMap::new(),
         }
     }
@@ -270,7 +269,7 @@ impl DAG {
     pub(crate) fn get(&self, key: &usize) -> Result<&DAGNode, UroboroSQLFmtError> {
         match self.dag.get(key) {
             Some(value) => Ok(value),
-            None => Err(UroboroSQLFmtError::RuntimeError(
+            None => Err(UroboroSQLFmtError::Runtime(
                 "DAG::get(): key not included in dag".to_string(),
             )),
         }
@@ -293,11 +292,9 @@ impl DAG {
                 value.add_child(child_id);
                 Ok(())
             }
-            None => {
-                return Err(UroboroSQLFmtError::RuntimeError(
-                    "DAG::add_child_to_parent(): key not included in dag".to_string(),
-                ));
-            }
+            None => Err(UroboroSQLFmtError::Runtime(
+                "DAG::add_child_to_parent(): key not included in dag".to_string(),
+            )),
         }
     }
 
@@ -321,7 +318,7 @@ impl DAG {
             let current_node = nodes.get(*cursor)?;
 
             match current_node.kind {
-                Kind::PLAIN => {
+                Kind::Plain => {
                     match parent_id {
                         // 親がいない、つまりDAGが初期状態の場合
                         None => {
@@ -341,13 +338,13 @@ impl DAG {
                         }
                     }
                 }
-                Kind::IF | Kind::BEGIN | Kind::ELSE | Kind::ELIF => {
+                Kind::If | Kind::Begin | Kind::Else | Kind::Elif => {
                     // もしIFモードでない状態でELSE、ELIFが出現した場合
                     // 1つ外のELSE, ELIFなのでbreak;
                     // このときcursorを1つ戻す
                     if !if_mode
-                        && (matches!(current_node.kind, Kind::ELSE)
-                            || matches!(current_node.kind, Kind::ELIF))
+                        && (matches!(current_node.kind, Kind::Else)
+                            || matches!(current_node.kind, Kind::Elif))
                     {
                         *cursor -= 1;
                         break;
@@ -378,7 +375,7 @@ impl DAG {
                         }
                     }
                 }
-                Kind::END => {
+                Kind::End => {
                     // 1つ外のENDなのでbreak;
                     // このときcursorを1つ戻す
                     if !if_mode {
@@ -414,10 +411,10 @@ impl DAG {
 }
 
 /// SQLからDAGを作成する
-pub(crate) fn generate_dag(src: &str) -> Result<DAG, UroboroSQLFmtError> {
+pub(crate) fn generate_dag(src: &str) -> Result<Dag, UroboroSQLFmtError> {
     let nodes = DAGNodes::from(src);
 
-    let dag = DAG::try_from(nodes)?;
+    let dag = Dag::try_from(nodes)?;
 
     Ok(dag)
 }

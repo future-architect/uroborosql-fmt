@@ -47,7 +47,7 @@ impl Formatter {
         if !cursor.goto_first_child() {
             // source_fileに子供がない、つまり、ソースファイルが空である場合
             // todo
-            return Err(UroboroSQLFmtError::UnimplementedError(format!(
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "format_source(): source_file has no child \nnode_kind: {}\n{:#?}",
                 cursor.node().kind(),
                 cursor.node().range(),
@@ -72,7 +72,7 @@ impl Formatter {
                     "insert_statement" => self.format_insert_stmt(cursor, src)?,
                     // todo
                     _ => {
-                        return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "format_source(): Unimplemented statement\nnode_kind: {}\n{:#?}",
                             cursor.node().kind(),
                             cursor.node().range(),
@@ -146,7 +146,7 @@ impl Formatter {
                     separated_lines.add_comment_to_child(Comment::new(cursor.node(), src))?;
                 }
                 _ => {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                                     "format_comma_sep_alias(): expected node is ',' or COMMENT, but actual {}\n{:?}",
                                     cursor.node().kind(),
                                     cursor.node().range()
@@ -197,7 +197,7 @@ fn ensure_kind<'a>(
     kind: &'a str,
 ) -> Result<&'a TreeCursor<'a>, UroboroSQLFmtError> {
     if cursor.node().kind() != kind {
-        Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+        Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
             "ensure_kind(): excepted node is {}, but actual {}\n{:#?}",
             kind,
             cursor.node().kind(),

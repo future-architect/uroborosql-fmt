@@ -3,7 +3,7 @@ use itertools::Itertools;
 
 use crate::cst::UroboroSQLFmtError;
 
-use super::dag::{Kind, DAG};
+use super::dag::{Kind, Dag};
 
 /// DAGから作成したTreeのノード
 #[derive(Debug, Clone)]
@@ -87,7 +87,7 @@ impl TreeNode {
                         if let Some(pre) = &pre_tree_node {
                             pre.clone().append_node_rec(r)
                         } else {
-                            Err(UroboroSQLFmtError::RuntimeError("TreeNode::append_node_rec(): Cannot be merge with a parent which has no children".to_string()))
+                            Err(UroboroSQLFmtError::Runtime("TreeNode::append_node_rec(): Cannot be merge with a parent which has no children".to_string()))
                         }
                     }
                 }).collect::<Result<Vec<_>, UroboroSQLFmtError>>()?;
@@ -131,7 +131,7 @@ impl TreeNode {
 ///         -> 各子供に対して traverse() を再帰的に呼び出し、ENDの手前まで走査を進める。
 ///         結果に子供の結果を結合し、ENDノードを現在のノードとして、1に戻る
 /// 3. 子供がいなくなったら、結果を返して終了   
-fn traverse(dag: &DAG, node_id: usize) -> Result<(TreeNode, usize), UroboroSQLFmtError> {
+fn traverse(dag: &Dag, node_id: usize) -> Result<(TreeNode, usize), UroboroSQLFmtError> {
     let mut current_node = dag.get(&node_id)?;
     let mut result = TreeNode::new_leaf();
 
@@ -151,23 +151,23 @@ fn traverse(dag: &DAG, node_id: usize) -> Result<(TreeNode, usize), UroboroSQLFm
                 let child_id = children.first().unwrap();
                 let child_node = dag.get(child_id)?;
                 match child_node.kind {
-                    Kind::END => {
+                    Kind::End => {
                         // 分岐終了
                         return Ok((result, **child_id));
                     }
-                    Kind::PLAIN => {
+                    Kind::Plain => {
                         current_node = child_node;
                         continue;
                     }
-                    Kind::IF | Kind::BEGIN => {
+                    Kind::If | Kind::Begin => {
                         let (child_result, end_id) = traverse(dag, **child_id)?;
                         let mut children_results = vec![child_result];
                         result = result.append_node(&mut children_results)?;
                         current_node = dag.get(&end_id)?;
                     }
-                    Kind::ELSE | Kind::ELIF => {
+                    Kind::Else | Kind::Elif => {
                         // else、elifに兄弟がいないことはない
-                        return Err(UroboroSQLFmtError::RuntimeError("traverse: unreachable error".to_string()));
+                        return Err(UroboroSQLFmtError::Runtime("traverse: unreachable error".to_string()));
                     }
                 }
             }
@@ -196,7 +196,7 @@ fn traverse(dag: &DAG, node_id: usize) -> Result<(TreeNode, usize), UroboroSQLFm
 }
 
 /// DAGからTreeを作成する
-pub(crate) fn generate_tree_from_dag(dag: &DAG) -> Result<TreeNode, UroboroSQLFmtError> {
+pub(crate) fn generate_tree_from_dag(dag: &Dag) -> Result<TreeNode, UroboroSQLFmtError> {
     // 親 (id = 0と仮定) から始める
     Ok(traverse(dag, 0)?.0)
 }

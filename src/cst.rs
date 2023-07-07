@@ -21,19 +21,19 @@ use tree_sitter::{Node, Point, Range};
 #[derive(Error, Debug)]
 pub enum UroboroSQLFmtError {
     #[error("Illegal operation error: {0}")]
-    IllegalOperationError(String),
+    IllegalOperation(String),
     #[error("Unexpected syntax error: {0}")]
-    UnexpectedSyntaxError(String),
+    UnexpectedSyntax(String),
     #[error("Unimplemented Error: {0}")]
-    UnimplementedError(String),
+    Unimplemented(String),
     #[error("File not found error: {0}")]
-    FileNotFoundError(String),
+    FileNotFound(String),
     #[error("Illegal setting file error: {0}")]
-    IllegalSettingFileError(String),
+    IllegalSettingFile(String),
     #[error("Rendering Error: {0}")]
-    RenderingError(String),
+    Rendering(String),
     #[error("Runtime Error: {0}")]
-    RuntimeError(String),
+    Runtime(String),
 }
 
 #[derive(Debug, Clone)]
@@ -111,10 +111,6 @@ impl Statement {
             comments: vec![] as Vec<Comment>,
             has_semi: false,
         }
-    }
-
-    pub(crate) fn loc(&self) -> Option<Location> {
-        self.loc.clone()
     }
 
     /// ClauseのVecへの参照を取得する

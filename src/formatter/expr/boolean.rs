@@ -34,7 +34,7 @@ impl Formatter {
             // (NOT expr)のソースコード上の位置を計算
             loc.append(expr.loc());
 
-            let not_expr = UnaryExpr::new(&convert_keyword_case(not_keyword), expr, loc);
+            let not_expr = UnaryExpr::new(convert_keyword_case(not_keyword), expr, loc);
 
             cursor.goto_parent();
             ensure_kind(cursor, "boolean_expression")?;

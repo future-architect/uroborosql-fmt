@@ -197,7 +197,7 @@ impl SeparatedLines {
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         if depth < 1 {
             // ','の後にタブ文字を挿入するので、インデントの深さ(depth)は1以上でなければならない。
-            return Err(UroboroSQLFmtError::RenderingError(
+            return Err(UroboroSQLFmtError::Rendering(
                 "SeparatedLines::render(): The depth must be bigger than 0".to_owned(),
             ));
         }
@@ -520,7 +520,7 @@ impl InsertBody {
         // depth は INSERT が描画される行のインデントの深さ + 1 (つまり、テーブル名が描画される行の深さ)
         if depth < 1 {
             // インデントの深さ(depth)は1以上でなければならない。
-            return Err(UroboroSQLFmtError::RenderingError(
+            return Err(UroboroSQLFmtError::Rendering(
                 "InsertBody::render(): The depth must be bigger than 0".to_owned(),
             ));
         }
@@ -632,7 +632,7 @@ impl Cte {
     ) -> Result<(), UroboroSQLFmtError> {
         if comment.is_multi_line_comment() {
             // 複数行コメント
-            Err(UroboroSQLFmtError::IllegalOperationError(format!(
+            Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_trailing_comment:{:?} is not trailing comment!",
                 comment
             )))
@@ -657,7 +657,7 @@ impl Cte {
     ) -> Result<(), UroboroSQLFmtError> {
         if comment.is_multi_line_comment() {
             // 複数行コメント
-            Err(UroboroSQLFmtError::IllegalOperationError(format!(
+            Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_name_trailing_comment:{:?} is not trailing comment!",
                 comment
             )))
