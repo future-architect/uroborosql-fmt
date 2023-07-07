@@ -45,7 +45,7 @@ fn format_tree(tree: TreeNode, language: Language) -> Result<TreeNode, UroboroSQ
         TreeNode::Leaf(src) => {
             let res = format(&src, language)?;
 
-            return Ok(TreeNode::Leaf(res));
+            Ok(TreeNode::Leaf(res))
         }
     }
 }
@@ -62,11 +62,9 @@ pub(crate) fn format_two_way_sql(
     let formatted_tree = format_tree(tree, language)?;
 
     if CONFIG.read().unwrap().debug {
-        let mut count = 0;
         eprintln!("{}", "-".repeat(100));
 
         for source in formatted_tree.to_vec_string() {
-            count += 1;
             eprintln!("{}", source);
             eprintln!("{}", "-".repeat(100));
         }

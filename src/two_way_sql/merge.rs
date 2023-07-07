@@ -18,14 +18,14 @@ fn read_before_end(src_lines: &Vec<&str>, cursor: &mut usize) -> Vec<String> {
         let kind = Kind::guess_from_str(current_line);
 
         match kind {
-            Kind::IF | Kind::BEGIN => {
+            Kind::If | Kind::Begin => {
                 // 入れ子カウントをインクリメント
                 // ただし、一行目の場合は入れ子とは関係のない/*IF*/、/*BEGIN*/なので無視する
                 if !is_first_line {
                     nest_count += 1;
                 }
             }
-            Kind::END => {
+            Kind::End => {
                 if nest_count == 0 {
                     // 現在見ているネストは終了したのでbreak
                     break;
@@ -71,7 +71,7 @@ fn merge_sql(sqls: Vec<String>) -> String {
                 return true;
             }
         }
-        return false;
+        false
     };
 
     while !is_overflow(&cursors) {
@@ -85,7 +85,7 @@ fn merge_sql(sqls: Vec<String>) -> String {
         if current_lines.iter().all_equal()
             || current_lines
                 .iter()
-                .all(|&x| matches!(Kind::guess_from_str(x), Kind::PLAIN))
+                .all(|&x| matches!(Kind::guess_from_str(x), Kind::Plain))
         {
             // 全て一致している
             // または

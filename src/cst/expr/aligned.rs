@@ -140,7 +140,7 @@ impl AlignedExpr {
     ) -> Result<(), UroboroSQLFmtError> {
         if comment.is_multi_line_comment() {
             // 複数行コメント
-            Err(UroboroSQLFmtError::IllegalOperationError(format!(
+            Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_trailing_comment:{:?} is not trailing comment!",
                 comment
             )))
@@ -165,7 +165,7 @@ impl AlignedExpr {
     ) -> Result<(), UroboroSQLFmtError> {
         if comment.is_multi_line_comment() {
             // 複数行コメント
-            Err(UroboroSQLFmtError::IllegalOperationError(format!(
+            Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_lhs_trailing_comment:{:?} is not trailing comment!",
                 comment
             )))
@@ -287,7 +287,7 @@ impl AlignedExpr {
                     if depth < 1 {
                         // 左辺に行末コメントがある場合、右辺の直前にタブ文字が挿入されるため、
                         // インデントの深さ(depth)は1以上でなければならない。
-                        return Err(UroboroSQLFmtError::RenderingError(
+                        return Err(UroboroSQLFmtError::Rendering(
                             "AlignedExpr::render_align(): The depth must be bigger than 0"
                                 .to_owned(),
                         ));
@@ -303,7 +303,7 @@ impl AlignedExpr {
 
                 // 左辺がCASE文の場合はopの前に改行してdepthだけタブを挿入
                 if matches!(self.lhs, Expr::Cond(_)) {
-                    result.push_str("\n");
+                    result.push('\n');
                     result.extend(repeat_n('\t', depth));
                 }
 
@@ -340,7 +340,7 @@ impl AlignedExpr {
             // AS補完する場合
             (None, _, Some(max_tab_num)) if complement_as => {
                 // 演算子までのタブ文字を挿入する
-                let tab_num = max_tab_num - &self.lhs_tab_num();
+                let tab_num = max_tab_num - self.lhs_tab_num();
                 result.extend(repeat_n('\t', tab_num));
 
                 if let Some(alias_name) = create_alias(&self.lhs) {
@@ -429,13 +429,10 @@ fn create_alias(lhs: &Expr) -> Option<Expr> {
         Expr::Primary(prim) if prim.is_identifier() => {
             // Primary式であり、さらに識別子である場合のみ、エイリアス名を作成する
             let element = prim.element();
-            element.split(".").last().and_then(|s| {
-                Some(Expr::Primary(Box::new(PrimaryExpr::new(
-                    s,
-                    loc,
-                    PrimaryExprKind::Expr,
-                ))))
-            })
+            element
+                .split('.')
+                .last()
+                .map(|s| Expr::Primary(Box::new(PrimaryExpr::new(s, loc, PrimaryExprKind::Expr))))
         }
         _ => None,
     }

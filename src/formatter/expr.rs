@@ -49,7 +49,7 @@ impl Formatter {
                         lhs_expr.set_head_comment(comment);
                     } else {
                         // エイリアス式の直前のコメントは、バインドパラメータしか考慮していない
-                        return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "format_aliasable_expr(): unexpected comment\n{:?}",
                             cursor.node().range()
                         )));
@@ -72,7 +72,7 @@ impl Formatter {
                             // 行末以外のコメント(次以降の行のコメント)は未定義
                             // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
                             // エイリアスがない場合は、コメントノードがここに現れない
-                            return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                                 "format_aliasable_expr(): unexpected syntax\nnode_kind: {}\n{:#?}",
                                 cursor.node().kind(),
                                 cursor.node().range(),
@@ -159,7 +159,7 @@ impl Formatter {
                     match cursor.node().kind() {
                         "." => dotted_name.push('.'),
                         "ERROR" => {
-                            return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                                 "format_expr: ERROR node appeared \n{:?}",
                                 cursor.node().range()
                             )));
@@ -235,7 +235,7 @@ impl Formatter {
             }
             _ => {
                 // todo
-                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "format_expr(): unimplemented expression \nnode_kind: {}\n{:#?}",
                     cursor.node().kind(),
                     cursor.node().range(),
@@ -250,7 +250,7 @@ impl Formatter {
                 result.set_head_comment(comment);
             } else {
                 // TODO: 隣接していないコメント
-                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "format_expr(): (bind parameter) separated comment\nnode_kind: {}\n{:#?}",
                     cursor.node().kind(),
                     cursor.node().range(),
@@ -298,10 +298,7 @@ impl Formatter {
                 paren_expr.set_loc(loc);
                 *paren_expr
             }
-            _ => {
-                let paren_expr = ParenExpr::new(expr, loc);
-                paren_expr
-            }
+            _ => ParenExpr::new(expr, loc),
         };
 
         // 開きかっこと式の間にあるコメントを追加
@@ -436,7 +433,7 @@ impl Formatter {
                 }
                 ")" => break,
                 _ => {
-                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "format_conflict_target_column_list(): Unexpected node\nnode_kind: {}\n{:#?}",
                         cursor.node().kind(),
                         cursor.node().range(),
@@ -488,7 +485,7 @@ impl Formatter {
                         last.set_trailing_comment(comment)?;
                     } else {
                         // バインドパラメータ、末尾コメント以外のコメントは想定していない
-                        return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "format_column_list(): Unexpected comment\nnode_kind: {}\n{:#?}",
                             cursor.node().kind(),
                             cursor.node().range(),
@@ -496,7 +493,7 @@ impl Formatter {
                     }
                 }
                 _ => {
-                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "format_column_list(): Unexpected node\nnode_kind: {}\n{:#?}",
                         cursor.node().kind(),
                         cursor.node().range(),
@@ -597,7 +594,7 @@ impl Formatter {
             if comment.is_multi_line_comment() && comment.loc().is_next_to(&column_list.loc()) {
                 column_list.set_head_comment(comment);
             } else {
-                return Err(UroboroSQLFmtError::UnexpectedSyntaxError(format!(
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "format_in_expr(): unexpected comment\n{:?}",
                     comment
                 )));

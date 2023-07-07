@@ -106,12 +106,12 @@ impl Config {
 /// 設定ファイルの読み込み
 pub(crate) fn load_settings(path: &str) -> Result<(), UroboroSQLFmtError> {
     let file = File::open(path)
-        .map_err(|_| UroboroSQLFmtError::FileNotFoundError("Setting file not found".to_string()))?;
+        .map_err(|_| UroboroSQLFmtError::FileNotFound("Setting file not found".to_string()))?;
 
     let reader = BufReader::new(file);
 
     let config = serde_json::from_reader(reader)
-        .map_err(|e| UroboroSQLFmtError::IllegalSettingFileError(e.to_string()))?;
+        .map_err(|e| UroboroSQLFmtError::IllegalSettingFile(e.to_string()))?;
 
     *CONFIG.write().unwrap() = config;
 

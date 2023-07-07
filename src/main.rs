@@ -11,7 +11,7 @@ fn main() {
 
     let output_file = std::env::args().nth(2);
 
-    let src = read_to_string(&input_file).unwrap();
+    let src = read_to_string(input_file).unwrap();
 
     let config_path = match Path::is_file(Path::new("./uroborosqlfmt-config.json")) {
         true => Some("./uroborosqlfmt-config.json"),

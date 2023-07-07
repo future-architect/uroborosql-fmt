@@ -132,7 +132,7 @@ impl Expr {
                 if aligned.loc().is_same_line(&comment.loc()) {
                     aligned.set_trailing_comment(comment)?;
                 } else {
-                    return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "add_comment_to_child(): this comment is not trailing comment\nexpr: {:?}comment: {:?}\n",
                         aligned,
                         comment
@@ -140,7 +140,7 @@ impl Expr {
                 }
             }
             Expr::Primary(primary) => {
-                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "add_comment_to_child(): unimplemented for primary\nexpr: {:?}",
                     primary
                 )));
@@ -156,14 +156,14 @@ impl Expr {
             }
 
             Expr::Cond(cond) => {
-                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "add_comment_to_child(): unimplemented for conditional_expr\nexpr: {:?}",
                     cond
                 )));
             }
             _ => {
                 // todo
-                return Err(UroboroSQLFmtError::UnimplementedError(format!(
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "add_comment_to_child(): unimplemented expr\nexpr: {:?}",
                     &self
                 )));
@@ -374,7 +374,7 @@ impl ConflictTargetElement {
         if let Some(op_class) = &self.op_class {
             result.push('\t');
             // 演算子クラスはキーワードルールを適用
-            result.push_str(&convert_keyword_case(&op_class));
+            result.push_str(&convert_keyword_case(op_class));
         };
 
         Ok(result)
@@ -385,16 +385,14 @@ impl ConflictTargetElement {
 #[derive(Debug, Clone)]
 pub(crate) struct ConflictTargetColumnList {
     cols: Vec<ConflictTargetElement>,
-    loc: Location,
+    /// Locationを示す
+    /// 現状使用していないため_locとしている
+    _loc: Location,
 }
 
 impl ConflictTargetColumnList {
     pub(crate) fn new(cols: Vec<ConflictTargetElement>, loc: Location) -> ConflictTargetColumnList {
-        ConflictTargetColumnList { cols, loc }
-    }
-
-    pub(crate) fn loc(&self) -> Location {
-        self.loc.clone()
+        ConflictTargetColumnList { cols, _loc: loc }
     }
 
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
@@ -508,7 +506,7 @@ impl ColumnList {
 
         // バインドパラメータがある場合、最初に描画
         if let Some(bind_param) = &self.head_comment {
-            result.push_str(&bind_param);
+            result.push_str(bind_param);
         }
 
         if self.is_multi_line() {

@@ -44,7 +44,7 @@ pub(crate) fn format(src: &str, language: Language) -> Result<String, UroboroSQL
     // tree-sitter-sqlの言語をパーサにセットする
     parser.set_language(language).unwrap();
     // srcをパースし、結果のTreeを取得
-    let tree = parser.parse(&src, None).unwrap();
+    let tree = parser.parse(src, None).unwrap();
     // Treeのルートノードを取得
     let root_node = tree.root_node();
 
