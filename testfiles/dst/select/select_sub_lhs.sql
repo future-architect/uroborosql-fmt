@@ -11,7 +11,7 @@ SELECT
 		/* comm3*/
 	)
 FROM
-	LONGLONGTABLE	L
+	LONGLONGTABLE	AS	L
 ,	(
 		SELECT
 			B
@@ -19,4 +19,4 @@ FROM
 		FROM
 			TAB1
 	)	-- trailing
-					BC
+					AS	BC

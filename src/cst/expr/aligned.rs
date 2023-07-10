@@ -222,13 +222,14 @@ impl AlignedExpr {
     // 演算子から末尾コメントまでの長さを返す
     pub(crate) fn tab_num_to_comment(&self, max_tab_num_to_op: Option<usize>) -> Option<usize> {
         let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
-        let complement_as = CONFIG.read().unwrap().complement_as && self.is_alias && !is_asterisk;
+        let complement_alias =
+            CONFIG.read().unwrap().complement_alias && self.is_alias && !is_asterisk;
 
         match (max_tab_num_to_op, &self.rhs) {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.last_line_tab_num()),
             // コメント以外に揃える対象があり、右辺を左辺で補完する場合、左辺の長さ
-            (Some(_), None) if complement_as => {
+            (Some(_), None) if complement_alias => {
                 if let Some(alias_name) = create_alias(&self.lhs) {
                     Some(alias_name.last_line_tab_num())
                 } else {
@@ -278,7 +279,8 @@ impl AlignedExpr {
         result.push_str(&formatted);
 
         let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
-        let complement_as = CONFIG.read().unwrap().complement_as && self.is_alias && !is_asterisk;
+        let complement_alias =
+            CONFIG.read().unwrap().complement_alias && self.is_alias && !is_asterisk;
 
         // 演算子と右辺をrender
         match (&self.op, max_op_tab_num, max_tab_num_to_op) {
@@ -312,7 +314,7 @@ impl AlignedExpr {
                 result.push('\t');
 
                 // from句以外はopを挿入
-                if !is_from_body {
+                if op != "" {
                     result.push_str(&convert_keyword_case(op));
 
                     // 右辺が存在してCASE文ではない場合はタブを挿入
@@ -321,6 +323,12 @@ impl AlignedExpr {
                         let tab_num = max_op_tab_num - self.op_tab_num().unwrap(); // self.op != Noneならop_tab_num != None
                         result.extend(repeat_n('\t', tab_num + 1));
                     }
+                } else if !is_from_body && CONFIG.read().unwrap().complement_as_keyword {
+                    // complement_keywordオプションがtrueのとき、
+                    // select句でASキーワードがない場合に補完する。
+                    // エイリアスである場合、縦ぞろえ対象の演算子はすべてASなので、タブ文字は一つ挿入すればよい
+                    result.push_str(&convert_keyword_case("AS"));
+                    result.push('\t');
                 }
 
                 //右辺をrender
@@ -337,8 +345,8 @@ impl AlignedExpr {
                     result.push_str(&formatted);
                 }
             }
-            // AS補完する場合
-            (None, _, Some(max_tab_num)) if complement_as => {
+            // エイリアス名を補完する場合
+            (None, _, Some(max_tab_num)) if complement_alias => {
                 // 演算子までのタブ文字を挿入する
                 let tab_num = max_tab_num - self.lhs_tab_num();
                 result.extend(repeat_n('\t', tab_num));
@@ -375,7 +383,7 @@ impl AlignedExpr {
                         } else {
                             0
                         }
-                } else if complement_as {
+                } else if complement_alias {
                     // エイリアス補完を行う場合は、コメントまでの最長の長さ - エイリアス名の長さ
                     // エイリアス名を求められない場合は、演算子とコメントまでの最大長分タブを挿入する
                     if let Some(alias_name) = create_alias(&self.lhs) {

@@ -1,8 +1,11 @@
 use tree_sitter::TreeCursor;
 
-use crate::cst::{
-    AlignedExpr, Body, Clause, Comment, Cte, Expr, ExprSeq, Location, PrimaryExpr, PrimaryExprKind,
-    SeparatedLines, SingleLine, SubExpr, UroboroSQLFmtError, WithBody,
+use crate::{
+    config::CONFIG,
+    cst::{
+        AlignedExpr, Body, Clause, Comment, Cte, Expr, ExprSeq, Location, PrimaryExpr,
+        PrimaryExprKind, SeparatedLines, SingleLine, SubExpr, UroboroSQLFmtError, WithBody,
+    },
 };
 
 use super::{create_clause, ensure_kind, Formatter, COMMENT};
@@ -302,10 +305,14 @@ impl Formatter {
         //  LEFT JOIN   ->  LEFT OUTER JOIN
         //  RIGHT JOIN  ->  RIGHT OUTER JOIN
         //  FULL JOIN   ->  FULL OUTER JOIN
-        if clause.keyword().eq_ignore_ascii_case("LEFT")
-            || clause.keyword().eq_ignore_ascii_case("RIGHT")
-            || clause.keyword().eq_ignore_ascii_case("FULL")
+        if CONFIG.read().unwrap().complement_outer_keyword
+            && (clause.keyword().eq_ignore_ascii_case("LEFT")
+                || clause.keyword().eq_ignore_ascii_case("RIGHT")
+                || clause.keyword().eq_ignore_ascii_case("FULL"))
         {
+            // keyword_case = "preserve" のとき、コーディング規約に従い大文字になる。
+            // keyword_case = "lower" のとき、extend_kw_with_string() で小文字に変換される
+            // ため、ここでは大文字で与えてよい。
             clause.extend_kw_with_string("OUTER");
         }
 

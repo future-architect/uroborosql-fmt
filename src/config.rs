@@ -21,8 +21,8 @@ fn default_tab_size() -> usize {
     4
 }
 
-/// complement_asのデフォルト値(true)
-fn default_complement_as() -> bool {
+/// complement_aliasのデフォルト値(true)
+fn default_complement_alias() -> bool {
     true
 }
 
@@ -34,6 +34,21 @@ fn default_trim_bind_param() -> bool {
 /// max_char_per_lineのデフォルト値(50)
 fn default_max_char_per_line() -> isize {
     50
+}
+
+/// complement_outer_keywordのデフォルト値(true)
+fn default_complement_outer_keyword() -> bool {
+    true
+}
+
+/// complement_as_keywordのデフォルト値(true)
+fn default_complement_as_keyword() -> bool {
+    true
+}
+
+/// remove_redundant_nestのデフォルト値(true)
+fn default_remove_redundant_nest() -> bool {
+    true
 }
 
 #[derive(Deserialize, Debug)]
@@ -70,9 +85,9 @@ pub(crate) struct Config {
     /// タブ幅
     #[serde(default = "default_tab_size")]
     pub(crate) tab_size: usize,
-    /// AS句がない場合に自動的に補完する
-    #[serde(default = "default_complement_as")]
-    pub(crate) complement_as: bool,
+    /// カラムエイリアスがない場合にエイリアス名を自動的に補完する
+    #[serde(default = "default_complement_alias")]
+    pub(crate) complement_alias: bool,
     /// バインド変数の中身をトリムする
     #[serde(default = "default_trim_bind_param")]
     pub(crate) trim_bind_param: bool,
@@ -85,6 +100,21 @@ pub(crate) struct Config {
     /// 1行当たりの文字数上限 (タブを含まない)
     #[serde(default = "default_max_char_per_line")]
     pub(crate) max_char_per_line: isize,
+    /// OUTER キーワードの自動補完を有効にする
+    ///
+    /// このオプションで補完されるキーワードは、keyword_case = "preserve"のとき、
+    /// コーディング規約に合わせて大文字とする。
+    /// 将来的には、keyword_case オプションで補完するキーワードのcaseを、
+    /// preserve_complement_upper (補完は大文字)、preserve_complement_lower (補完は小文字)、...
+    /// のように設定できるようにしてもよい。
+    #[serde(default = "default_complement_outer_keyword")]
+    pub(crate) complement_outer_keyword: bool,
+    /// カラムエイリアスにおける AS キーワードの自動補完を有効にする
+    #[serde(default = "default_complement_as_keyword")]
+    pub(crate) complement_as_keyword: bool,
+    /// 余分な括弧を自動で除去する
+    #[serde(default = "default_remove_redundant_nest")]
+    pub(crate) remove_redundant_nest: bool,
 }
 
 impl Config {
@@ -94,11 +124,14 @@ impl Config {
         Config {
             debug: default_debug(),
             tab_size: default_tab_size(),
-            complement_as: default_complement_as(),
+            complement_alias: default_complement_alias(),
             trim_bind_param: default_trim_bind_param(),
             keyword_case: Case::default(),
             identifier_case: Case::default(),
             max_char_per_line: default_max_char_per_line(),
+            complement_outer_keyword: default_complement_outer_keyword(),
+            complement_as_keyword: default_complement_as_keyword(),
+            remove_redundant_nest: default_remove_redundant_nest(),
         }
     }
 }

@@ -1,9 +1,12 @@
 {
   "debug": false,
   "tab_size": 4,
-  "complement_as": true,
+  "complement_alias": true,
   "trim_bind_param": true,
   "keyword_case": "upper",
   "identifier_case": "lower",
-  "max_char_per_line": 30
+  "max_char_per_line": 30,
+  "complement_outer_keyword": true,
+  "complement_as_keyword": true,
+  "remove_redundant_nest": false
 }
