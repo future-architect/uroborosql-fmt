@@ -30,16 +30,16 @@ pub(crate) enum Kind {
 impl Kind {
     /// 引数がどのKindに対応するかを返す
     pub(crate) fn guess_from_str(src: &str) -> Self {
-        if src.contains("/*END*/") {
-            Self::End
-        } else if src.contains("/*ELSE*/") {
-            Self::Else
-        } else if src.contains("/*BEGIN*/") {
-            Self::Begin
-        } else if RE.if_re.find(src).is_some() {
+        if RE.if_re.find(src).is_some() {
             Self::If
         } else if RE.elif_re.find(src).is_some() {
             Self::Elif
+        } else if RE.else_re.find(src).is_some() {
+            Self::Else
+        } else if RE.end_re.find(src).is_some() {
+            Self::End
+        } else if RE.begin_re.find(src).is_some() {
+            Self::Begin
         } else {
             Self::Plain
         }
