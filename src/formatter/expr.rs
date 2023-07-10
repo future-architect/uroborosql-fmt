@@ -6,7 +6,7 @@ mod subquery;
 
 use tree_sitter::TreeCursor;
 
-use crate::{cst::*, util::convert_keyword_case};
+use crate::{config::CONFIG, cst::*, util::convert_keyword_case};
 
 use super::{ensure_kind, Formatter, COMMENT};
 
@@ -84,10 +84,14 @@ impl Formatter {
                         cursor.goto_next_sibling();
                     }
 
-                    // ASが存在する場合は読み飛ばす
-                    if cursor.node().kind() == "AS" {
+                    let as_keyword = if cursor.node().kind() == "AS" {
+                        let kw = cursor.node().utf8_text(src.as_bytes()).unwrap();
                         cursor.goto_next_sibling();
-                    }
+                        kw
+                    } else {
+                        // ASキーワードがないエイリアスの場合、空文字列を入れる
+                        ""
+                    };
 
                     //右辺に移動
                     cursor.goto_next_sibling();
@@ -99,7 +103,7 @@ impl Formatter {
                     let rhs_expr =
                         PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Expr);
                     aligned.add_rhs(
-                        convert_keyword_case("AS"),
+                        convert_keyword_case(as_keyword),
                         Expr::Primary(Box::new(rhs_expr)),
                     );
                 }
@@ -294,7 +298,8 @@ impl Formatter {
         let expr = self.format_expr(cursor, src)?;
 
         let mut paren_expr = match expr {
-            Expr::ParenExpr(mut paren_expr) => {
+            Expr::ParenExpr(mut paren_expr) if CONFIG.read().unwrap().remove_redundant_nest => {
+                // remove_redundant_nestオプションが有効のとき、ParenExprをネストさせない
                 paren_expr.set_loc(loc);
                 *paren_expr
             }

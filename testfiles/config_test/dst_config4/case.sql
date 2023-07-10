@@ -1,5 +1,5 @@
 SELECT
-	ID	AS	ID
+	ID	As	ID
 ,	case
 		when
 			GRADE_POINT	>=	80
@@ -18,7 +18,7 @@ SELECT
 		ELSE
 			'D'
 	EnD
-		AS	GRADE
+		As	GRADE
 FROM
 	RISYU
 WHERe
