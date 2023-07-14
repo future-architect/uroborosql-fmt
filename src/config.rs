@@ -51,6 +51,11 @@ fn default_remove_redundant_nest() -> bool {
     true
 }
 
+/// complement_sql_idのデフォルト値(false)
+fn default_complement_sql_id() -> bool {
+    false
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Case {
@@ -115,6 +120,9 @@ pub(crate) struct Config {
     /// 余分な括弧を自動で除去する
     #[serde(default = "default_remove_redundant_nest")]
     pub(crate) remove_redundant_nest: bool,
+    /// /* _SQL_ID_ */がない場合に自動で補完する
+    #[serde(default = "default_complement_sql_id")]
+    pub(crate) complement_sql_id: bool,
 }
 
 impl Config {
@@ -129,6 +137,7 @@ impl Config {
             keyword_case: Case::default(),
             identifier_case: Case::default(),
             max_char_per_line: default_max_char_per_line(),
+            complement_sql_id: default_complement_sql_id(),
             complement_outer_keyword: default_complement_outer_keyword(),
             complement_as_keyword: default_complement_as_keyword(),
             remove_redundant_nest: default_remove_redundant_nest(),

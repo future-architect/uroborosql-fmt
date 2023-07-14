@@ -155,7 +155,7 @@ impl Formatter {
         // DELETE
         let mut clause = create_clause(cursor, src, "DELETE")?;
         cursor.goto_next_sibling();
-        self.consume_sql_id(cursor, src, &mut clause);
+        self.consume_or_complement_sql_id(cursor, src, &mut clause);
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         statement.add_clause(clause);
@@ -220,7 +220,7 @@ impl Formatter {
 
         let mut update_clause = create_clause(cursor, src, "UPDATE")?;
         cursor.goto_next_sibling();
-        self.consume_sql_id(cursor, src, &mut update_clause);
+        self.consume_or_complement_sql_id(cursor, src, &mut update_clause);
         self.consume_comment_in_clause(cursor, src, &mut update_clause)?;
 
         // 規則上でここに現れるノードは_aliasable_identifierだが、'_'から始まっているためノードに現れない。
@@ -312,7 +312,7 @@ impl Formatter {
         let mut insert = create_clause(cursor, src, "INSERT")?;
         cursor.goto_next_sibling();
         // SQL_IDがあるかをチェック
-        self.consume_sql_id(cursor, src, &mut insert);
+        self.consume_or_complement_sql_id(cursor, src, &mut insert);
         self.consume_comment_in_clause(cursor, src, &mut insert)?;
 
         statement.add_clause(insert);
