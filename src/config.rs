@@ -159,3 +159,26 @@ pub(crate) fn load_settings(path: &str) -> Result<(), UroboroSQLFmtError> {
 
     Ok(())
 }
+
+/// デフォルトの設定をロードする
+pub(crate) fn load_default_settings() {
+    *CONFIG.write().unwrap() = Config::new();
+}
+
+/// 補完・削除を行わない設定をロードする
+pub(crate) fn load_never_complement_settings() {
+    let config = Config {
+        debug: default_debug(),
+        tab_size: default_tab_size(),
+        complement_alias: false,
+        trim_bind_param: false,
+        keyword_case: Case::default(),
+        identifier_case: Case::default(),
+        max_char_per_line: default_max_char_per_line(),
+        complement_outer_keyword: false,
+        complement_as_keyword: false,
+        remove_redundant_nest: false,
+    };
+
+    *CONFIG.write().unwrap() = config;
+}

@@ -34,6 +34,11 @@ pub enum UroboroSQLFmtError {
     Rendering(String),
     #[error("Runtime Error: {0}")]
     Runtime(String),
+    #[error("Validation Error: {error_msg}")]
+    Validation {
+        format_result: String,
+        error_msg: String,
+    },
 }
 
 #[derive(Debug, Clone)]
