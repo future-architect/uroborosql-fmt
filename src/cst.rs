@@ -197,25 +197,6 @@ impl Comment {
         self.text.starts_with("/*")
     }
 
-    /// コメントが/*_SQL_ID_*/であるかどうかを返す
-    pub(crate) fn is_sql_id_comment(&self) -> bool {
-        if self.text.starts_with("/*") {
-            // 複数行コメント
-
-            // コメントの中身を取り出す
-            let content = self
-                .text
-                .trim_start_matches("/*")
-                .trim_end_matches("*/")
-                .trim();
-
-            content == "_SQL_ID_" || content == "_SQL_IDENTIFIER_"
-        } else {
-            // 行コメント
-            false
-        }
-    }
-
     fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
@@ -253,5 +234,31 @@ impl Comment {
         }
 
         Ok(result)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SqlID {
+    sql_id: String,
+}
+
+impl SqlID {
+    pub(crate) fn new(sql_id: String) -> SqlID {
+        SqlID { sql_id }
+    }
+
+    /// /*_SQL_ID_*/であるかどうかを返す
+    pub(crate) fn is_sql_id(text: &str) -> bool {
+        if text.starts_with("/*") {
+            // 複数行コメント
+
+            // コメントの中身を取り出す
+            let content = text.trim_start_matches("/*").trim_end_matches("*/").trim();
+
+            content == "_SQL_ID_" || content == "_SQL_IDENTIFIER_"
+        } else {
+            // 行コメント
+            false
+        }
     }
 }

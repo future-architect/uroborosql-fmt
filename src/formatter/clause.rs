@@ -31,7 +31,7 @@ impl Formatter {
         cursor.goto_next_sibling();
 
         // SQL_IDとコメントを消費
-        self.consume_sql_id(cursor, src, &mut clause);
+        self.consume_or_complement_sql_id(cursor, src, &mut clause);
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         // cursor -> select_caluse_body
@@ -138,7 +138,7 @@ impl Formatter {
         cursor.goto_next_sibling();
 
         // SQL_IDとコメントを消費
-        self.consume_sql_id(cursor, src, &mut with_clause);
+        self.consume_or_complement_sql_id(cursor, src, &mut with_clause);
         self.consume_comment_in_clause(cursor, src, &mut with_clause)?;
 
         let mut with_body = WithBody::new();

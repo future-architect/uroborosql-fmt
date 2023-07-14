@@ -6,9 +6,12 @@ use tree_sitter::{Node, TreeCursor};
 
 pub(crate) const COMMENT: &str = "comment";
 
-use crate::cst::*;
+use crate::{config::CONFIG, cst::*};
 
-pub(crate) struct Formatter {}
+pub(crate) struct Formatter {
+    /// select文、insert文などが複数回出てきた際に1度だけSQL_IDを補完する、という処理を実現するためのフラグ
+    should_complement_sql_id: bool,
+}
 
 impl Default for Formatter {
     fn default() -> Self {
@@ -17,8 +20,11 @@ impl Default for Formatter {
 }
 
 impl Formatter {
+    /// CONFIGファイルを見て、補完フラグがtrueの場合は`should_complement_sql_id`をtrueにして初期化する
     pub(crate) fn new() -> Formatter {
-        Formatter {}
+        Formatter {
+            should_complement_sql_id: CONFIG.read().unwrap().complement_sql_id,
+        }
     }
 
     /// sqlソースファイルをフォーマット用構造体に変形する
@@ -159,17 +165,30 @@ impl Formatter {
     }
 
     /// カーソルが指すノードがSQL_IDであれば、clauseに追加する
-    fn consume_sql_id(&mut self, cursor: &mut TreeCursor, src: &str, clause: &mut Clause) {
-        if cursor.node().kind() != COMMENT {
-            return;
+    /// もし (_SQL_ID_が存在していない) && (_SQL_ID_がまだ出現していない) && (_SQL_ID_の補完がオン)
+    /// の場合は補完する
+    fn consume_or_complement_sql_id(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+        clause: &mut Clause,
+    ) {
+        if cursor.node().kind() == COMMENT {
+            let text = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
+            if SqlID::is_sql_id(text) {
+                clause.set_sql_id(SqlID::new(text.to_string()));
+                cursor.goto_next_sibling();
+                self.should_complement_sql_id = false;
+
+                return;
+            }
         }
 
-        let comment = Comment::new(cursor.node(), src);
-
-        // _SQL_ID_であれば追加
-        if comment.is_sql_id_comment() {
-            clause.set_sql_id(comment);
-            cursor.goto_next_sibling();
+        // SQL_IDがない、かつSQL補完フラグがtrueの場合、補完する
+        if self.should_complement_sql_id {
+            clause.set_sql_id(SqlID::new("/* _SQL_ID_ */".to_string()));
+            self.should_complement_sql_id = false;
         }
     }
 

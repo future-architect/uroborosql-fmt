@@ -1,4 +1,4 @@
-SELECT
+SELECT /* _SQL_ID_ */
 	A
 FROM
 	B

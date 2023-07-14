@@ -3,7 +3,7 @@ use tree_sitter::Node;
 
 use crate::util::convert_keyword_case;
 
-use super::{Body, Comment, Location, UroboroSQLFmtError};
+use super::{Body, Comment, Location, SqlID, UroboroSQLFmtError};
 
 // 句に対応した構造体
 #[derive(Debug, Clone)]
@@ -12,7 +12,7 @@ pub(crate) struct Clause {
     body: Option<Body>,
     loc: Location,
     /// DML(, DDL)に付与できるsql_id
-    sql_id: Option<Comment>,
+    sql_id: Option<SqlID>,
     /// キーワードの下に現れるコメント
     comments: Vec<Comment>,
 }
@@ -94,8 +94,8 @@ impl Clause {
         Ok(())
     }
 
-    pub(crate) fn set_sql_id(&mut self, comment: Comment) {
-        self.sql_id = Some(comment);
+    pub(crate) fn set_sql_id(&mut self, sql_id: SqlID) {
+        self.sql_id = Some(sql_id);
     }
 
     /// Clause のキーワードの下のコメントとして追加したコメントが、
@@ -127,7 +127,7 @@ impl Clause {
 
         if let Some(sql_id) = &self.sql_id {
             result.push(' ');
-            result.push_str(&sql_id.text);
+            result.push_str(&sql_id.sql_id);
         }
 
         // comments
