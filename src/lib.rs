@@ -4,24 +4,37 @@ mod formatter;
 mod re;
 mod two_way_sql;
 mod util;
+mod validate;
 
 use config::*;
-use cst::UroboroSQLFmtError;
+pub use cst::UroboroSQLFmtError;
 use formatter::Formatter;
 
 use tree_sitter::{Language, Node};
 use two_way_sql::{format_two_way_sql, is_two_way_sql};
+use validate::validate_format_result;
 
 /// 引数のSQLをフォーマットして返す
 pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, UroboroSQLFmtError> {
-    //設定ファイルの読み込み
-    if let Some(path) = config_path {
-        load_settings(path)?
-    }
     // tree-sitter-sqlの言語を取得
     let language = tree_sitter_sql::language();
 
-    if is_two_way_sql(src) {
+    let is_two_way_sql = is_two_way_sql(src);
+
+    validate_format_result(src, language, is_two_way_sql)?;
+
+    //設定ファイルの読み込み
+    if let Some(path) = config_path {
+        load_settings(path)?
+    } else {
+        // 指定されていない場合は、デフォルトの設定をロードする。
+        // テスト等で複数回format_sql()を呼び出す場合に必要になる。
+        // ここでロードしないと、マージ検証処理で設定を変更しているため、
+        // 2回目以降の呼び出しで、マージ検証用の設定が使われてしまう。
+        load_default_settings()
+    }
+
+    if is_two_way_sql {
         // 2way-sqlモード
         if CONFIG.read().unwrap().debug {
             eprintln!("\n{} 2way-sql mode {}\n", "=".repeat(20), "=".repeat(20));

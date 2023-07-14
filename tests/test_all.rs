@@ -1,18 +1,29 @@
 use std::{
+    collections::HashMap,
     fs::{create_dir, create_dir_all, read_to_string, remove_dir_all, DirEntry, File},
     io::Write,
+    panic,
     path::{self, PathBuf},
 };
+
+use uroborosql_fmt::UroboroSQLFmtError;
 
 // 並列実行するとグローバル変数の問題が発生するため並列実行しない
 #[test]
 fn test() {
-    test_all_files();
-    test_config_file();
+    let result_all_files = test_all_files();
+    let result_config_file = test_config_file();
+    assert!(result_all_files);
+    assert!(result_config_file);
 }
 
 /// srcをconfigの設定でフォーマットした結果をdst_dirに保存
-fn run_with_config(dst_dir: &PathBuf, src: &PathBuf, config: Option<&PathBuf>) {
+fn run_with_config(
+    dst_dir: &PathBuf,
+    src: &PathBuf,
+    config: Option<&PathBuf>,
+    failure_results: &mut HashMap<String, String>,
+) {
     // file名
     let file_name = src.file_name().unwrap().to_str().unwrap();
     // fileの内容
@@ -21,9 +32,17 @@ fn run_with_config(dst_dir: &PathBuf, src: &PathBuf, config: Option<&PathBuf>) {
     let config_path = config.and_then(|c| c.to_str());
 
     let result = match uroborosql_fmt::format_sql(&content, config_path) {
-        Ok(res) => res,
+        Ok(format_result) => format_result,
+        Err(UroboroSQLFmtError::Validation {
+            format_result,
+            error_msg,
+        }) => {
+            // assertion errorが生じた際は、Ok((フォーマット結果, エラーメッセージ))が返される
+            failure_results.insert(src.to_str().unwrap().to_string(), error_msg);
+            format_result
+        }
         Err(e) => {
-            eprintln!("{}", e);
+            failure_results.insert(src.to_str().unwrap().to_string(), e.to_string());
             content.clone()
         }
     };
@@ -35,12 +54,10 @@ fn run_with_config(dst_dir: &PathBuf, src: &PathBuf, config: Option<&PathBuf>) {
     dst_file.write_all(result.as_bytes()).unwrap();
 }
 
-/*
-   `cargo test`で、testfiles/src/にあるファイルすべてをフォーマットする
-   フォーマット結果は、testfiles/dst/ディレクトリの同名ファイルに書き込まれる。
-   commitしてあるファイルと比較し、違っていたらバグの可能性がある。
-*/
-fn test_all_files() {
+/// `cargo test`で、testfiles/src/にあるファイルすべてをフォーマットする
+/// フォーマット結果は、testfiles/dst/ディレクトリの同名ファイルに書き込まれる。
+/// commitしてあるファイルと比較し、違っていたらバグの可能性がある。
+fn test_all_files() -> bool {
     // testの対象を格納するディレクトリ
     let test_dir = path::PathBuf::from("./testfiles/");
     let src_dir = test_dir.join("src");
@@ -53,16 +70,27 @@ fn test_all_files() {
 
     let entries = src_dir.read_dir().unwrap();
 
+    let mut failure_results = HashMap::new();
+
     // デフォルト値の設定でテスト
-    entries.for_each(|e| test_entry_with_config(e.unwrap(), "", None));
+    entries.for_each(|e| test_entry_with_config(e.unwrap(), "", None, &mut failure_results));
+
+    if !failure_results.is_empty() {
+        eprintln!("-- test_all_files out --");
+        eprintln!("failed files ...");
+        failure_results.iter().for_each(|(path, error_msg)| {
+            eprintln!("{}: {}", path, error_msg);
+        });
+        eprintln!("{} files failed", failure_results.len());
+        return false;
+    }
+    true
 }
 
-/*
-   `cargo test`で、testfiles/config_test/src/にあるファイルすべてをtestfiles/config_test/configs内の各設定でフォーマットする
-   フォーマット結果は、testfiles/dst_configX/ディレクトリの同名ファイルに書き込まれる。
-   commitしてあるファイルと比較し、違っていたらバグの可能性がある。
-*/
-fn test_config_file() {
+/// `cargo test`で、testfiles/config_test/src/にあるファイルすべてをtestfiles/config_test/configs内の各設定でフォーマットする
+/// フォーマット結果は、testfiles/dst_configX/ディレクトリの同名ファイルに書き込まれる。
+/// commitしてあるファイルと比較し、違っていたらバグの可能性がある。
+fn test_config_file() -> bool {
     let config_test_dir = path::PathBuf::from("./testfiles/config_test/");
     let configs_dir = config_test_dir.join("configs");
     let configs: Vec<DirEntry> = configs_dir
@@ -86,6 +114,8 @@ fn test_config_file() {
     // 出力先ディレクトリの作成
     let _ = create_dir(&dst_dir);
 
+    let mut failure_results = HashMap::new();
+
     for entry in &config_entries {
         let src_path = entry.path();
 
@@ -94,7 +124,7 @@ fn test_config_file() {
             continue;
         }
 
-        run_with_config(&dst_dir, &src_path, None);
+        run_with_config(&dst_dir, &src_path, None, &mut failure_results);
     }
 
     // configsに含まれる設定
@@ -122,12 +152,33 @@ fn test_config_file() {
                 continue;
             }
 
-            run_with_config(&dst_dir, &src_path, Some(&config.path()));
+            run_with_config(
+                &dst_dir,
+                &src_path,
+                Some(&config.path()),
+                &mut failure_results,
+            );
         }
     }
+
+    if !failure_results.is_empty() {
+        eprintln!("-- test_config_file out --");
+        eprintln!("failed files ...");
+        failure_results.iter().for_each(|(path, error_msg)| {
+            eprintln!("{}: {}", path, error_msg);
+        });
+        eprintln!("{} files failed", failure_results.len());
+        return false;
+    }
+    true
 }
 
-fn test_entry_with_config(entry: DirEntry, rel_path: &str, config: Option<&PathBuf>) {
+fn test_entry_with_config(
+    entry: DirEntry,
+    rel_path: &str,
+    config: Option<&PathBuf>,
+    failure_results: &mut HashMap<String, String>,
+) {
     let src_path = entry.path();
     if src_path.is_dir() {
         let dir_name = src_path.file_name().unwrap().to_str().unwrap();
@@ -142,7 +193,8 @@ fn test_entry_with_config(entry: DirEntry, rel_path: &str, config: Option<&PathB
         let entries = src_path.read_dir().unwrap();
         let rel_path = rel_path.to_owned() + dir_name + "/";
 
-        entries.for_each(|e| test_entry_with_config(e.unwrap(), &rel_path, config));
+        entries
+            .for_each(|e| test_entry_with_config(e.unwrap(), &rel_path, config, failure_results));
     } else if src_path.is_file() {
         // ファイルの拡張子が.sql出ない場合は飛ばす
         let ext = src_path.extension().unwrap();
@@ -155,6 +207,6 @@ fn test_entry_with_config(entry: DirEntry, rel_path: &str, config: Option<&PathB
         let dst_dir = dst_dir.join(rel_path);
 
         // フォーマットをデフォルト設定で実行
-        run_with_config(&dst_dir, &src_path, config);
+        run_with_config(&dst_dir, &src_path, config, failure_results);
     }
 }
