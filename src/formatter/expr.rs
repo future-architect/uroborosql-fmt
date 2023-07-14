@@ -66,8 +66,7 @@ impl Formatter {
                         // ASの直前にcommentがある場合
                         let comment = Comment::new(cursor.node(), src);
 
-                        if comment.is_multi_line_comment()
-                            || !comment.loc().is_same_line(&aligned.loc())
+                        if comment.is_block_comment() || !comment.loc().is_same_line(&aligned.loc())
                         {
                             // 行末以外のコメント(次以降の行のコメント)は未定義
                             // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
@@ -249,7 +248,7 @@ impl Formatter {
 
         // バインドパラメータの追加
         if let Some(comment) = head_comment {
-            if comment.is_multi_line_comment() && comment.loc().is_next_to(&result.loc()) {
+            if comment.is_block_comment() && comment.loc().is_next_to(&result.loc()) {
                 // 複数行コメントかつ式に隣接していれば、バインドパラメータ
                 result.set_head_comment(comment);
             } else {
@@ -596,7 +595,7 @@ impl Formatter {
         ensure_kind(cursor, "tuple")?;
 
         if let Some(comment) = bind_param {
-            if comment.is_multi_line_comment() && comment.loc().is_next_to(&column_list.loc()) {
+            if comment.is_block_comment() && comment.loc().is_next_to(&column_list.loc()) {
                 column_list.set_head_comment(comment);
             } else {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(

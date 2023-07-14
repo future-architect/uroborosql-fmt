@@ -3,7 +3,7 @@ use std::{
     fs::{create_dir, create_dir_all, read_to_string, remove_dir_all, DirEntry, File},
     io::Write,
     panic,
-    path::{self, PathBuf},
+    path::{self, Path, PathBuf},
 };
 
 use uroborosql_fmt::UroboroSQLFmtError;
@@ -19,7 +19,7 @@ fn test() {
 
 /// srcをconfigの設定でフォーマットした結果をdst_dirに保存
 fn run_with_config(
-    dst_dir: &PathBuf,
+    dst_dir: &Path,
     src: &PathBuf,
     config: Option<&PathBuf>,
     failure_results: &mut HashMap<String, String>,
@@ -27,7 +27,7 @@ fn run_with_config(
     // file名
     let file_name = src.file_name().unwrap().to_str().unwrap();
     // fileの内容
-    let content = read_to_string(&src).unwrap();
+    let content = read_to_string(src).unwrap();
 
     let config_path = config.and_then(|c| c.to_str());
 
@@ -66,7 +66,7 @@ fn test_all_files() -> bool {
     // 最初に ./testfiles/dir/を削除しておく
     remove_dir_all(&dst_dir).unwrap_or_else(|_| eprintln!("./testfiles/dst/ does not exists"));
 
-    create_dir_all(&dst_dir).expect(&format!("Directory ./testfiles.dst cannot be created.",));
+    create_dir_all(&dst_dir).expect("Directory ./testfiles.dst cannot be created.");
 
     let entries = src_dir.read_dir().unwrap();
 
@@ -136,7 +136,7 @@ fn test_config_file() -> bool {
                 .file_name()
                 .to_str()
                 .unwrap() // file名 (例: config1.json)
-                .split(".")
+                .split('.')
                 .next()
                 .unwrap() // 拡張子を外したファイル名 (例: config1)
         ));
@@ -185,9 +185,8 @@ fn test_entry_with_config(
         let directory_path = ("./testfiles/dst/".to_owned() + rel_path) + dir_name;
 
         // dstディレクトリに、対応するディレクトリを生成
-        match create_dir_all(path::Path::new(&directory_path)) {
-            Err(e) => panic!("create_dir: {:?}", e),
-            Ok(_) => (),
+        if let Err(e) = create_dir_all(path::Path::new(&directory_path)) {
+            panic!("create_dir: {:?}", e)
         }
 
         let entries = src_path.read_dir().unwrap();
@@ -199,7 +198,7 @@ fn test_entry_with_config(
         // ファイルの拡張子が.sql出ない場合は飛ばす
         let ext = src_path.extension().unwrap();
         if ext != "sql" {
-            return ();
+            return;
         }
 
         // 出力先

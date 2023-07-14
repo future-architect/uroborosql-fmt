@@ -138,7 +138,7 @@ impl AlignedExpr {
         &mut self,
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
-        if comment.is_multi_line_comment() {
+        if comment.is_block_comment() {
             // 複数行コメント
             Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_trailing_comment:{:?} is not trailing comment!",
@@ -163,7 +163,7 @@ impl AlignedExpr {
         &mut self,
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
-        if comment.is_multi_line_comment() {
+        if comment.is_block_comment() {
             // 複数行コメント
             Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_lhs_trailing_comment:{:?} is not trailing comment!",
@@ -314,7 +314,7 @@ impl AlignedExpr {
                 result.push('\t');
 
                 // from句以外はopを挿入
-                if op != "" {
+                if !op.is_empty() {
                     result.push_str(&convert_keyword_case(op));
 
                     // 右辺が存在してCASE文ではない場合はタブを挿入

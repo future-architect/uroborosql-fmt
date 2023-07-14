@@ -9,14 +9,17 @@ pub(crate) use expr::*;
 pub(crate) use function::*;
 pub(crate) use paren::*;
 pub(crate) use primary::*;
+
 pub(crate) use subquery::*;
 
 pub(crate) use body::*;
 pub(crate) use clause::*;
 
-use itertools::repeat_n;
+use itertools::{repeat_n, Itertools};
 use thiserror::Error;
 use tree_sitter::{Node, Point, Range};
+
+use crate::config::CONFIG;
 
 #[derive(Error, Debug)]
 pub enum UroboroSQLFmtError {
@@ -197,8 +200,8 @@ impl Comment {
         self.loc.clone()
     }
 
-    /// コメントが複数行コメントであればtrueを返す
-    pub(crate) fn is_multi_line_comment(&self) -> bool {
+    /// コメントがブロックコメントであればtrueを返す
+    pub(crate) fn is_block_comment(&self) -> bool {
         self.text.starts_with("/*")
     }
 
@@ -208,33 +211,144 @@ impl Comment {
         // インデントの挿入
         result.extend(repeat_n('\t', depth));
 
-        if self.is_multi_line_comment() && self.loc.is_single_line() {
-            // 元のコメントが、単一行のブロックコメントである場合、そのまま描画する
-            result.push_str(&self.text);
-        } else if self.is_multi_line_comment() {
-            // multi lines
+        if self.is_block_comment() && !self.loc.is_single_line() {
+            // ブロックコメント かつ 単一行ではない (= 複数行ブロックコメント)
 
-            let lines: Vec<_> = self
+            // コメントの開始キーワード
+            let start_keyword = if self.text.starts_with("/*+") {
+                // ヒント句
+                "/*+"
+            } else {
+                "/*"
+            };
+            // コメントの終了キーワード
+            let end_keyword = "*/";
+
+            // 開始キーワードと終了キーワードを除去して改行でsplit
+            //
+            // 以下のような例の場合、testの前の空白文字は保持される
+            //
+            // ```
+            // /*
+            //                  test
+            // */
+            // ```
+            let lines = self
                 .text
-                .trim_start_matches("/*")
-                .trim_end_matches("*/")
-                .trim()
+                .trim_start_matches(start_keyword) // 開始キーワードの除去
+                .trim_end_matches(end_keyword) // 終了キーワードの除去
+                .trim_end() // 終了キーワードの前のタブ/改行を除去
+                .trim_start_matches(' ') // 開始キーワードの後の空白を除去
+                .trim_start_matches('\n') // 開始キーワードの後の改行を除去
                 .split('\n')
-                .collect();
+                .map(|line| line.trim_end()) // 各行の末尾の空白文字を除去
+                .collect_vec();
 
-            result.push_str("/*\n");
+            // 行の先頭のスペースの数をcount
+            // タブも考慮する
+            let count_start_space = |target: &str| {
+                let mut res = 0;
+                for c in target.chars() {
+                    if c == '\t' {
+                        res += CONFIG.read().unwrap().tab_size
+                            - (res % CONFIG.read().unwrap().tab_size);
+                    } else if c == ' ' {
+                        res += 1;
+                    } else {
+                        break;
+                    }
+                }
+                res
+            };
 
+            // 全ての行のうち先頭のスペースの数が最小のもの
+            // ただし、空白行は無視
+            let min_start_space = lines
+                .iter()
+                .filter(|x| !x.is_empty())
+                .map(|x| count_start_space(x))
+                .min()
+                .unwrap_or(0);
+
+            // 開始キーワードを描画して改行
+            result.push_str(&format!("{}\n", start_keyword));
+
+            // 各行を描画
             for line in &lines {
-                let line = line.trim();
-                result.extend(repeat_n('\t', depth + 1));
-                result.push_str(line);
+                // 必要な深さ
+                let need_depth = depth + 1;
+
+                // 設定ファイルに記述されたタブサイズ (デフォルトサイズ: 4)
+                let tab_size = CONFIG.read().unwrap().tab_size;
+
+                if line.is_empty() {
+                    // 空白行の場合そのまま描画
+                    result.push_str(line);
+                } else if need_depth * tab_size >= min_start_space {
+                    // タブが少なく、補完が必要な場合
+
+                    // 必要なスペースの数
+                    let need_space = need_depth * tab_size - min_start_space;
+
+                    // 補完するスペースの数
+                    let complement_tab = need_space / tab_size;
+
+                    // 補完するスペースの数
+                    let complement_space = if need_space % tab_size == 0 {
+                        // 割り切れる場合はタブのみで補完
+                        0
+                    } else {
+                        // 割り切れない場合はタブで補完した後にスペースで補完
+                        need_space % tab_size
+                    };
+
+                    result.extend(repeat_n('\t', complement_tab));
+                    result.extend(repeat_n(' ', complement_space));
+                    result.push_str(line);
+                } else {
+                    // TABが多い場合
+
+                    // 余分なスペース
+                    let extra_space = min_start_space - (need_depth * tab_size);
+
+                    let mut trimmed_line = line.to_string();
+
+                    // 削除したスペース/タブの和
+                    let mut removal_space = 0;
+
+                    let mut pre_space_count = count_start_space(&trimmed_line);
+
+                    // 余分な先頭のスペース/タブを除去する
+                    loop {
+                        trimmed_line = trimmed_line[1..].to_string();
+
+                        let current_space_count = count_start_space(&trimmed_line);
+
+                        // 削除したスペース/タブの和に今回削除したスペース/タブの数を追加
+                        removal_space += pre_space_count - current_space_count;
+
+                        pre_space_count = current_space_count;
+
+                        // 削除したスペースの数が余分なスペースの数を超えたら終了
+                        if removal_space >= extra_space {
+                            break;
+                        }
+                    }
+
+                    if removal_space > extra_space {
+                        // 削除しすぎたスペースを追加
+                        result.extend(repeat_n(' ', removal_space - extra_space));
+                    }
+
+                    result.push_str(&trimmed_line);
+                }
                 result.push('\n');
             }
 
             result.extend(repeat_n('\t', depth));
-            result.push_str("*/");
+            result.push_str(end_keyword);
         } else {
-            // single line
+            // 1行コメント
             result.push_str(&self.text);
         }
 

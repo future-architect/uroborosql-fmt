@@ -169,7 +169,7 @@ impl BooleanExpr {
         &mut self,
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
-        if comment.is_multi_line_comment() || !self.loc().unwrap().is_same_line(&comment.loc()) {
+        if comment.is_block_comment() || !self.loc().unwrap().is_same_line(&comment.loc()) {
             // 行末コメントではない場合
             // 最後の要素にコメントを追加
             self.contents

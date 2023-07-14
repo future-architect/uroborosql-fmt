@@ -7,8 +7,8 @@ SELECT /* _SQL_ID_ */
 ,	STD.GRADE	AS	GRADE
 -- single line comment
 /*
-	multi lines comment
-	hoge hoge fuga
+    multi lines comment
+    hoge hoge fuga
 */
 ,	STD.AGE		AS	AGE		-- age
 /* end select */

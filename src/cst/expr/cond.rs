@@ -68,7 +68,7 @@ impl CondExpr {
         } else if let Some(when_then_expr) = self.when_then_clause.last_mut() {
             when_then_expr.1.add_comment_to_child(comment)?;
         } else if let Some(expr) = self.expr.as_mut() {
-            if !comment.is_multi_line_comment() && comment.loc().is_same_line(&expr.loc()) {
+            if !comment.is_block_comment() && comment.loc().is_same_line(&expr.loc()) {
                 expr.set_trailing_comment(comment)?;
             } else {
                 self.comments.push(comment)

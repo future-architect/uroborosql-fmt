@@ -175,6 +175,7 @@ pub(crate) fn load_never_complement_settings() {
         keyword_case: Case::default(),
         identifier_case: Case::default(),
         max_char_per_line: default_max_char_per_line(),
+        complement_sql_id: false,
         complement_outer_keyword: false,
         complement_as_keyword: false,
         remove_redundant_nest: false,
