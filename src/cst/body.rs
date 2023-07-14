@@ -156,7 +156,7 @@ impl SeparatedLines {
     ) -> Result<(), UroboroSQLFmtError> {
         let comment_loc = comment.loc();
 
-        if comment.is_multi_line_comment() || !self.loc().unwrap().is_same_line(&comment.loc()) {
+        if comment.is_block_comment() || !self.loc().unwrap().is_same_line(&comment.loc()) {
             // 行末コメントではない場合
             // 最後の要素にコメントを追加
             self.contents.last_mut().unwrap().1.push(comment);
@@ -505,7 +505,7 @@ impl InsertBody {
         // 下から順番に見ていく
 
         // table_nameの直後に現れる
-        if comment.is_multi_line_comment() || !self.table_name.loc().is_same_line(&comment.loc()) {
+        if comment.is_block_comment() || !self.table_name.loc().is_same_line(&comment.loc()) {
             // 行末コメントではない場合は未対応
             unimplemented!()
         } else {
@@ -630,7 +630,7 @@ impl Cte {
         &mut self,
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
-        if comment.is_multi_line_comment() {
+        if comment.is_block_comment() {
             // 複数行コメント
             Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_trailing_comment:{:?} is not trailing comment!",
@@ -655,7 +655,7 @@ impl Cte {
         &mut self,
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
-        if comment.is_multi_line_comment() {
+        if comment.is_block_comment() {
             // 複数行コメント
             Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_name_trailing_comment:{:?} is not trailing comment!",
@@ -749,7 +749,7 @@ impl WithBody {
     ) -> Result<(), UroboroSQLFmtError> {
         let comment_loc = comment.loc();
 
-        if comment.is_multi_line_comment() || !self.loc().unwrap().is_same_line(&comment.loc()) {
+        if comment.is_block_comment() || !self.loc().unwrap().is_same_line(&comment.loc()) {
             // 行末コメントではない場合
             // 最後の要素にコメントを追加
             self.contents.last_mut().unwrap().1.push(comment);
@@ -826,7 +826,7 @@ impl SingleLine {
         &mut self,
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
-        if comment.is_multi_line_comment() || !self.loc.is_same_line(&comment.loc()) {
+        if comment.is_block_comment() || !self.loc.is_same_line(&comment.loc()) {
             // 行末コメントではない場合
             self.comments.push(comment);
         } else {
