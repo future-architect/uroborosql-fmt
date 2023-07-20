@@ -114,7 +114,11 @@ impl Formatter {
             }
             _ => {
                 // _expression
-                let expr = self.format_expr(cursor, src)?;
+                let mut expr = self.format_expr(cursor, src)?;
+
+                if let Some(comment) = comment {
+                    expr.set_head_comment(comment);
+                }
 
                 Ok(AlignedExpr::new(expr, true))
             }
