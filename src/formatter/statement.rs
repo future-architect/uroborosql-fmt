@@ -248,9 +248,13 @@ impl Formatter {
         let set_clause = self.format_set_clause(cursor, src)?;
         statement.add_clause(set_clause);
 
-        // where句、returning句を持つ可能性がある
+        // from句、where句、returning句を持つ可能性がある
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
+                "from_clause" => {
+                    let clause = self.format_from_clause(cursor, src)?;
+                    statement.add_clause(clause);
+                }
                 "where_clause" => {
                     let clause = self.format_where_clause(cursor, src)?;
                     statement.add_clause(clause);
