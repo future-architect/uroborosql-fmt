@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <title>uroborosql-fmt wasm demo page</title>
+    <link href="style.css" rel="stylesheet">
+  </head>
+  
+  <body>
+    <h1> uroborosql-fmt </h1>
+
+    <p>
+      左側にフォーマットしたいSQLソースを入力し「format」ボタンを押すと、
+      右側にフォーマット結果が出力されます。
+    </p>
+    <p>
+    フォーマット結果は
+    <a href="https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88Oracle%EF%BC%89.html">フューチャー株式会社のSQLコーディング規約</a>
+    に従った形式になっています。
+    </p>
+    <div class="options">
+      <div>
+        <input type="checkbox" id="complement_alias" name="complement_alias">
+        <label for="complement_alias">カラムのエイリアス名を補完する</label>
+      </div>
+      <div>
+        <input type="checkbox" id="trim_bind_param" name="trim_bind_param">
+        <label for="trim_bind_param">バインドパラメータの空白をトリムする</label>
+      </div>
+      <table>
+        <tr>
+          <td>タブのサイズ:</td>
+          <td><input type="number" id="tab_size" name="tab_size" value="4"></td>
+        </tr>
+        <tr>
+          <td>予約語:</td>
+          <td>
+            <select id="keyword_case">
+              <option value="upper">upper</option>
+              <option value="lower">lower</option>
+              <option value="preserve">preserve</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td>テーブル・カラム名:</td>
+          <td>
+            <select id="identifier_case">
+              <option value="upper">upper</option>
+              <option value="lower">lower</option>
+              <option value="preserve">preserve</option>
+            </select>
+          </td>
+        </tr>
+      </table>
+      <div class="editor_parent">
+        <div class="editor" id="src_editor"></div>
+        <div class="editor" id="dst_editor"></div>
+      </div>
+    </div>
+
+    <div class="button_parent">
+      <div class="format_btn">
+        <input type="button" value="format" id="format" class="button"/>
+        <span class="format_balloon">Ctrl+Shift+F</span>
+      </div>
+      <div class="copy_btn">
+        <input type="button" value="copy" id="copy" class="button"/>
+      </div>
+    </div>
+  
+    <script src="../node_modules/monaco-editor/min/vs/loader.js"></script>
+    <script src="main.js"></script>
+    <script async src=uroborosql-fmt.js></script>
+  </body>
+</html>

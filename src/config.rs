@@ -1,10 +1,9 @@
 use once_cell::sync::Lazy;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::sync::RwLock;
-
 use std::fs::File;
 use std::io::BufReader;
+use std::sync::RwLock;
 
 use crate::cst::UroboroSQLFmtError;
 
@@ -56,7 +55,7 @@ fn default_complement_sql_id() -> bool {
     false
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Case {
     Upper,
@@ -82,7 +81,7 @@ impl Case {
 }
 
 /// 設定を保持する構造体
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Config {
     /// デバッグモード
     #[serde(default = "default_debug")]
@@ -143,26 +142,29 @@ impl Config {
             remove_redundant_nest: default_remove_redundant_nest(),
         }
     }
+
+    /// Json 文字列から Config 構造体を生成する
+    pub(crate) fn from_json_str(json_str: &str) -> Result<Config, UroboroSQLFmtError> {
+        serde_json::from_str(json_str).map_err(|e| {
+            UroboroSQLFmtError::Runtime(format!("Setting json is invalid.{}", &e.to_string()))
+        })
+    }
+
+    /// 設定ファイルのパスから Config 構造体を生成する
+    pub(crate) fn from_path(path: &str) -> Result<Config, UroboroSQLFmtError> {
+        let file = File::open(path)
+            .map_err(|_| UroboroSQLFmtError::FileNotFound("Setting file not found".to_string()))?;
+
+        let reader = BufReader::new(file);
+
+        serde_json::from_reader(reader)
+            .map_err(|e| UroboroSQLFmtError::IllegalSettingFile(e.to_string()))
+    }
 }
 
-/// 設定ファイルの読み込み
-pub(crate) fn load_settings(path: &str) -> Result<(), UroboroSQLFmtError> {
-    let file = File::open(path)
-        .map_err(|_| UroboroSQLFmtError::FileNotFound("Setting file not found".to_string()))?;
-
-    let reader = BufReader::new(file);
-
-    let config = serde_json::from_reader(reader)
-        .map_err(|e| UroboroSQLFmtError::IllegalSettingFile(e.to_string()))?;
-
-    *CONFIG.write().unwrap() = config;
-
-    Ok(())
-}
-
-/// デフォルトの設定をロードする
-pub(crate) fn load_default_settings() {
-    *CONFIG.write().unwrap() = Config::new();
+/// 引数に与えた Config 構造体をグローバル変数 CONFIG に読み込む
+pub(crate) fn load_settings(config: Config) {
+    *CONFIG.write().unwrap() = config
 }
 
 /// 補完・削除を行わない設定をロードする

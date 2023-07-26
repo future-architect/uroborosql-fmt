@@ -6,6 +6,8 @@ mod two_way_sql;
 mod util;
 mod validate;
 
+use std::ffi::{c_char, CStr, CString};
+
 use config::*;
 pub use cst::UroboroSQLFmtError;
 use formatter::Formatter;
@@ -14,8 +16,46 @@ use tree_sitter::{Language, Node};
 use two_way_sql::{format_two_way_sql, is_two_way_sql};
 use validate::validate_format_result;
 
-/// 引数のSQLをフォーマットして返す
+#[export_name = "format_sql"]
+#[no_mangle]
+pub extern "C" fn format_sql_for_wasm(
+    src: *mut c_char,
+    config_json_str: *mut c_char,
+) -> *mut c_char {
+    let src = unsafe { CStr::from_ptr(src).to_str().unwrap().to_owned() };
+
+    let config_json_str = unsafe { CStr::from_ptr(config_json_str).to_str().unwrap() };
+    let config = Config::from_json_str(config_json_str).unwrap();
+
+    // TODO: error handling
+    let result = format_sql_inner(&src, config).unwrap();
+
+    CString::new(result).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn free_format_string(s: *mut c_char) {
+    unsafe {
+        if s.is_null() {
+            return;
+        }
+        CString::from_raw(s)
+    };
+}
+
+/// 設定をファイルで渡して、SQLをフォーマットする。
 pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, UroboroSQLFmtError> {
+    let config = if let Some(path) = config_path {
+        Config::from_path(path)?
+    } else {
+        Config::new()
+    };
+
+    format_sql_inner(src, config)
+}
+
+/// 設定をConfig構造体で渡して、SQLをフォーマットする。
+fn format_sql_inner(src: &str, config: Config) -> Result<String, UroboroSQLFmtError> {
     // tree-sitter-sqlの言語を取得
     let language = tree_sitter_sql::language();
 
@@ -23,16 +63,7 @@ pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, Urobor
 
     validate_format_result(src, language, is_two_way_sql)?;
 
-    //設定ファイルの読み込み
-    if let Some(path) = config_path {
-        load_settings(path)?
-    } else {
-        // 指定されていない場合は、デフォルトの設定をロードする。
-        // テスト等で複数回format_sql()を呼び出す場合に必要になる。
-        // ここでロードしないと、マージ検証処理で設定を変更しているため、
-        // 2回目以降の呼び出しで、マージ検証用の設定が使われてしまう。
-        load_default_settings()
-    }
+    load_settings(config);
 
     if is_two_way_sql {
         // 2way-sqlモード
