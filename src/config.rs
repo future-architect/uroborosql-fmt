@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::sync::RwLock;
 
-use crate::cst::UroboroSQLFmtError;
+use crate::error::UroboroSQLFmtError;
 
 /// 設定を保持するグローバル変数
 pub(crate) static CONFIG: Lazy<RwLock<Config>> = Lazy::new(|| RwLock::new(Config::new()));

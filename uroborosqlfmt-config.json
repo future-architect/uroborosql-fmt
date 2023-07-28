@@ -1,5 +1,5 @@
 {
-  "debug": true,
+  "debug": false,
   "tab_size": 4,
   "complement_alias": true,
   "trim_bind_param": false,

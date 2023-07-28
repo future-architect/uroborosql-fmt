@@ -1,5 +1,5 @@
 SELECT
-	col
+	col	AS	col
 FROM
 	tab
 ORDER BY

@@ -1,6 +1,9 @@
 use itertools::repeat_n;
 
-use crate::cst::{Comment, Location, UroboroSQLFmtError};
+use crate::{
+    cst::{Comment, Location},
+    error::UroboroSQLFmtError,
+};
 
 use super::Expr;
 

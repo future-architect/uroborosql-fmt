@@ -1,7 +1,7 @@
 SELECT
-	DEPNAME
-,	EMPNO
-,	SALARY
+	DEPNAME	AS	DEPNAME
+,	EMPNO	AS	EMPNO
+,	SALARY	AS	SALARY
 ,	RANK() OVER(
 		PARTITION BY
 			DEPNAME
@@ -13,8 +13,8 @@ FROM
 ;
 -- 0 argument over
 SELECT
-	SALARY				-- salary
-,	SUM(SALARY) OVER()	-- sum
+	SALARY				AS	SALARY	-- salary
+,	SUM(SALARY) OVER()				-- sum
 FROM
 	EMPSALARY
 ;

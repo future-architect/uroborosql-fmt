@@ -1,8 +1,8 @@
 SELECT
-	A
+	A	AS	A
 ,	(
 		SELECT
-			Z
+			Z	AS	Z
 		,	CASE
 				WHEN
 					Z	=	1

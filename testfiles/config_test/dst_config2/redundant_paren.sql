@@ -1,5 +1,5 @@
 SELECT
-	a
+	a	AS	a
 FROM
 	b
 WHERE

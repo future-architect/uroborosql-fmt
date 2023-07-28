@@ -1,16 +1,17 @@
 mod config;
 mod cst;
-mod formatter;
+pub mod error;
 mod re;
 mod two_way_sql;
 mod util;
 mod validate;
+mod visitor;
 
 use std::ffi::{c_char, CStr, CString};
 
 use config::*;
-pub use cst::UroboroSQLFmtError;
-use formatter::Formatter;
+use error::UroboroSQLFmtError;
+use visitor::Visitor;
 
 use tree_sitter::{Language, Node};
 use two_way_sql::{format_two_way_sql, is_two_way_sql};
@@ -97,11 +98,11 @@ pub(crate) fn format(src: &str, language: Language) -> Result<String, UroboroSQL
         eprintln!();
     }
 
-    // フォーマッタオブジェクトを生成
-    let mut formatter = Formatter::default();
+    // ビジターオブジェクトを生成
+    let mut visitor = Visitor::default();
 
-    // formatを行い、バッファに結果を格納
-    let stmts = formatter.format_sql(root_node, src.as_ref())?;
+    // SQLソースファイルをフォーマット用構造体に変換する
+    let stmts = visitor.visit_sql(root_node, src.as_ref())?;
 
     if CONFIG.read().unwrap().debug {
         eprintln!("{:#?}", stmts);

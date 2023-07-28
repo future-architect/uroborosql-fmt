@@ -1,11 +1,10 @@
 use tree_sitter::Node;
 
 use crate::{
-    cst::{Comment, Location, UroboroSQLFmtError},
-    util::{convert_keyword_case, is_quoted, trim_bind_param},
+    cst::{Comment, Location},
+    error::UroboroSQLFmtError,
+    util::{convert_identifier_case, convert_keyword_case, is_quoted, trim_bind_param},
 };
-
-use super::convert_identifier_case;
 
 /// PrimaryExprがKeywordかExprか示すEnum
 #[derive(Clone, Debug)]
@@ -22,31 +21,33 @@ pub(crate) struct PrimaryExpr {
     loc: Location,
     /// バインドパラメータ
     head_comment: Option<String>,
-    kind: PrimaryExprKind,
 }
 
 impl PrimaryExpr {
-    pub(crate) fn new(
-        element: impl Into<String>,
-        loc: Location,
-        kind: PrimaryExprKind,
-    ) -> PrimaryExpr {
+    pub(crate) fn new(element: impl Into<String>, loc: Location) -> PrimaryExpr {
         PrimaryExpr {
             element: element.into(),
             loc,
             head_comment: None,
-            kind,
         }
     }
 
     /// tree_sitter::Node から PrimaryExpr を生成する。
     /// キーワードをPrimaryExprとして扱う場合があり、その際はこのメソッドで生成する。
+    /// kindによって自動でキーワードの大文字小文字ルールを適用する
     pub(crate) fn with_node(node: Node, src: &str, kind: PrimaryExprKind) -> PrimaryExpr {
-        PrimaryExpr::new(
-            node.utf8_text(src.as_bytes()).unwrap(),
-            Location::new(node.range()),
-            kind,
-        )
+        let element = node.utf8_text(src.as_bytes()).unwrap();
+
+        // PrimaryExprKindによって適用するルールを変更する
+        let converted_element = if matches!(kind, PrimaryExprKind::Keyword) {
+            // キーワードの大文字小文字設定を適用した文字列
+            convert_keyword_case(element)
+        } else {
+            // 文字列リテラルであればそのまま、DBオブジェクトであれば大文字小文字設定を適用した文字列
+            convert_identifier_case(element)
+        };
+
+        PrimaryExpr::new(converted_element, Location::new(node.range()))
     }
 
     pub(crate) fn loc(&self) -> Location {
@@ -90,17 +91,9 @@ impl PrimaryExpr {
     /// フォーマット後の文字列に変換する。
     /// 大文字・小文字は to_uppercase_identifier() 関数の結果に依存する。
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
-        let element_str = if matches!(self.kind, PrimaryExprKind::Keyword) {
-            // キーワードの大文字小文字設定を適用した文字列
-            convert_keyword_case(&self.element)
-        } else {
-            // 文字列リテラルであればそのまま、DBオブジェクトであれば大文字小文字設定を適用した文字列
-            convert_identifier_case(&self.element)
-        };
-
         match self.head_comment.as_ref() {
-            Some(comment) => Ok(format!("{}{}", comment, element_str)),
-            None => Ok(element_str),
+            Some(comment) => Ok(format!("{}{}", comment, self.element)),
+            None => Ok(self.element.clone()),
         }
     }
 }

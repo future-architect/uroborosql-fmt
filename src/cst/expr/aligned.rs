@@ -1,21 +1,32 @@
 use itertools::repeat_n;
 
 use crate::{
-    config::CONFIG,
-    cst::{Comment, Location, UroboroSQLFmtError},
-    util::{convert_keyword_case, tab_size, to_tab_num},
+    cst::{Comment, Location},
+    error::UroboroSQLFmtError,
+    util::{tab_size, to_tab_num},
 };
 
-use super::{primary::PrimaryExpr, primary::PrimaryExprKind, Expr};
+use super::Expr;
 
 /// AlignedExprの演算子、コメントを縦ぞろえする際に使用する情報を含む構造体
 #[derive(Debug)]
 pub(crate) struct AlignInfo {
-    /// 演算子自身の最長の長さ
+    /// 演算子を持つAlignedExprが含まれていればtrue
+    has_op: bool,
+
+    /// 演算子の最長の長さをタブ換算したもの
+    ///
+    /// AlignedExprの式が1つも演算子を持っていない場合はNone
     max_op_tab_num: Option<usize>,
-    /// 演算子までの最長の長さ
+
+    /// 演算子までの最長の長さをタブ換算したもの
+    ///
+    /// AlignedExprの式が1つも演算子を持っていない場合はNone
     max_tab_num_to_op: Option<usize>,
-    /// 行末コメントまでの最長の長さ
+
+    /// 行末コメントまでの最長の長さをタブ換算したもの
+    ///
+    /// AlignedExprの式が1つも行末コメントを持っていない場合はNone
     max_tab_num_to_comment: Option<usize>,
 }
 
@@ -28,7 +39,7 @@ impl From<Vec<&AlignedExpr>> for AlignInfo {
             aligned.trailing_comment.is_some() || aligned.lhs_trailing_comment.is_some()
         });
 
-        // 演算子自体の長さ
+        // 演算子の最長の長さをタブ換算したもの
         let max_op_tab_num = if has_op {
             aligned_exprs
                 .iter()
@@ -38,6 +49,7 @@ impl From<Vec<&AlignedExpr>> for AlignInfo {
             None
         };
 
+        // 演算子までの最長の長さをタブ換算したもの
         let max_tab_num_to_op = if has_op {
             aligned_exprs
                 .iter()
@@ -47,6 +59,7 @@ impl From<Vec<&AlignedExpr>> for AlignInfo {
             None
         };
 
+        // 行末コメントまでの最長の長さをタブ換算したもの
         let max_tab_num_to_comment = if has_comment {
             aligned_exprs
                 .iter()
@@ -57,6 +70,7 @@ impl From<Vec<&AlignedExpr>> for AlignInfo {
         };
 
         AlignInfo {
+            has_op,
             max_op_tab_num,
             max_tab_num_to_op,
             max_tab_num_to_comment,
@@ -65,16 +79,9 @@ impl From<Vec<&AlignedExpr>> for AlignInfo {
 }
 
 impl AlignInfo {
-    pub(crate) fn new(
-        max_op_tab_num: Option<usize>,
-        max_tab_num_to_op: Option<usize>,
-        max_tab_num_to_comment: Option<usize>,
-    ) -> AlignInfo {
-        AlignInfo {
-            max_op_tab_num,
-            max_tab_num_to_op,
-            max_tab_num_to_comment,
-        }
+    /// 演算子を持つAlignedExprが含まれているかどうか
+    pub(crate) fn has_op(&self) -> bool {
+        self.has_op
     }
 }
 
@@ -89,12 +96,10 @@ pub(crate) struct AlignedExpr {
     trailing_comment: Option<String>,
     /// 左辺の直後に現れる行末コメント
     lhs_trailing_comment: Option<String>,
-    /// エイリアス式であるかどうか
-    is_alias: bool,
 }
 
 impl AlignedExpr {
-    pub(crate) fn new(lhs: Expr, is_alias: bool) -> AlignedExpr {
+    pub(crate) fn new(lhs: Expr, _is_alias: bool) -> AlignedExpr {
         let loc = lhs.loc();
         AlignedExpr {
             lhs,
@@ -103,7 +108,6 @@ impl AlignedExpr {
             loc,
             trailing_comment: None,
             lhs_trailing_comment: None,
-            is_alias,
         }
     }
 
@@ -111,7 +115,11 @@ impl AlignedExpr {
         self.loc.clone()
     }
 
-    /// opのタブ文字換算の長さを返す
+    /// opのタブ文字換算の長さを返す (opが存在しない場合はNone)
+    ///
+    /// 例えばtab_sizeが4、opがbetweenの場合
+    ///
+    /// op_tab_num() => 2
     fn op_tab_num(&self) -> Option<usize> {
         self.op.as_ref().map(|op| to_tab_num(op.len()))
     }
@@ -186,14 +194,14 @@ impl AlignedExpr {
         self.lhs.set_head_comment(comment);
     }
 
-    // 演算子と右辺の式を追加する
-    pub(crate) fn add_rhs(&mut self, op: impl Into<String>, rhs: Expr) {
+    /// 演算子と右辺の式を追加する
+    pub(crate) fn add_rhs(&mut self, op: Option<String>, rhs: Expr) {
         self.loc.append(rhs.loc());
-        self.op = Some(op.into());
+        self.op = op;
         self.rhs = Some(rhs);
     }
 
-    // 右辺があるかどうかをboolで返す
+    /// 右辺があるかどうかをboolで返す
     pub(crate) fn has_rhs(&self) -> bool {
         self.rhs.is_some()
     }
@@ -221,21 +229,9 @@ impl AlignedExpr {
 
     // 演算子から末尾コメントまでの長さを返す
     pub(crate) fn tab_num_to_comment(&self, max_tab_num_to_op: Option<usize>) -> Option<usize> {
-        let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
-        let complement_alias =
-            CONFIG.read().unwrap().complement_alias && self.is_alias && !is_asterisk;
-
         match (max_tab_num_to_op, &self.rhs) {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.last_line_tab_num()),
-            // コメント以外に揃える対象があり、右辺を左辺で補完する場合、左辺の長さ
-            (Some(_), None) if complement_alias => {
-                if let Some(alias_name) = create_alias(&self.lhs) {
-                    Some(alias_name.last_line_tab_num())
-                } else {
-                    Some(0)
-                }
-            }
             // コメント以外に揃える対象があり、右辺を左辺を保管しない場合、0
             (Some(_), None) => Some(0),
             // そろえる対象がコメントだけであるとき、左辺の長さ
@@ -245,46 +241,49 @@ impl AlignedExpr {
 
     /// 演算子・コメントの縦ぞろえをせずにrenderする
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
-        let tab_num_to_op = if self.has_rhs() {
-            Some(self.lhs_tab_num())
-        } else {
-            None
-        };
-        self.render_align(
-            depth,
-            &AlignInfo::new(
-                self.op_tab_num(),
-                tab_num_to_op,
-                self.tab_num_to_comment(tab_num_to_op),
-            ),
-            false,
-        )
+        // 自身のみからAlignInfo作成
+        let align_info = &AlignInfo::from(vec![self]);
+
+        self.render_align(depth, align_info)
     }
 
     /// 演算子までの長さを与え、演算子の前にtab文字を挿入した文字列を返す
     pub(crate) fn render_align(
         &self,
         depth: usize,
+        // 縦揃え対象AligendExpr(自分を含む)の情報
         align_info: &AlignInfo,
-        is_from_body: bool,
     ) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
+        // 演算子の最長の長さをタブ換算したもの
+        // AlignedExprの式が1つも演算子を持っていない場合はNone
         let max_op_tab_num = align_info.max_op_tab_num;
+
+        // 演算子までの最長の長さをタブ換算したもの
+        // AlignedExprの式が1つも演算子を持っていない場合はNone
         let max_tab_num_to_op = align_info.max_tab_num_to_op;
+
+        // 行末コメントまでの最長の長さをタブ換算したもの
+        // AlignedExprの式が1つも行末コメントを持っていない場合はNone
         let max_tab_num_to_comment = align_info.max_tab_num_to_comment;
 
         // 左辺をrender
         let formatted = self.lhs.render(depth)?;
         result.push_str(&formatted);
 
-        let is_asterisk = matches!(self.lhs, Expr::Asterisk(_));
-        let complement_alias =
-            CONFIG.read().unwrap().complement_alias && self.is_alias && !is_asterisk;
+        // 演算子を持つAligendExprが存在するかどうか (=演算子で縦揃えをするかどうか)
+        let any_expr_has_op = align_info.has_op();
 
-        // 演算子と右辺をrender
-        match (&self.op, max_op_tab_num, max_tab_num_to_op) {
-            (Some(op), Some(max_op_tab_num), Some(max_tab_num)) => {
+        if any_expr_has_op {
+            // いずれかのAligendExprが演算子を持つので必ず共にSome(_)
+            let max_op_tab_num = max_op_tab_num.unwrap();
+            let max_tab_num_to_op = max_tab_num_to_op.unwrap();
+
+            // 自身が演算子を持つ場合、演算子、右辺を縦揃えする
+            if let Some(op) = &self.op {
+                // 左辺に行末コメントがある場合
+                // (現状binary_expressionの左辺に行末コメントがある場合はCSTの構成の時点で未対応)
                 if let Some(comment_str) = &self.lhs_trailing_comment {
                     if depth < 1 {
                         // 左辺に行末コメントがある場合、右辺の直前にタブ文字が挿入されるため、
@@ -309,13 +308,14 @@ impl AlignedExpr {
                     result.extend(repeat_n('\t', depth));
                 }
 
-                let tab_num = max_tab_num - self.lhs_tab_num();
+                // 縦揃え対象opの直前までタブを挿入
+                let tab_num = max_tab_num_to_op - self.lhs_tab_num();
                 result.extend(repeat_n('\t', tab_num));
                 result.push('\t');
 
                 // from句以外はopを挿入
                 if !op.is_empty() {
-                    result.push_str(&convert_keyword_case(op));
+                    result.push_str(op);
 
                     // 右辺が存在してCASE文ではない場合はタブを挿入
                     // CASE文の場合はopの直後で改行するため、opの後にはタブを挿入しない
@@ -323,12 +323,55 @@ impl AlignedExpr {
                         let tab_num = max_op_tab_num - self.op_tab_num().unwrap(); // self.op != Noneならop_tab_num != None
                         result.extend(repeat_n('\t', tab_num + 1));
                     }
-                } else if !is_from_body && CONFIG.read().unwrap().complement_as_keyword {
-                    // complement_keywordオプションがtrueのとき、
-                    // select句でASキーワードがない場合に補完する。
-                    // エイリアスである場合、縦ぞろえ対象の演算子はすべてASなので、タブ文字は一つ挿入すればよい
-                    result.push_str(&convert_keyword_case("AS"));
+                }
+
+                //右辺をrender
+                if let Some(rhs) = &self.rhs {
+                    let formatted = if matches!(rhs, Expr::Cond(_)) {
+                        // 右辺がCASE文の場合は改行してタブを挿入
+                        result.push('\n');
+                        result.extend(repeat_n('\t', depth + 1));
+                        // 1つ深いところでrender
+                        rhs.render(depth + 1)?
+                    } else {
+                        rhs.render(depth)?
+                    };
+                    result.push_str(&formatted);
+                }
+            // 演算子を持たないが右辺が存在する場合、右辺を他の右辺に縦揃えする
+            } else if self.rhs.is_some() {
+                if let Some(comment_str) = &self.lhs_trailing_comment {
+                    if depth < 1 {
+                        // 左辺に行末コメントがある場合、右辺の直前にタブ文字が挿入されるため、
+                        // インデントの深さ(depth)は1以上でなければならない。
+                        return Err(UroboroSQLFmtError::Rendering(
+                            "AlignedExpr::render_align(): The depth must be bigger than 0"
+                                .to_owned(),
+                        ));
+                    }
+
                     result.push('\t');
+                    result.push_str(comment_str);
+                    result.push('\n');
+
+                    // インデントを挿入
+                    result.extend(repeat_n('\t', depth - 1));
+                }
+
+                // 左辺がCASE文の場合はopの前に改行してdepthだけタブを挿入
+                if matches!(self.lhs, Expr::Cond(_)) {
+                    result.push('\n');
+                    result.extend(repeat_n('\t', depth));
+                }
+
+                let tab_num = max_tab_num_to_op - self.lhs_tab_num();
+                result.extend(repeat_n('\t', tab_num));
+
+                // 右辺が存在してCASE文ではない場合はタブを挿入
+                // CASE文の場合はopの直後で改行するため、opの後にはタブを挿入しない
+                if self.rhs.is_some() && !matches!(&self.rhs, Some(Expr::Cond(_))) {
+                    let tab_num = max_op_tab_num; // self.op != Noneならop_tab_num != None
+                    result.extend(repeat_n('\t', tab_num + 1));
                 }
 
                 //右辺をrender
@@ -345,77 +388,49 @@ impl AlignedExpr {
                     result.push_str(&formatted);
                 }
             }
-            // エイリアス名を補完する場合
-            (None, _, Some(max_tab_num)) if complement_alias => {
-                // 演算子までのタブ文字を挿入する
-                let tab_num = max_tab_num - self.lhs_tab_num();
-                result.extend(repeat_n('\t', tab_num));
-
-                if let Some(alias_name) = create_alias(&self.lhs) {
-                    // エイリアス名を生成できた場合に、エイリアス補完を行う
-
-                    if !is_from_body {
-                        result.push('\t');
-                        result.push_str(&convert_keyword_case("AS"));
-                    }
-
-                    // エイリアス補完はすべての演算子が"AS"であるかないため、すべての演算子の長さ(op_tab_num())は等しい
-                    result.push('\t');
-
-                    result.push_str(&alias_name.render(depth)?);
-                }
-            }
-            (_, _, _) => (),
         }
 
-        // 末尾コメントをrender
-        match (&self.trailing_comment, max_op_tab_num, max_tab_num_to_op) {
-            // 末尾コメントが存在し、ほかのそろえる対象が存在する場合
-            (Some(comment), Some(max_op_tab_num), Some(max_tab_num)) => {
-                let tab_num = if let Some(rhs) = &self.rhs {
+        // 行末コメントが存在する場合
+        if let Some(trailing_comment) = &self.trailing_comment {
+            // 行末コメントが存在する場合はmax_tab_num_to_commentはSome(_)
+            let max_tab_num_to_comment = max_tab_num_to_comment.unwrap();
+
+            if any_expr_has_op {
+                // いずれかのAligendExprが演算子を持つので必ず共にSome(_)
+                let max_op_tab_num = max_op_tab_num.unwrap();
+                let max_tab_num_to_op = max_tab_num_to_op.unwrap();
+
+                let tab_num_to_comment = if let Some(rhs) = &self.rhs {
                     // 右辺がある場合は、コメントまでの最長の長さ - 右辺の長さ
 
                     // trailing_commentがある場合、max_tab_num_to_commentは必ずSome(_)
-                    max_tab_num_to_comment.unwrap() - rhs.last_line_tab_num()
+                    max_tab_num_to_comment - rhs.last_line_tab_num()
                         + if rhs.is_multi_line() {
                             // 右辺が複数行である場合、最後の行に左辺と演算子はないため、その分タブで埋める
-                            max_tab_num + max_op_tab_num
+                            max_tab_num_to_op + max_op_tab_num
                         } else {
                             0
                         }
-                } else if complement_alias {
-                    // エイリアス補完を行う場合は、コメントまでの最長の長さ - エイリアス名の長さ
-                    // エイリアス名を求められない場合は、演算子とコメントまでの最大長分タブを挿入する
-                    if let Some(alias_name) = create_alias(&self.lhs) {
-                        max_tab_num_to_comment.unwrap() - alias_name.last_line_tab_num()
-                    } else {
-                        max_tab_num_to_comment.unwrap() + max_op_tab_num
-                    }
                 } else {
                     // 右辺がない場合は
                     // コメントまでの最長 + 演算子の長さ + 左辺の最大長からの差分
-                    max_tab_num_to_comment.unwrap()
-                        + (if is_from_body { 0 } else { max_op_tab_num })
-                        + max_tab_num
+                    max_tab_num_to_comment + max_op_tab_num + max_tab_num_to_op
                         - self.lhs.last_line_tab_num()
                 };
 
+                result.extend(repeat_n('\t', tab_num_to_comment));
+                result.push('\t');
+                result.push_str(trailing_comment);
+            } else {
+                // 全てのAligendExprが演算子を持たない場合
+                // 左辺だけを考慮すれば良い
+                let tab_num = max_tab_num_to_comment - self.lhs.last_line_tab_num();
+
                 result.extend(repeat_n('\t', tab_num));
 
                 result.push('\t');
-                result.push_str(comment);
+                result.push_str(trailing_comment);
             }
-            // 末尾コメントが存在し、ほかにはそろえる対象が存在しない場合
-            (Some(comment), _, None) => {
-                // max_tab_num_to_opがNoneであればそろえる対象はない
-                let tab_num = max_tab_num_to_comment.unwrap() - self.lhs.last_line_tab_num();
-
-                result.extend(repeat_n('\t', tab_num));
-
-                result.push('\t');
-                result.push_str(comment);
-            }
-            _ => (),
         }
 
         Ok(result)
@@ -424,24 +439,5 @@ impl AlignedExpr {
     /// 左辺がCASE文であればtrueを返す
     pub(crate) fn is_lhs_cond(&self) -> bool {
         matches!(&self.lhs, Expr::Cond(_))
-    }
-}
-
-/// エイリアス補完を行う際に、エイリアス名を持つ Expr を生成する関数。
-/// 引数に元の式を与える。その式がPrimary式ではない場合は、エイリアス名を生成できないので、None を返す。
-fn create_alias(lhs: &Expr) -> Option<Expr> {
-    // 補完用に生成した式には、仮に左辺の位置情報を入れておく
-    let loc = lhs.loc();
-
-    match lhs {
-        Expr::Primary(prim) if prim.is_identifier() => {
-            // Primary式であり、さらに識別子である場合のみ、エイリアス名を作成する
-            let element = prim.element();
-            element
-                .split('.')
-                .last()
-                .map(|s| Expr::Primary(Box::new(PrimaryExpr::new(s, loc, PrimaryExprKind::Expr))))
-        }
-        _ => None,
     }
 }

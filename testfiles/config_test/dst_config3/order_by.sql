@@ -1,5 +1,5 @@
 select
-	COL
+	COL	as	COL
 from
 	TAB
 order by

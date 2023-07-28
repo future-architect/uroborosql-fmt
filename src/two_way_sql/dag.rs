@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 use indexmap::{indexset, IndexSet};
 
-use crate::cst::UroboroSQLFmtError;
-use crate::re::RE;
+use crate::{error::UroboroSQLFmtError, re::RE};
 
 /// DAGノードの種類
 #[derive(Debug, Clone)]

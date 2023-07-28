@@ -1,22 +1,22 @@
 SELECT
-	A
+	A	AS	A
 ,	(
 		-- comm1
 		/* comm2 */
 		SELECT
-			Z
+			Z	AS	Z
 		/* z */
 		FROM
 			TAB2
 		/* comm3*/
 	)
 FROM
-	LONGLONGTABLE	AS	L
+	LONGLONGTABLE	L
 ,	(
 		SELECT
-			B
-		,	C
+			B	AS	B
+		,	C	AS	C
 		FROM
 			TAB1
 	)	-- trailing
-					AS	BC
+					BC

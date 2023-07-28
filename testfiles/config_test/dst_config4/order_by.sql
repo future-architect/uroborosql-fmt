@@ -1,5 +1,5 @@
 SElECT
-	COL
+	COL	AS	COL
 FRoM
 	TAB
 ORdER By

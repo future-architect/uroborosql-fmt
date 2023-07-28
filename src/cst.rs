@@ -1,48 +1,36 @@
 mod body;
 mod clause;
 mod expr;
-
-pub(crate) use aligned::*;
-pub(crate) use boolean::*;
-pub(crate) use cond::*;
-pub(crate) use expr::*;
-pub(crate) use function::*;
-pub(crate) use paren::*;
-pub(crate) use primary::*;
-
-pub(crate) use subquery::*;
+mod statement;
 
 pub(crate) use body::*;
 pub(crate) use clause::*;
+pub(crate) use expr::*;
+pub(crate) use statement::*;
+
+// expr
+pub(crate) use aligned::*;
+pub(crate) use asterisk::*;
+pub(crate) use boolean::*;
+pub(crate) use column_list::*;
+pub(crate) use cond::*;
+pub(crate) use conflict_target::*;
+pub(crate) use expr_seq::*;
+pub(crate) use function::*;
+pub(crate) use paren::*;
+pub(crate) use primary::*;
+pub(crate) use subquery::*;
+
+// body
+pub(crate) use insert::*;
+pub(crate) use separeted_lines::*;
+pub(crate) use single_line::*;
+pub(crate) use with::*;
 
 use itertools::{repeat_n, Itertools};
-use thiserror::Error;
 use tree_sitter::{Node, Point, Range};
 
-use crate::config::CONFIG;
-
-#[derive(Error, Debug)]
-pub enum UroboroSQLFmtError {
-    #[error("Illegal operation error: {0}")]
-    IllegalOperation(String),
-    #[error("Unexpected syntax error: {0}")]
-    UnexpectedSyntax(String),
-    #[error("Unimplemented Error: {0}")]
-    Unimplemented(String),
-    #[error("File not found error: {0}")]
-    FileNotFound(String),
-    #[error("Illegal setting file error: {0}")]
-    IllegalSettingFile(String),
-    #[error("Rendering Error: {0}")]
-    Rendering(String),
-    #[error("Runtime Error: {0}")]
-    Runtime(String),
-    #[error("Validation Error: {error_msg}")]
-    Validation {
-        format_result: String,
-        error_msg: String,
-    },
-}
+use crate::{config::CONFIG, error::UroboroSQLFmtError};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Position {
@@ -97,87 +85,6 @@ impl Location {
     /// Location が単一行を意味していれば true を返す
     pub(crate) fn is_single_line(&self) -> bool {
         self.start_position.row == self.end_position.row
-    }
-}
-
-// *_statementに対応した構造体
-#[derive(Debug, Clone)]
-pub(crate) struct Statement {
-    clauses: Vec<Clause>,
-    loc: Option<Location>,
-    /// Statementの上に現れるコメント
-    comments: Vec<Comment>,
-    /// 末尾にセミコロンがついているか
-    has_semi: bool,
-}
-
-impl Statement {
-    pub(crate) fn new() -> Statement {
-        Statement {
-            clauses: vec![] as Vec<Clause>,
-            loc: None,
-            comments: vec![] as Vec<Comment>,
-            has_semi: false,
-        }
-    }
-
-    /// ClauseのVecへの参照を取得する
-    pub(crate) fn get_clauses(self) -> Vec<Clause> {
-        self.clauses
-    }
-
-    // 文に句を追加する
-    pub(crate) fn add_clause(&mut self, clause: Clause) {
-        match &mut self.loc {
-            Some(loc) => loc.append(clause.loc()),
-            None => self.loc = Some(clause.loc()),
-        }
-        self.clauses.push(clause);
-    }
-
-    pub(crate) fn add_comment_to_child(
-        &mut self,
-        comment: Comment,
-    ) -> Result<(), UroboroSQLFmtError> {
-        self.clauses
-            .last_mut()
-            .unwrap()
-            .add_comment_to_child(comment)?;
-
-        Ok(())
-    }
-
-    // Statementの上に現れるコメントを追加する
-    pub(crate) fn add_comment(&mut self, comment: Comment) {
-        self.comments.push(comment);
-    }
-
-    /// 末尾にセミコロンがつくかどうかを指定する
-    pub(crate) fn set_semi(&mut self, has_semi: bool) {
-        self.has_semi = has_semi;
-    }
-
-    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
-        // clause1
-        // ...
-        // clausen
-        let mut result = String::new();
-
-        for comment in &self.comments {
-            result.push_str(&comment.render(depth)?);
-            result.push('\n');
-        }
-
-        // 1つでもエラーの場合は全体もエラー
-        for clause in &self.clauses {
-            result.push_str(&clause.render(depth)?);
-        }
-
-        if self.has_semi {
-            result.push_str(";\n");
-        }
-
-        Ok(result)
     }
 }
 

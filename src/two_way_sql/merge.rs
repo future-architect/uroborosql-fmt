@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use crate::cst::UroboroSQLFmtError;
+use crate::error::UroboroSQLFmtError;
 
 use super::{dag::Kind, tree::TreeNode};
 

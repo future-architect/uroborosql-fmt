@@ -1,11 +1,11 @@
 -- セミコロンあり
 SELECT
-	A
+	A	AS	A
 FROM
 	TBL1
 ;
 -- セミコロンなし
 SELECT
-	B
+	B	AS	B
 FROM
 	TBL2

@@ -4,14 +4,15 @@ use tree_sitter::TreeCursor;
 
 use crate::{
     cst::*,
-    formatter::{ensure_kind, Formatter, COMMENT},
+    error::UroboroSQLFmtError,
     util::convert_keyword_case,
+    visitor::{ensure_kind, Visitor, COMMENT},
 };
 
-impl Formatter {
+impl Visitor {
     /// かっこで囲まれたSELECTサブクエリをフォーマットする
     /// 呼び出し後、cursorはselect_subexpressionを指している
-    pub(crate) fn format_select_subexpr(
+    pub(crate) fn visit_select_subexpr(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -36,7 +37,7 @@ impl Formatter {
         }
 
         // cursor -> select_statement
-        let mut select_stmt = self.format_select_stmt(cursor, src)?;
+        let mut select_stmt = self.visit_select_stmt(cursor, src)?;
 
         // select_statementの前にコメントがあった場合、コメントを追加
         comment_buf
@@ -61,7 +62,7 @@ impl Formatter {
     }
 
     /// EXISTSサブクエリをフォーマットする
-    pub(crate) fn format_exists_subquery(
+    pub(crate) fn visit_exists_subquery(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -74,14 +75,14 @@ impl Formatter {
         // cursor -> "EXISTS"
 
         ensure_kind(cursor, "EXISTS")?;
-        let exists_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        let exists_keyword = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
 
         cursor.goto_next_sibling();
         // cursor -> "select_subexpression"
 
-        let select_subexpr = self.format_select_subexpr(cursor, src)?;
+        let select_subexpr = self.visit_select_subexpr(cursor, src)?;
 
-        let exists_subquery = ExistsSubquery::new(exists_keyword, select_subexpr, exists_loc);
+        let exists_subquery = ExistsSubquery::new(&exists_keyword, select_subexpr, exists_loc);
 
         cursor.goto_parent();
         ensure_kind(cursor, "exists_subquery_expression")?;
@@ -90,7 +91,7 @@ impl Formatter {
     }
 
     /// INサブクエリをフォーマットする
-    pub(crate) fn format_in_subquery(
+    pub(crate) fn visit_in_subquery(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -105,7 +106,7 @@ impl Formatter {
         cursor.goto_first_child();
         // cursor -> _expression
 
-        let lhs = self.format_expr(cursor, src)?;
+        let lhs = self.visit_expr(cursor, src)?;
 
         cursor.goto_next_sibling();
         // cursor -> "NOT"?
@@ -129,10 +130,10 @@ impl Formatter {
         // cursor -> select_subexpression
 
         ensure_kind(cursor, "select_subexpression")?;
-        let rhs = Expr::Sub(Box::new(self.format_select_subexpr(cursor, src)?));
+        let rhs = Expr::Sub(Box::new(self.visit_select_subexpr(cursor, src)?));
 
         let mut in_sub = AlignedExpr::new(lhs, false);
-        in_sub.add_rhs(op, rhs);
+        in_sub.add_rhs(Some(op), rhs);
 
         cursor.goto_parent();
         ensure_kind(cursor, "in_subquery_expression")?;
@@ -141,7 +142,7 @@ impl Formatter {
     }
 
     /// ALLサブクエリ, SOMEサブクエリ, ANYサブクエリをフォーマットする
-    pub(crate) fn format_all_some_any_subquery(
+    pub(crate) fn visit_all_some_any_subquery(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -160,27 +161,28 @@ impl Formatter {
         cursor.goto_first_child();
         // cursor -> expression
 
-        let lhs = self.format_expr(cursor, src)?;
+        let lhs = self.visit_expr(cursor, src)?;
 
         cursor.goto_next_sibling();
         // cursor -> 比較演算子
 
-        let op = cursor.node().utf8_text(src.as_ref()).unwrap();
+        let op = convert_keyword_case(cursor.node().utf8_text(src.as_ref()).unwrap());
 
         cursor.goto_next_sibling();
         // cursor -> "ALL" | "SOME" | "ANY"
 
-        let all_some_any_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        let all_some_any_keyword =
+            convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
 
         cursor.goto_next_sibling();
         // cursor -> "select_subexpression"
 
-        let select_subexpr = self.format_select_subexpr(cursor, src)?;
+        let select_subexpr = self.visit_select_subexpr(cursor, src)?;
 
         let mut all_some_any_sub = AlignedExpr::new(lhs, false);
 
         all_some_any_sub.add_rhs(
-            format!("{op}\t{all_some_any_keyword}"),
+            Some(format!("{op}\t{all_some_any_keyword}")),
             Expr::Sub(Box::new(select_subexpr)),
         );
 

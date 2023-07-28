@@ -1,5 +1,5 @@
 SELECT
-	A
+	A	AS	A
 FROM
 	B
 /* select - union */
@@ -7,6 +7,6 @@ UNION
 -- union
 /* union - subselect */
 SELECT
-	C
+	C	AS	C
 FROM
 	B

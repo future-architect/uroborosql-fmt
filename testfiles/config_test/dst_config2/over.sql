@@ -1,7 +1,7 @@
 SELECT
-	depname
-,	empno
-,	salary
+	depname	AS	depname
+,	empno	AS	empno
+,	salary	AS	salary
 ,	RANK() OVER(
 		PARTITION BY
 			depname

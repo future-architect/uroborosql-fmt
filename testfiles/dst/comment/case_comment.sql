@@ -1,5 +1,5 @@
 SELECT
-	A
+	A	AS	A
 ,	CASE
 		-- case trailing
 		/* case */

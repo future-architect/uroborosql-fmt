@@ -1,9 +1,9 @@
 use itertools::repeat_n;
 use tree_sitter::Node;
 
-use crate::util::convert_keyword_case;
+use crate::{error::UroboroSQLFmtError, util::convert_keyword_case};
 
-use super::{Body, Comment, Location, SqlID, UroboroSQLFmtError};
+use super::{Body, Comment, Location, SqlID};
 
 // 句に対応した構造体
 #[derive(Debug, Clone)]
@@ -18,7 +18,9 @@ pub(crate) struct Clause {
 }
 
 impl Clause {
-    pub(crate) fn new(kw_node: Node, src: &str) -> Clause {
+    /// NodeからClauseを新規作成
+    /// 作成時にキーワードの大文字小文字を設定に合わせて自動で変換する
+    pub(crate) fn from_node(kw_node: Node, src: &str) -> Clause {
         let keyword = convert_keyword_case(kw_node.utf8_text(src.as_bytes()).unwrap());
         let loc = Location::new(kw_node.range());
         Clause {
@@ -38,7 +40,8 @@ impl Clause {
         self.keyword.clone()
     }
 
-    /// キーワードを延長する
+    /// Nodeでキーワードを延長する (延長にはスペースを使用)
+    /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
     pub(crate) fn extend_kw(&mut self, node: Node, src: &str) {
         let loc = Location::new(node.range());
         self.loc.append(loc);
@@ -49,12 +52,14 @@ impl Clause {
     }
 
     /// 文字列を受け取ってキーワードを延長する
+    /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
     pub(crate) fn extend_kw_with_string(&mut self, kw: &str) {
         self.keyword.push(' ');
         self.keyword.push_str(&convert_keyword_case(kw));
     }
 
-    /// タブ文字でキーワードを延長する
+    /// Nodeでキーワードを延長する (延長にはタブ文字を使用)
+    /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
     pub(crate) fn extend_kw_with_tab(&mut self, node: Node, src: &str) {
         let loc = Location::new(node.range());
         self.loc.append(loc);
@@ -64,7 +69,7 @@ impl Clause {
         ));
     }
 
-    // bodyをセットする
+    /// bodyをセットする
     pub(crate) fn set_body(&mut self, body: Body) {
         if !body.is_empty() {
             self.loc.append(body.loc().unwrap());
@@ -94,6 +99,7 @@ impl Clause {
         Ok(())
     }
 
+    /// SQL_IDをセットする
     pub(crate) fn set_sql_id(&mut self, sql_id: SqlID) {
         self.sql_id = Some(sql_id);
     }
