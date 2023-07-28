@@ -1,5 +1,5 @@
 select
-	Identifier
+	Identifier	as	Identifier
 from
 	japanese_student_table
 where

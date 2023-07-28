@@ -1,8 +1,8 @@
 use itertools::repeat_n;
 
 use crate::{
-    cst::{Comment, Location, Statement, UroboroSQLFmtError},
-    util::convert_keyword_case,
+    cst::{Comment, Location, Statement},
+    error::UroboroSQLFmtError,
 };
 
 /// SELECTサブクエリ、DELETEサブクエリ、INSERTサブクエリ、UPDATEサブクエリに対応する構造体
@@ -69,7 +69,7 @@ impl ExistsSubquery {
     /// EXISTSサブクエリをフォーマットした文字列を返す。
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
-        let exists_keyword = &convert_keyword_case(&self.exists_keyword);
+        let exists_keyword = &self.exists_keyword;
 
         result.push_str(exists_keyword);
         result += &self.select_sub_expr.render(depth)?;

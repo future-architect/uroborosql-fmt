@@ -6,7 +6,7 @@ SELECT
 ,	VALUE2	AS	VALUE2					-- 値2
 ,	(
 		SELECT
-			VALUE3
+			VALUE3	AS	VALUE3
 		FROM
 			TABLE2
 	)									-- サブクエリ

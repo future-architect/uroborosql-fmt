@@ -1,7 +1,7 @@
 select
-	dePname
-,	empno
-,	sAlary
+	dePname	as	dePname
+,	empno	as	empno
+,	sAlary	as	sAlary
 ,	rank() over(
 		partition by
 			depname
@@ -13,8 +13,8 @@ from
 ;
 -- 0 argument over
 select
-	salary				-- salary
-,	sum(sAlary) over()	-- sum
+	salary				as	salary	-- salary
+,	sum(sAlary) over()				-- sum
 from
 	empsalaRy
 ;

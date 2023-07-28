@@ -2,13 +2,14 @@ use tree_sitter::TreeCursor;
 
 use crate::{
     cst::*,
-    formatter::{ensure_kind, Formatter},
+    error::UroboroSQLFmtError,
+    visitor::{ensure_kind, Visitor},
 };
 
 use super::is_comp_op;
 
-impl Formatter {
-    pub(crate) fn format_binary_expr(
+impl Visitor {
+    pub(crate) fn visit_binary_expr(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -19,29 +20,29 @@ impl Formatter {
         // cursor -> _expression
 
         // 左辺
-        let lhs_expr = self.format_expr(cursor, src)?;
+        let lhs_expr = self.visit_expr(cursor, src)?;
 
         cursor.goto_next_sibling();
         // cursor -> op (e.g., "+", "-", "=", ...)
 
         // 演算子
         let op_node = cursor.node();
-        let op_str = op_node.utf8_text(src.as_ref()).unwrap();
+        let op_str = op_node.utf8_text(src.as_ref()).unwrap().to_string();
 
         cursor.goto_next_sibling();
         // cursor -> _expression
 
         // 右辺
-        let rhs_expr = self.format_expr(cursor, src)?;
+        let rhs_expr = self.visit_expr(cursor, src)?;
 
         // cursorを戻しておく
         cursor.goto_parent();
         ensure_kind(cursor, "binary_expression")?;
 
-        if is_comp_op(op_str) {
+        if is_comp_op(&op_str) {
             // 比較演算子ならばそろえる必要があるため、AlignedExprとする
             let mut aligned = AlignedExpr::new(lhs_expr, false);
-            aligned.add_rhs(op_str, rhs_expr);
+            aligned.add_rhs(Some(op_str), rhs_expr);
 
             Ok(Expr::Aligned(Box::new(aligned)))
         } else {

@@ -2,10 +2,9 @@ use tree_sitter::{Language, Node, Tree};
 
 use crate::{
     config::{load_never_complement_settings, CONFIG},
-    format,
-    formatter::COMMENT,
-    print_cst,
+    format, print_cst,
     two_way_sql::format_two_way_sql,
+    visitor::COMMENT,
     UroboroSQLFmtError,
 };
 
@@ -121,8 +120,8 @@ fn compare_leaf(
     src_node: &Node,
     dst_node: &Node,
 ) -> Result<(), UroboroSQLFmtError> {
-    let src_leaf_str = src_node.utf8_text(&src_str.as_bytes()).unwrap();
-    let dst_leaf_str = dst_node.utf8_text(&format_result.as_bytes()).unwrap();
+    let src_leaf_str = src_node.utf8_text(src_str.as_bytes()).unwrap();
+    let dst_leaf_str = dst_node.utf8_text(format_result.as_bytes()).unwrap();
 
     match src_node.kind() {
         COMMENT if src_leaf_str.starts_with("/*+") || src_leaf_str.starts_with("--+") => {

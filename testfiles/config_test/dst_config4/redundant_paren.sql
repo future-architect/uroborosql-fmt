@@ -1,5 +1,5 @@
 select
-	A
+	A	AS	A
 from
 	B
 where

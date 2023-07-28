@@ -4,11 +4,13 @@ use tree_sitter::TreeCursor;
 
 use crate::{
     cst::*,
-    formatter::{ensure_kind, Formatter},
+    error::UroboroSQLFmtError,
+    util::convert_keyword_case,
+    visitor::{ensure_kind, Visitor},
 };
 
-impl Formatter {
-    pub(crate) fn format_function_call(
+impl Visitor {
+    pub(crate) fn visit_function_call(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -19,11 +21,11 @@ impl Formatter {
         // "LATERAL"は未対応
 
         // 関数名
-        let function_name = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        let function_name = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
         cursor.goto_next_sibling();
 
         ensure_kind(cursor, "(")?;
-        let args = self.format_column_list(cursor, src)?;
+        let args = self.visit_column_list(cursor, src)?;
         cursor.goto_next_sibling();
 
         let mut func_call = FunctionCall::new(
@@ -38,15 +40,17 @@ impl Formatter {
         if cursor.node().kind() == "over_clause" {
             // 大文字小文字情報を保持するために、出現した"OVER"文字列を保持
             // over_clauseの1つ目の子供が"OVER"であるはずなので取得
-            let over_keyword = cursor
-                .node()
-                .child(0)
-                .unwrap()
-                .utf8_text(src.as_bytes())
-                .unwrap();
-            func_call.set_over_keyword(over_keyword);
+            let over_keyword = convert_keyword_case(
+                cursor
+                    .node()
+                    .child(0)
+                    .unwrap()
+                    .utf8_text(src.as_bytes())
+                    .unwrap(),
+            );
+            func_call.set_over_keyword(&over_keyword);
 
-            func_call.set_over_window_definition(&self.format_over_clause(cursor, src)?);
+            func_call.set_over_window_definition(&self.visit_over_clause(cursor, src)?);
             cursor.goto_next_sibling();
         }
 
@@ -56,7 +60,7 @@ impl Formatter {
         Ok(func_call)
     }
 
-    fn format_over_clause(
+    fn visit_over_clause(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -78,21 +82,21 @@ impl Formatter {
 
         if cursor.node().kind() == "partition_by_clause" {
             let mut clause =
-                self.format_simple_clause(cursor, src, "partition_by_clause", "PARTITION_BY")?;
+                self.visit_simple_clause(cursor, src, "partition_by_clause", "PARTITION_BY")?;
             cursor.goto_next_sibling();
             self.consume_comment_in_clause(cursor, src, &mut clause)?;
             clauses.push(clause);
         };
 
         if cursor.node().kind() == "order_by_clause" {
-            let mut clause = self.format_order_by_clause(cursor, src)?;
+            let mut clause = self.visit_order_by_clause(cursor, src)?;
             cursor.goto_next_sibling();
             self.consume_comment_in_clause(cursor, src, &mut clause)?;
             clauses.push(clause);
         }
 
         if cursor.node().kind() == "frame_clause" {
-            let mut clause = self.format_frame_clause(cursor, src)?;
+            let mut clause = self.visit_frame_clause(cursor, src)?;
             cursor.goto_next_sibling();
             self.consume_comment_in_clause(cursor, src, &mut clause)?;
             clauses.push(clause);
@@ -109,7 +113,7 @@ impl Formatter {
         Ok(clauses)
     }
 
-    pub(crate) fn format_type_cast(
+    pub(crate) fn visit_type_cast(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -121,7 +125,7 @@ impl Formatter {
 
         // CAST関数
         ensure_kind(cursor, "CAST")?;
-        let cast_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        let cast_keyword = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
 
         cursor.goto_next_sibling();
         ensure_kind(cursor, "(")?;
@@ -129,11 +133,11 @@ impl Formatter {
 
         // キャストされる式
         // 注: キャスト関数の式は alias ノードになっていないので、
-        // format_aliasable_expr では対処できない。
-        let expr = self.format_expr(cursor, src)?;
+        // visit_aliasable_expr では対処できない。
+        let expr = self.visit_expr(cursor, src)?;
         cursor.goto_next_sibling();
         ensure_kind(cursor, "AS")?;
-        let as_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        let as_keyword = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
 
         cursor.goto_next_sibling();
 
@@ -152,7 +156,7 @@ impl Formatter {
         // expr AS type を AlignedExpr にする。
         // エイリアスのASとは意味が異なるので、is_alias には false を与える。
         let mut aligned = AlignedExpr::new(expr, false);
-        aligned.add_rhs(as_keyword, type_name);
+        aligned.add_rhs(Some(as_keyword), type_name);
         let loc = aligned.loc();
 
         let args = ColumnList::new(vec![aligned], loc);

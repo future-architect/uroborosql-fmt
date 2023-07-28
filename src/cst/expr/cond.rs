@@ -1,7 +1,8 @@
 use itertools::repeat_n;
 
 use crate::{
-    cst::{AlignedExpr, Clause, Comment, Location, UroboroSQLFmtError},
+    cst::{AlignedExpr, Clause, Comment, Location},
+    error::UroboroSQLFmtError,
     util::convert_keyword_case,
 };
 
@@ -23,8 +24,8 @@ pub(crate) struct CondExpr {
 impl CondExpr {
     pub(crate) fn new(loc: Location) -> CondExpr {
         CondExpr {
-            case_keyword: "CASE".to_string(),
-            end_keyword: "END".to_string(),
+            case_keyword: convert_keyword_case("CASE"),
+            end_keyword: convert_keyword_case("END"),
             expr: None,
             when_then_clause: vec![],
             else_clause: None,
@@ -42,18 +43,22 @@ impl CondExpr {
         self.expr = Some(expr.to_aligned())
     }
 
+    /// WHEN句とTHEN句を追加
     pub(crate) fn add_when_then_clause(&mut self, when_clause: Clause, then_clause: Clause) {
         self.when_then_clause.push((when_clause, then_clause));
     }
 
+    /// ELSE句を追加
     pub(crate) fn set_else_clause(&mut self, else_clause: Clause) {
         self.else_clause = Some(else_clause);
     }
 
+    /// CASEキーワードをセット
     pub(crate) fn set_case_keyword(&mut self, case_keyword: &str) {
         self.case_keyword = case_keyword.to_string();
     }
 
+    /// ENDキーワードをセット
     pub(crate) fn set_end_keyword(&mut self, end_keyword: &str) {
         self.end_keyword = end_keyword.to_string();
     }
@@ -87,7 +92,7 @@ impl CondExpr {
         let mut result = String::new();
 
         // CASEキーワードの行のインデントは呼び出し側が行う
-        result.push_str(&convert_keyword_case(&self.case_keyword));
+        result.push_str(&self.case_keyword);
         result.push('\n');
 
         if let Some(expr) = &self.expr {
@@ -117,7 +122,7 @@ impl CondExpr {
         }
 
         result.extend(repeat_n('\t', depth));
-        result.push_str(&convert_keyword_case(&self.end_keyword));
+        result.push_str(&self.end_keyword);
 
         Ok(result)
     }

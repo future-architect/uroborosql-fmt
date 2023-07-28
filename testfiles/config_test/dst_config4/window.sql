@@ -1,7 +1,7 @@
 SELEcT
-	DEPNAME
-,	EMPNO
-,	SALARY
+	DEPNAME	AS	DEPNAME
+,	EMPNO	AS	EMPNO
+,	SALARY	AS	SALARY
 ,	rank() OVER(
 		PArTITION bY
 			DEPNAME
@@ -13,8 +13,8 @@ FROM
 ;
 -- 0 argument over
 SELECT
-	SALARY				-- salary
-,	sUm(SALARY) OVeR()	-- sum
+	SALARY				AS	SALARY	-- salary
+,	sUm(SALARY) OVeR()				-- sum
 FrOM
 	EMPSALARY
 ;
@@ -27,7 +27,7 @@ SELECT
 		OrDER By
 			ORDER_ID
 		ROWS	BEtWEEN	1	PRECeDING	AnD	1	FOLLOwING
-	)			RESULT
+	)				RESULT
 FROM
 	TEST_ORDERS
 ;

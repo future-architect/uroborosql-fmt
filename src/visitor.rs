@@ -6,29 +6,29 @@ use tree_sitter::{Node, TreeCursor};
 
 pub(crate) const COMMENT: &str = "comment";
 
-use crate::{config::CONFIG, cst::*};
+use crate::{config::CONFIG, cst::*, error::UroboroSQLFmtError, util::convert_identifier_case};
 
-pub(crate) struct Formatter {
+pub(crate) struct Visitor {
     /// select文、insert文などが複数回出てきた際に1度だけSQL_IDを補完する、という処理を実現するためのフラグ
     should_complement_sql_id: bool,
 }
 
-impl Default for Formatter {
+impl Default for Visitor {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Formatter {
+impl Visitor {
     /// CONFIGファイルを見て、補完フラグがtrueの場合は`should_complement_sql_id`をtrueにして初期化する
-    pub(crate) fn new() -> Formatter {
-        Formatter {
+    pub(crate) fn new() -> Visitor {
+        Visitor {
             should_complement_sql_id: CONFIG.read().unwrap().complement_sql_id,
         }
     }
 
     /// sqlソースファイルをフォーマット用構造体に変形する
-    pub(crate) fn format_sql(
+    pub(crate) fn visit_sql(
         &mut self,
         node: Node,
         src: &str,
@@ -37,12 +37,12 @@ impl Formatter {
         // ほかの関数にはこのcursorの可変参照を渡す
         let mut cursor = node.walk();
 
-        self.format_source(&mut cursor, src)
+        self.visit_source(&mut cursor, src)
     }
 
     /// source_file
     /// 呼び出し終了後、cursorはsource_fileを指している
-    fn format_source(
+    fn visit_source(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -54,7 +54,7 @@ impl Formatter {
             // source_fileに子供がない、つまり、ソースファイルが空である場合
             // todo
             return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "format_source(): source_file has no child \nnode_kind: {}\n{:#?}",
+                "visit_source(): source_file has no child \nnode_kind: {}\n{:#?}",
                 cursor.node().kind(),
                 cursor.node().range(),
             )));
@@ -72,14 +72,14 @@ impl Formatter {
 
             if kind.ends_with("_statement") {
                 let mut stmt = match kind {
-                    "select_statement" => self.format_select_stmt(cursor, src)?,
-                    "delete_statement" => self.format_delete_stmt(cursor, src)?,
-                    "update_statement" => self.format_update_stmt(cursor, src)?,
-                    "insert_statement" => self.format_insert_stmt(cursor, src)?,
+                    "select_statement" => self.visit_select_stmt(cursor, src)?,
+                    "delete_statement" => self.visit_delete_stmt(cursor, src)?,
+                    "update_statement" => self.visit_update_stmt(cursor, src)?,
+                    "insert_statement" => self.visit_insert_stmt(cursor, src)?,
                     // todo
                     _ => {
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "format_source(): Unimplemented statement\nnode_kind: {}\n{:#?}",
+                            "visit_source(): Unimplemented statement\nnode_kind: {}\n{:#?}",
                             cursor.node().kind(),
                             cursor.node().range(),
                         )))
@@ -126,16 +126,27 @@ impl Formatter {
     }
 
     /// _aliasable_expressionが,で区切られた構造をBodyにして返す
-    fn format_comma_sep_alias(
+    fn visit_comma_sep_alias(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
-        omit_as: bool,
+        // 補完する場合の補完の種類
+        complement_kind: Option<&ComplementKind>,
+        // ASキーワードを補完/省略するかどうか
+        complement_as: bool,
+        // エイリアスを補完するかどうか
+        complement_alias: bool,
     ) -> Result<Body, UroboroSQLFmtError> {
-        let mut separated_lines = SeparatedLines::new(",", omit_as);
+        let mut separated_lines = SeparatedLines::new(",");
 
         // commaSep(_aliasable_expression)
-        let alias = self.format_aliasable_expr(cursor, src)?;
+        let alias = self.visit_aliasable_expr(
+            cursor,
+            src,
+            complement_kind,
+            complement_as,
+            complement_alias,
+        )?;
         separated_lines.add_expr(alias);
 
         // ("," _aliasable_expression)*
@@ -145,7 +156,13 @@ impl Formatter {
                 "," => {
                     cursor.goto_next_sibling();
                     // _aliasable_expression
-                    let alias = self.format_aliasable_expr(cursor, src)?;
+                    let alias = self.visit_aliasable_expr(
+                        cursor,
+                        src,
+                        complement_kind,
+                        complement_as,
+                        complement_alias,
+                    )?;
                     separated_lines.add_expr(alias);
                 }
                 COMMENT => {
@@ -153,11 +170,11 @@ impl Formatter {
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                                    "format_comma_sep_alias(): expected node is ',' or COMMENT, but actual {}\n{:?}",
-                                    cursor.node().kind(),
-                                    cursor.node().range()
-                                )))
-                },
+                    "visit_comma_sep_alias(): expected node is ',' or COMMENT, but actual {}\n{:?}",
+                    cursor.node().kind(),
+                    cursor.node().range()
+                )))
+                }
             }
         }
 
@@ -209,6 +226,14 @@ impl Formatter {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum ComplementKind {
+    /// テーブル名
+    TableName,
+    /// カラム名
+    ColumnName,
+}
+
 /// cursorが指定した種類のノードを指しているかどうかをチェックする関数
 /// 期待しているノードではない場合、エラーを返す
 fn ensure_kind<'a>(
@@ -227,6 +252,25 @@ fn ensure_kind<'a>(
     }
 }
 
+/// エイリアス補完を行う際に、エイリアス名を持つ Expr を生成する関数。
+/// 引数に元の式を与える。その式がPrimary式ではない場合は、エイリアス名を生成できないので、None を返す。
+fn create_alias(lhs: &Expr) -> Option<Expr> {
+    // 補完用に生成した式には、仮に左辺の位置情報を入れておく
+    let loc = lhs.loc();
+
+    match lhs {
+        Expr::Primary(prim) if prim.is_identifier() => {
+            // Primary式であり、さらに識別子である場合のみ、エイリアス名を作成する
+            let element = prim.element();
+            element
+                .split('.')
+                .last()
+                .map(|s| Expr::Primary(Box::new(PrimaryExpr::new(convert_identifier_case(s), loc))))
+        }
+        _ => None,
+    }
+}
+
 /// keyword の Clauseを生成する関数。
 /// 呼び出し後の cursor はキーワードの最後のノードを指す。
 /// cursor のノードがキーワードと異なっていたら UroboroSQLFmtErrorを返す。
@@ -242,7 +286,7 @@ fn create_clause(
     keyword: &str,
 ) -> Result<Clause, UroboroSQLFmtError> {
     ensure_kind(cursor, keyword)?;
-    let mut clause = Clause::new(cursor.node(), src);
+    let mut clause = Clause::from_node(cursor.node(), src);
 
     for _ in 1..keyword.split('_').count() {
         cursor.goto_next_sibling();

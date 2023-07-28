@@ -6,7 +6,7 @@ use std::{
     path::{self, Path, PathBuf},
 };
 
-use uroborosql_fmt::UroboroSQLFmtError;
+use uroborosql_fmt::error::UroboroSQLFmtError;
 
 // 並列実行するとグローバル変数の問題が発生するため並列実行しない
 #[test]

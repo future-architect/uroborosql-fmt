@@ -1,7 +1,7 @@
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
 
-use crate::cst::UroboroSQLFmtError;
+use crate::error::UroboroSQLFmtError;
 
 use super::dag::{Kind, Dag};
 

@@ -1,5 +1,5 @@
 SELECT
-	identifier
+	identifier	AS	identifier
 FROM
 	japanese_student_table
 WHERE

@@ -4,8 +4,7 @@ pub(crate) mod tree;
 
 use tree_sitter::Language;
 
-use crate::re::RE;
-use crate::{config::CONFIG, cst::UroboroSQLFmtError, format};
+use crate::{config::CONFIG, error::UroboroSQLFmtError, format, re::RE};
 
 use self::{
     dag::generate_dag,

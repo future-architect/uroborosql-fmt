@@ -1,11 +1,12 @@
 use itertools::repeat_n;
 
 use crate::{
-    cst::{Clause, Location, UroboroSQLFmtError},
+    cst::{Clause, Location},
+    error::UroboroSQLFmtError,
     util::{convert_keyword_case, is_line_overflow, tab_size, to_tab_num},
 };
 
-use super::ColumnList;
+use super::column_list::ColumnList;
 
 /// FunctionCallがユーザ定義関数か組み込み関数か示すEnum
 #[derive(Debug, Clone)]
@@ -41,7 +42,7 @@ impl FunctionCall {
         // argsが単一行で描画する設定になっている場合
         // レンダリング後の文字列の長さが定義ファイルにおける「各行の最大長」を超えないかチェックする
         let mut args = args;
-        if !args.force_multi_line {
+        if !args.force_multi_line() {
             // 関数名と引数部分をレンダリングした際の合計文字数を計算
             let func_char_len = args.last_line_len(name.len());
 
@@ -55,7 +56,7 @@ impl FunctionCall {
             name,
             args,
             over_window_definition: None,
-            over_keyword: "OVER".to_string(),
+            over_keyword: convert_keyword_case("OVER"),
             _kind: kind,
             loc,
         }
@@ -119,13 +120,7 @@ impl FunctionCall {
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
-        // 現状はどのような関数名の場合でも全て予約語の大文字小文字ルールを適用する
-        // 将来的には以下の機能を追加する可能性あり
-        // 1. ユーザ定義関数、組み込み関数で変換ルールを変更する
-        // 2. 定義ファイルに関数の大文字小文字ルールを追加する
-        let func_name = convert_keyword_case(&self.name);
-
-        result.push_str(&func_name);
+        result.push_str(&self.name);
 
         // 引数の描画
         let args = self.args.render(depth)?;
@@ -135,7 +130,7 @@ impl FunctionCall {
         // OVER句
         if let Some(clauses) = &self.over_window_definition {
             result.push(' ');
-            result.push_str(&convert_keyword_case(&self.over_keyword));
+            result.push_str(&self.over_keyword);
             result.push('(');
 
             if !clauses.is_empty() {

@@ -1,6 +1,6 @@
 SELECT
-	A		-- c
-,	AAAAAAA	-- c
+	A		AS	A		-- c
+,	AAAAAAA	AS	AAAAAAA	-- c
 ;
 SELECT
 	AA	AS	A	-- c

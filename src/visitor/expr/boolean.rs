@@ -3,15 +3,16 @@
 use tree_sitter::TreeCursor;
 
 use crate::{
-    cst::*,
-    formatter::{ensure_kind, Formatter, COMMENT},
+    cst::{unary::UnaryExpr, *},
+    error::UroboroSQLFmtError,
     util::convert_keyword_case,
+    visitor::{ensure_kind, Visitor, COMMENT},
 };
 
-impl Formatter {
+impl Visitor {
     /// bool式をフォーマットする
     /// 呼び出し後、cursorはboolean_expressionを指している
-    pub(crate) fn format_bool_expr(
+    pub(crate) fn visit_bool_expr(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -29,7 +30,7 @@ impl Formatter {
             // cursor -> _expr
 
             // ここにバインドパラメータ以外のコメントは来ないことを想定している。
-            let expr = self.format_expr(cursor, src)?;
+            let expr = self.visit_expr(cursor, src)?;
 
             // (NOT expr)のソースコード上の位置を計算
             loc.append(expr.loc());
@@ -43,7 +44,7 @@ impl Formatter {
             return Ok(Expr::Unary(Box::new(not_expr)));
         } else {
             // and or
-            let left = self.format_expr(cursor, src)?;
+            let left = self.visit_expr(cursor, src)?;
 
             boolean_expr.add_expr(left);
 
@@ -55,7 +56,7 @@ impl Formatter {
                 cursor.goto_next_sibling();
             }
 
-            let sep = cursor.node().utf8_text(src.as_bytes()).unwrap();
+            let sep = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
 
             boolean_expr.set_default_separator(sep);
 
@@ -68,7 +69,7 @@ impl Formatter {
                 cursor.goto_next_sibling();
             }
 
-            let right = self.format_expr(cursor, src)?;
+            let right = self.visit_expr(cursor, src)?;
 
             // 左辺と同様の処理を行う
             boolean_expr.add_expr_with_preceding_comments(right, comments);
@@ -82,7 +83,7 @@ impl Formatter {
 
     /// BETWEEN述語をフォーマットする
     /// 呼び出し後、cursorはbetween_and_expressionを指す
-    pub(crate) fn format_between_and_expression(
+    pub(crate) fn visit_between_and_expression(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -91,7 +92,7 @@ impl Formatter {
         cursor.goto_first_child();
         // cursor -> expression
 
-        let expr = self.format_expr(cursor, src)?;
+        let expr = self.visit_expr(cursor, src)?;
 
         cursor.goto_next_sibling();
         // cursor -> (NOT)? BETWEEN
@@ -109,7 +110,7 @@ impl Formatter {
         cursor.goto_next_sibling();
         // cursor -> _expression
 
-        let from_expr = self.format_expr(cursor, src)?;
+        let from_expr = self.visit_expr(cursor, src)?;
         cursor.goto_next_sibling();
 
         // AND の直前に現れる行末コメントを処理する
@@ -127,11 +128,11 @@ impl Formatter {
         cursor.goto_next_sibling();
         // cursor -> _expression
 
-        let to_expr = self.format_expr(cursor, src)?;
+        let to_expr = self.visit_expr(cursor, src)?;
 
         // (from AND to)をAlignedExprにまとめる
         let mut rhs = AlignedExpr::new(from_expr, false);
-        rhs.add_rhs(convert_keyword_case("AND"), to_expr);
+        rhs.add_rhs(Some(convert_keyword_case("AND")), to_expr);
 
         if let Some(comment) = start_trailing_comment {
             rhs.set_lhs_trailing_comment(comment)?;
@@ -139,7 +140,7 @@ impl Formatter {
 
         // (expr BETWEEN rhs)をAlignedExprにまとめる
         let mut aligned = AlignedExpr::new(expr, false);
-        aligned.add_rhs(operator, Expr::Aligned(Box::new(rhs)));
+        aligned.add_rhs(Some(operator), Expr::Aligned(Box::new(rhs)));
 
         cursor.goto_parent();
         ensure_kind(cursor, "between_and_expression")?;

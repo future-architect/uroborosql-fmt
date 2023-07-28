@@ -24,6 +24,12 @@ pub(crate) fn is_quoted(elem: &str) -> bool {
 }
 
 /// 引数の文字列長をタブ数換算した長さを返す
+///
+/// 例えばtabsize = 4の場合
+///
+/// to_tab_num(4) => 8
+///
+/// to_tab_num(4) => 4
 pub(crate) fn to_tab_num(len: usize) -> usize {
     if len == 0 {
         0
