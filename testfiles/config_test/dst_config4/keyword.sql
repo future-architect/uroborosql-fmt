@@ -11,8 +11,8 @@ select
 from
 	STUDENT	STD
 whEre
-	GRADE	BETWEEN		/*start1*/60	AND	/*end1*/100
-and	GRADE	NOT BETWEEN	/*start2*/70	AND	/*end2*/80
+	GRADE	BeTWEEN		/*start1*/60	AND	/*end1*/100
+and	GRADE	NOT between	/*start2*/70	and	/*end2*/80
 ;
 UPDATE
 	WEATHER

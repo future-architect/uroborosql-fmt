@@ -81,6 +81,7 @@ impl Visitor {
             "between_and_expression" => {
                 Expr::Aligned(Box::new(self.visit_between_and_expression(cursor, src)?))
             }
+            "like_expression" => Expr::Aligned(Box::new(self.visit_like_expression(cursor, src)?)),
             "boolean_expression" => self.visit_bool_expr(cursor, src)?,
             // identifier | number | string (そのまま表示)
             "identifier" | "number" | "string" => {
