@@ -100,13 +100,15 @@ impl Visitor {
         let mut operator = String::new();
 
         if cursor.node().kind() == "NOT" {
-            operator += &convert_keyword_case("NOT");
+            let not_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+            operator += &convert_keyword_case(not_keyword);
             operator += " "; // betweenの前に空白を入れる
             cursor.goto_next_sibling();
         }
 
         ensure_kind(cursor, "BETWEEN")?;
-        operator += &convert_keyword_case("BETWEEN");
+        let between_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        operator += &convert_keyword_case(between_keyword);
         cursor.goto_next_sibling();
         // cursor -> _expression
 
@@ -125,6 +127,8 @@ impl Visitor {
         };
 
         ensure_kind(cursor, "AND")?;
+        let and_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
+
         cursor.goto_next_sibling();
         // cursor -> _expression
 
@@ -132,7 +136,7 @@ impl Visitor {
 
         // (from AND to)をAlignedExprにまとめる
         let mut rhs = AlignedExpr::new(from_expr, false);
-        rhs.add_rhs(Some(convert_keyword_case("AND")), to_expr);
+        rhs.add_rhs(Some(convert_keyword_case(and_keyword)), to_expr);
 
         if let Some(comment) = start_trailing_comment {
             rhs.set_lhs_trailing_comment(comment)?;
@@ -144,6 +148,74 @@ impl Visitor {
 
         cursor.goto_parent();
         ensure_kind(cursor, "between_and_expression")?;
+
+        Ok(aligned)
+    }
+
+    /// like式をフォーマットする
+    /// 呼び出し後、cursorはlike_expressoinを指す
+    /// 参考：https://www.postgresql.jp/document/12/html/functions-matching.html
+    pub(crate) fn visit_like_expression(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+        // cursor -> expression
+
+        let string = self.visit_expr(cursor, src)?;
+
+        cursor.goto_next_sibling();
+        // cursor -> (NOT)? LIKE
+
+        let mut operator = String::new();
+
+        if cursor.node().kind() == "NOT" {
+            let text = cursor.node().utf8_text(src.as_bytes()).unwrap();
+            operator += &convert_keyword_case(text);
+            operator += " "; // betweenの前に空白を入れる
+            cursor.goto_next_sibling();
+        }
+
+        ensure_kind(cursor, "LIKE")?;
+
+        let text = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        operator += &convert_keyword_case(text);
+        cursor.goto_next_sibling();
+        // cursor -> _expression
+
+        let pattern = self.visit_expr(cursor, src)?;
+        cursor.goto_next_sibling();
+
+        let mut comments_after_pattern = Vec::new();
+        while cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            comments_after_pattern.push(comment);
+            cursor.goto_next_sibling();
+        }
+
+        let mut exprs = vec![pattern];
+
+        if cursor.node().kind() == "ESCAPE" {
+            // cursor -> (ESCAPE _expression)?
+            let escape_keyword =
+                PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
+            let escape_keyword = Expr::Primary(Box::new(escape_keyword));
+
+            cursor.goto_next_sibling();
+            let escape_character = self.visit_expr(cursor, src)?;
+
+            exprs.push(escape_keyword);
+            exprs.push(escape_character);
+        };
+
+        let expr_seq = Expr::ExprSeq(Box::new(ExprSeq::new(&exprs)));
+
+        let mut aligned = AlignedExpr::new(string, false);
+        aligned.add_rhs(Some(operator), expr_seq);
+
+        cursor.goto_parent();
+        ensure_kind(cursor, "like_expression")?;
 
         Ok(aligned)
     }
