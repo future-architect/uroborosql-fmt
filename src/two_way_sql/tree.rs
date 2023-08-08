@@ -3,7 +3,7 @@ use itertools::Itertools;
 
 use crate::error::UroboroSQLFmtError;
 
-use super::dag::{Kind, Dag};
+use super::dag::{Dag, Kind};
 
 /// DAGから作成したTreeのノード
 #[derive(Debug, Clone)]
@@ -70,25 +70,23 @@ impl TreeNode {
                 let mut pre_tree_node: Option<TreeNode> = None;
 
                 // zip_longestで、異なる長さのiteratorをzipできる
-                let zipped_children =                     
-                self_child
-                .iter()
-                .zip_longest(if_else_child.iter_mut())
-                .map(|pair| match pair {
-                    Both(l, r) => {
-                        // 現在のノードをpre_tree_nodeとして記憶
-                        pre_tree_node = Some(l.clone());
-                        l.clone().append_node_rec(r)
-                    }
-                    // 自身の方が子が多い場合、そのまま子を返す
-                    Left(l) => Ok(l.clone()),
-                    // 結合相手の方が子が多い場合、1つ前に出現した自身のノードと結合する
-                    Right(r) => {
-                        if let Some(pre) = &pre_tree_node {
-                            pre.clone().append_node_rec(r)
-                        } else {
-                            Err(UroboroSQLFmtError::Runtime("TreeNode::append_node_rec(): Cannot be merge with a parent which has no children".to_string()))
+                let zipped_children = self_child.iter()
+                    .zip_longest(if_else_child.iter_mut())
+                    .map(|pair| match pair {
+                        Both(l, r) => {
+                            // 現在のノードをpre_tree_nodeとして記憶
+                            pre_tree_node = Some(l.clone());
+                            l.clone().append_node_rec(r)
                         }
+                        // 自身の方が子が多い場合、そのまま子を返す
+                        Left(l) => Ok(l.clone()),
+                        // 結合相手の方が子が多い場合、1つ前に出現した自身のノードと結合する
+                        Right(r) => {
+                            if let Some(pre) = &pre_tree_node {
+                                pre.clone().append_node_rec(r)
+                            } else {
+                                Err(UroboroSQLFmtError::Runtime("TreeNode::append_node_rec(): Cannot be merge with a parent which has no children".to_string()))
+                            }
                     }
                 }).collect::<Result<Vec<_>, UroboroSQLFmtError>>()?;
 
@@ -167,7 +165,9 @@ fn traverse(dag: &Dag, node_id: usize) -> Result<(TreeNode, usize), UroboroSQLFm
                     }
                     Kind::Else | Kind::Elif => {
                         // else、elifに兄弟がいないことはない
-                        return Err(UroboroSQLFmtError::Runtime("traverse: unreachable error".to_string()));
+                        return Err(UroboroSQLFmtError::Runtime(
+                            "traverse: unreachable error".to_string(),
+                        ));
                     }
                 }
             }

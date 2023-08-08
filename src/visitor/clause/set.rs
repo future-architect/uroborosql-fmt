@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{ensure_kind, Visitor, COMMENT},
+    visitor::{ensure_kind, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -23,11 +23,11 @@ impl Visitor {
         ensure_kind(cursor, "set_clause_body")?;
         cursor.goto_first_child();
 
-        let mut sep_lines = SeparatedLines::new(",");
+        let mut sep_lines = SeparatedLines::new();
 
         // commaSep1(set_clause_item)
         let aligned = self.visit_set_clause_item(cursor, src)?;
-        sep_lines.add_expr(aligned);
+        sep_lines.add_expr(aligned, None, vec![]);
 
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
@@ -35,10 +35,10 @@ impl Visitor {
                     let comment = Comment::new(cursor.node(), src);
                     sep_lines.add_comment_to_child(comment)?;
                 }
-                "," => continue,
+                COMMA => continue,
                 _ => {
                     let aligned = self.visit_set_clause_item(cursor, src)?;
-                    sep_lines.add_expr(aligned);
+                    sep_lines.add_expr(aligned, Some(COMMA.to_string()), vec![]);
                 }
             }
         }
@@ -78,7 +78,7 @@ impl Visitor {
                 Expr::ColumnList(Box::new(self.visit_column_list(cursor, src)?))
             };
 
-            let mut aligned = AlignedExpr::new(lhs, false);
+            let mut aligned = AlignedExpr::new(lhs);
             aligned.add_rhs(Some("=".to_string()), rhs);
 
             Ok(aligned)

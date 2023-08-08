@@ -42,7 +42,7 @@ impl Visitor {
 
                     // cursor -> _expression
                     let when_expr = self.visit_expr(cursor, src)?;
-                    when_clause.set_body(Body::with_expr(when_expr));
+                    when_clause.set_body(Body::from(when_expr));
 
                     cursor.goto_next_sibling();
                     // cursor -> comment | "THEN"
@@ -55,7 +55,7 @@ impl Visitor {
 
                     // cursor -> _expression
                     let then_expr = self.visit_expr(cursor, src)?;
-                    then_clause.set_body(Body::with_expr(then_expr));
+                    then_clause.set_body(Body::from(then_expr));
 
                     cond_expr.add_when_then_clause(when_clause, then_clause);
                 }
@@ -66,7 +66,7 @@ impl Visitor {
 
                     // cursor -> _expression
                     let else_expr = self.visit_expr(cursor, src)?;
-                    else_clause.set_body(Body::with_expr(else_expr));
+                    else_clause.set_body(Body::from(else_expr));
 
                     cond_expr.set_else_clause(else_clause);
                 }

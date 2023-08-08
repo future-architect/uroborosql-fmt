@@ -29,6 +29,7 @@ pub(crate) fn validate_format_result(
     } else {
         format(src, language)?
     };
+
     let dst_ts_tree = parser.parse(&format_result, None).unwrap();
 
     let validate_result = compare_tree(src, &format_result, &src_ts_tree, &dst_ts_tree);

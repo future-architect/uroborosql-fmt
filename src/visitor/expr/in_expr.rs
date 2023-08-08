@@ -67,7 +67,7 @@ impl Visitor {
 
         let rhs = Expr::ColumnList(Box::new(column_list));
 
-        let mut aligned = AlignedExpr::new(lhs, false);
+        let mut aligned = AlignedExpr::new(lhs);
         aligned.add_rhs(Some(op), rhs);
 
         cursor.goto_parent();

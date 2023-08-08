@@ -154,8 +154,7 @@ impl Visitor {
         ensure_kind(cursor, ")")?;
 
         // expr AS type を AlignedExpr にする。
-        // エイリアスのASとは意味が異なるので、is_alias には false を与える。
-        let mut aligned = AlignedExpr::new(expr, false);
+        let mut aligned = AlignedExpr::new(expr);
         aligned.add_rhs(Some(as_keyword), type_name);
         let loc = aligned.loc();
 

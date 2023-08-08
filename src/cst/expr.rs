@@ -1,6 +1,5 @@
 pub(crate) mod aligned;
 pub(crate) mod asterisk;
-pub(crate) mod boolean;
 pub(crate) mod column_list;
 pub(crate) mod cond;
 pub(crate) mod conflict_target;
@@ -14,22 +13,23 @@ pub(crate) mod unary;
 use crate::{error::UroboroSQLFmtError, util::to_tab_num};
 
 use self::{
-    aligned::AlignedExpr, asterisk::AsteriskExpr, boolean::BooleanExpr, cond::CondExpr,
-    function::FunctionCall, paren::ParenExpr, primary::PrimaryExpr, subquery::SubExpr,
-    unary::UnaryExpr,
+    aligned::AlignedExpr, asterisk::AsteriskExpr, cond::CondExpr, function::FunctionCall,
+    paren::ParenExpr, primary::PrimaryExpr, subquery::SubExpr, unary::UnaryExpr,
 };
 
-use super::{ColumnList, Comment, ExistsSubquery, ExprSeq, Location};
+use super::{ColumnList, Comment, ExistsSubquery, ExprSeq, Location, SeparatedLines};
 
-/// 式に対応した列挙体
+/// 式に対応した列挙型
+///
+/// renderの際に改行とインデントをせずに描画する（※ ただし、例外的にExpr::Booleanは先頭での改行とインデントを行う）
 #[derive(Debug, Clone)]
 pub(crate) enum Expr {
     /// AS句、二項比較演算、BETWEEN述語など、縦ぞろえを行う式
     Aligned(Box<AlignedExpr>),
     /// 識別子、文字列、数値など
     Primary(Box<PrimaryExpr>),
-    /// bool式
-    Boolean(Box<BooleanExpr>),
+    /// bool式、SeparatedLinesで表現
+    Boolean(Box<SeparatedLines>),
     /// サブクエリ
     Sub(Box<SubExpr>),
     /// EXISTSサブクエリ
@@ -217,7 +217,6 @@ impl Expr {
             | Expr::ColumnList(_)
             | Expr::FunctionCall(_)
             | Expr::ExprSeq(_) => false,
-            // _ => unimplemented!(),
         }
     }
 
@@ -227,7 +226,7 @@ impl Expr {
         if let Expr::Aligned(aligned) = self {
             *aligned.clone()
         } else {
-            AlignedExpr::new(self.clone(), false)
+            AlignedExpr::new(self.clone())
         }
     }
 }

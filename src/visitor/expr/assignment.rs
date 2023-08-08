@@ -20,7 +20,7 @@ impl Visitor {
         cursor.goto_next_sibling();
         let expr = self.visit_expr(cursor, src)?;
 
-        let mut aligned = AlignedExpr::new(identifier, false);
+        let mut aligned = AlignedExpr::new(identifier);
         aligned.add_rhs(Some("=".to_string()), expr);
         cursor.goto_parent();
         ensure_kind(cursor, "assigment_expression")?;

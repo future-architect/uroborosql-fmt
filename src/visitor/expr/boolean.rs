@@ -17,7 +17,7 @@ impl Visitor {
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Expr, UroboroSQLFmtError> {
-        let mut boolean_expr = BooleanExpr::new("-");
+        let mut boolean_expr = SeparatedLines::new();
 
         cursor.goto_first_child();
 
@@ -46,7 +46,12 @@ impl Visitor {
             // and or
             let left = self.visit_expr(cursor, src)?;
 
-            boolean_expr.add_expr(left);
+            match left {
+                // 左辺がbooleanの場合、初期化したboolean_exprを左辺で上書き
+                Expr::Boolean(boolean) => boolean_expr = *boolean,
+                // それ以外の場合は左辺をAlignedExprに変換して格納
+                _ => boolean_expr.add_expr(left.to_aligned(), None, vec![]),
+            }
 
             cursor.goto_next_sibling();
             // cursor -> COMMENT | op
@@ -57,8 +62,6 @@ impl Visitor {
             }
 
             let sep = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
-
-            boolean_expr.set_default_separator(sep);
 
             cursor.goto_next_sibling();
             // cursor -> _expression
@@ -71,8 +74,12 @@ impl Visitor {
 
             let right = self.visit_expr(cursor, src)?;
 
-            // 左辺と同様の処理を行う
-            boolean_expr.add_expr_with_preceding_comments(right, comments);
+            if let Expr::Boolean(boolean) = right {
+                // 右辺がbooleanの場合はマージ処理を行う
+                boolean_expr.merge_boolean_expr(sep, *boolean);
+            } else {
+                boolean_expr.add_expr(right.to_aligned(), Some(sep), comments);
+            }
         }
         // cursorをboolean_expressionに戻す
         cursor.goto_parent();
@@ -128,14 +135,13 @@ impl Visitor {
 
         ensure_kind(cursor, "AND")?;
         let and_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
-
         cursor.goto_next_sibling();
         // cursor -> _expression
 
         let to_expr = self.visit_expr(cursor, src)?;
 
         // (from AND to)をAlignedExprにまとめる
-        let mut rhs = AlignedExpr::new(from_expr, false);
+        let mut rhs = AlignedExpr::new(from_expr);
         rhs.add_rhs(Some(convert_keyword_case(and_keyword)), to_expr);
 
         if let Some(comment) = start_trailing_comment {
@@ -143,7 +149,7 @@ impl Visitor {
         }
 
         // (expr BETWEEN rhs)をAlignedExprにまとめる
-        let mut aligned = AlignedExpr::new(expr, false);
+        let mut aligned = AlignedExpr::new(expr);
         aligned.add_rhs(Some(operator), Expr::Aligned(Box::new(rhs)));
 
         cursor.goto_parent();
@@ -211,7 +217,7 @@ impl Visitor {
 
         let expr_seq = Expr::ExprSeq(Box::new(ExprSeq::new(&exprs)));
 
-        let mut aligned = AlignedExpr::new(string, false);
+        let mut aligned = AlignedExpr::new(string);
         aligned.add_rhs(Some(operator), expr_seq);
 
         cursor.goto_parent();

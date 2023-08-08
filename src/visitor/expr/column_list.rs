@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{ensure_kind, Visitor, COMMENT},
+    visitor::{ensure_kind, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -32,7 +32,7 @@ impl Visitor {
         while cursor.goto_next_sibling() {
             loc.append(Location::new(cursor.node().range()));
             match cursor.node().kind() {
-                "," => {
+                COMMA => {
                     cursor.goto_next_sibling();
                     exprs.push(self.visit_expr(cursor, src)?.to_aligned());
                 }

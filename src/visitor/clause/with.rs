@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, convert_keyword_case},
-    visitor::{create_clause, ensure_kind, Visitor, COMMENT},
+    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -31,7 +31,7 @@ impl Visitor {
                     // WITH句のキーワードにRECURSIVEを付与する
                     with_clause.extend_kw(cursor.node(), src);
                 }
-                "," => {}
+                COMMA => {}
                 "cte" => {
                     let cte = self.visit_cte(cursor, src)?;
                     with_body.add_cte(cte);

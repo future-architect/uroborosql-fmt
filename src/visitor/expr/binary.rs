@@ -41,7 +41,7 @@ impl Visitor {
 
         if is_comp_op(&op_str) {
             // 比較演算子ならばそろえる必要があるため、AlignedExprとする
-            let mut aligned = AlignedExpr::new(lhs_expr, false);
+            let mut aligned = AlignedExpr::new(lhs_expr);
             aligned.add_rhs(Some(op_str), rhs_expr);
 
             Ok(Expr::Aligned(Box::new(aligned)))

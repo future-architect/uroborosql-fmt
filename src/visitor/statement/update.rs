@@ -45,8 +45,8 @@ impl Visitor {
             self.visit_aliasable_expr(cursor, src, Some(&ComplementKind::TableName), false, false)?;
 
         // update句を追加する
-        let mut sep_lines = SeparatedLines::new(",");
-        sep_lines.add_expr(table_name);
+        let mut sep_lines = SeparatedLines::new();
+        sep_lines.add_expr(table_name, None, vec![]);
         update_clause.set_body(Body::SepLines(sep_lines));
         statement.add_clause(update_clause);
 
