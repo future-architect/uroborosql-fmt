@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{create_clause, ensure_kind, Visitor, COMMENT},
+    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -20,15 +20,20 @@ impl Visitor {
         cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
-        let mut sep_lines = SeparatedLines::new(",");
+        let mut sep_lines = SeparatedLines::new();
+
         let first = self.visit_order_expression(cursor, src)?;
-        sep_lines.add_expr(first);
+        sep_lines.add_expr(first, None, vec![]);
 
         // commaSep(order_expression)
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
-                "order_expression" => sep_lines.add_expr(self.visit_order_expression(cursor, src)?),
-                "," => continue,
+                "order_expression" => sep_lines.add_expr(
+                    self.visit_order_expression(cursor, src)?,
+                    Some(COMMA.to_string()),
+                    vec![],
+                ),
+                COMMA => continue,
                 COMMENT => {
                     let comment = Comment::new(cursor.node(), src);
                     sep_lines.add_comment_to_child(comment)?;
@@ -80,7 +85,7 @@ impl Visitor {
         src: &str,
         expr: Expr,
     ) -> Result<AlignedExpr, UroboroSQLFmtError> {
-        let mut order_expr = AlignedExpr::new(expr, false);
+        let mut order_expr = AlignedExpr::new(expr);
 
         // オプション
         let mut order = vec![];

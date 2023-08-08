@@ -63,7 +63,7 @@ impl Visitor {
                     }
                 }
 
-                let mut aligned = AlignedExpr::new(lhs_expr, true);
+                let mut aligned = AlignedExpr::new(lhs_expr);
 
                 // ("AS"? identifier)?
                 if cursor.goto_next_sibling() {
@@ -137,7 +137,7 @@ impl Visitor {
                     expr.set_head_comment(comment);
                 }
 
-                let mut aligned = AlignedExpr::new(expr.clone(), true);
+                let mut aligned = AlignedExpr::new(expr.clone());
 
                 if complement_alias {
                     // エイリアス名を生成できた場合に、エイリアス補完を行う

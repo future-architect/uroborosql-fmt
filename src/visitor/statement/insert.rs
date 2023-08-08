@@ -3,7 +3,8 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, Visitor, COMMENT, ComplementKind}, util::convert_keyword_case,
+    util::convert_keyword_case,
+    visitor::{create_clause, ensure_kind, ComplementKind, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -32,7 +33,7 @@ impl Visitor {
 
             statement.add_clause(with_clause);
         }
-        
+
         // cursor -> INSERT
         ensure_kind(cursor, "INSERT")?;
 
@@ -52,10 +53,11 @@ impl Visitor {
 
         // table_nameは_aliasable_identifierであるが、CST上では_aliasable_expressionと等しいため、
         // visit_aliasable_exprを使用する
-        // 
+        //
         // エイリアス補完は行わず、AS補完のみを行う
         // INSERTのテーブルエイリアスにおいてASは必須なので、テーブル名だが、カラム名ルール(ASがなければASを補完)でAS補完を行う
-        let table_name = self.visit_aliasable_expr(cursor, src,Some(&ComplementKind::ColumnName), true, false)?;
+        let table_name =
+            self.visit_aliasable_expr(cursor, src, Some(&ComplementKind::ColumnName), true, false)?;
         let mut insert_body = InsertBody::new(loc, table_name);
 
         cursor.goto_next_sibling();
@@ -66,13 +68,29 @@ impl Visitor {
             cursor.goto_next_sibling();
         }
 
+        let mut is_first_content = true;
+
         // column_name
         if cursor.node().kind() == "(" {
-            let mut sep_lines = SeparatedLines::new(",");
+            let mut sep_lines = SeparatedLines::new();
             while cursor.goto_next_sibling() {
                 match cursor.node().kind() {
                     "identifier" | "dotted_name" => {
-                        sep_lines.add_expr(self.visit_expr(cursor, src)?.to_aligned());
+                        // 最初の式はコンマなしで式を追加する
+                        if is_first_content {
+                            sep_lines.add_expr(
+                                self.visit_expr(cursor, src)?.to_aligned(),
+                                None,
+                                vec![],
+                            );
+                            is_first_content = false;
+                        } else {
+                            sep_lines.add_expr(
+                                self.visit_expr(cursor, src)?.to_aligned(),
+                                Some(COMMA.to_string()),
+                                vec![],
+                            );
+                        }
                     }
                     ")" => {
                         insert_body.set_column_name(sep_lines);
@@ -107,7 +125,7 @@ impl Visitor {
                     "values_clause_item" => {
                         items.push(self.visit_values_clause_item(cursor, src)?);
                     }
-                    "," => continue,
+                    COMMA => continue,
                     _ => {
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "visit_insert_stmt(): unexpected token {}\n{:#?}",
@@ -187,7 +205,10 @@ impl Visitor {
         // cursor -> "ON_CONFLICT"
         ensure_kind(cursor, "ON_CONFLICT")?;
         let conflict_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
-        let on_conflict_keyword = (convert_keyword_case(on_keyword), convert_keyword_case(conflict_keyword));
+        let on_conflict_keyword = (
+            convert_keyword_case(on_keyword),
+            convert_keyword_case(conflict_keyword),
+        );
 
         cursor.goto_next_sibling();
 
@@ -226,7 +247,7 @@ impl Visitor {
                 let nothing_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
 
                 let do_nothing_keyword = (convert_keyword_case(do_keyword), convert_keyword_case(nothing_keyword));
-            
+
                 ConflictAction::DoNothing(DoNothing::new(do_nothing_keyword))
             }
             "DO_UPDATE" => {

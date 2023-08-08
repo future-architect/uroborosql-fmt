@@ -38,7 +38,7 @@ impl Visitor {
             self.visit_expr(cursor, src)?
         };
 
-        let mut aligned = AlignedExpr::new(lhs, false);
+        let mut aligned = AlignedExpr::new(lhs);
         aligned.add_rhs(Some(op), rhs);
 
         cursor.goto_parent();

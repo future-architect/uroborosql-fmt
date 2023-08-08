@@ -35,7 +35,7 @@ impl Visitor {
         // テーブル名だが補完は行わない
         let table =
             self.visit_aliasable_expr(cursor, src, Some(&ComplementKind::TableName), false, false)?;
-        let body = Body::with_expr(Expr::Aligned(Box::new(table)));
+        let body = Body::from(Expr::Aligned(Box::new(table)));
         join_clause.set_body(body);
 
         if cursor.goto_next_sibling() {
@@ -71,7 +71,7 @@ impl Visitor {
                 self.consume_comment_in_clause(cursor, src, &mut on_clause)?;
 
                 let expr = self.visit_expr(cursor, src)?;
-                let body = Body::with_expr(expr);
+                let body = Body::from(expr);
                 on_clause.set_body(body);
 
                 Ok(on_clause)

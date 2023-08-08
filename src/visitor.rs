@@ -5,6 +5,7 @@ mod statement;
 use tree_sitter::{Node, TreeCursor};
 
 pub(crate) const COMMENT: &str = "comment";
+pub(crate) const COMMA: &str = ",";
 
 use crate::{config::CONFIG, cst::*, error::UroboroSQLFmtError, util::convert_identifier_case};
 
@@ -137,7 +138,7 @@ impl Visitor {
         // エイリアスを補完するかどうか
         complement_alias: bool,
     ) -> Result<Body, UroboroSQLFmtError> {
-        let mut separated_lines = SeparatedLines::new(",");
+        let mut separated_lines = SeparatedLines::new();
 
         // commaSep(_aliasable_expression)
         let alias = self.visit_aliasable_expr(
@@ -147,13 +148,13 @@ impl Visitor {
             complement_as,
             complement_alias,
         )?;
-        separated_lines.add_expr(alias);
+        separated_lines.add_expr(alias, None, vec![]);
 
         // ("," _aliasable_expression)*
         while cursor.goto_next_sibling() {
             // cursor -> , または comment または _aliasable_expression
             match cursor.node().kind() {
-                "," => {
+                COMMA => {
                     cursor.goto_next_sibling();
                     // _aliasable_expression
                     let alias = self.visit_aliasable_expr(
@@ -163,7 +164,7 @@ impl Visitor {
                         complement_as,
                         complement_alias,
                     )?;
-                    separated_lines.add_expr(alias);
+                    separated_lines.add_expr(alias, Some(COMMA.to_string()), vec![]);
                 }
                 COMMENT => {
                     separated_lines.add_comment_to_child(Comment::new(cursor.node(), src))?;

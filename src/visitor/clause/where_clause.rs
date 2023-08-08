@@ -24,7 +24,7 @@ impl Visitor {
         let expr = self.visit_expr(cursor, src)?;
 
         // 結果として得られた式をBodyに変換する
-        let body = Body::with_expr(expr);
+        let body = Body::from(expr);
 
         clause.set_body(body);
 

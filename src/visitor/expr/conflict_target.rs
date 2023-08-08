@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, convert_keyword_case},
-    visitor::{ensure_kind, Visitor},
+    visitor::{ensure_kind, Visitor, COMMA},
 };
 
 impl Visitor {
@@ -91,7 +91,7 @@ impl Visitor {
                     let element = ConflictTargetElement::new(column);
                     elements.push(element);
                 }
-                "," => {
+                COMMA => {
                     continue;
                 }
                 "COLLATE" => {

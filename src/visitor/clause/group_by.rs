@@ -1,9 +1,11 @@
+use std::vec;
+
 use tree_sitter::TreeCursor;
 
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, Visitor, COMMENT},
+    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -22,19 +24,19 @@ impl Visitor {
         cursor.goto_next_sibling();
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
-        let mut sep_lines = SeparatedLines::new(",");
+        let mut sep_lines = SeparatedLines::new();
         let first = self.visit_group_expression(cursor, src)?;
-        sep_lines.add_expr(first.to_aligned());
+        sep_lines.add_expr(first.to_aligned(), None, vec![]);
 
         // commaSep(group_expression)
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
-                "," => {
+                COMMA => {
                     continue;
                 }
                 "group_expression" => {
                     let expr = self.visit_group_expression(cursor, src)?;
-                    sep_lines.add_expr(expr.to_aligned());
+                    sep_lines.add_expr(expr.to_aligned(), Some(COMMA.to_string()), vec![]);
                 }
                 COMMENT => {
                     let comment = Comment::new(cursor.node(), src);

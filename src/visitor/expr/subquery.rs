@@ -132,7 +132,7 @@ impl Visitor {
         ensure_kind(cursor, "select_subexpression")?;
         let rhs = Expr::Sub(Box::new(self.visit_select_subexpr(cursor, src)?));
 
-        let mut in_sub = AlignedExpr::new(lhs, false);
+        let mut in_sub = AlignedExpr::new(lhs);
         in_sub.add_rhs(Some(op), rhs);
 
         cursor.goto_parent();
@@ -179,7 +179,7 @@ impl Visitor {
 
         let select_subexpr = self.visit_select_subexpr(cursor, src)?;
 
-        let mut all_some_any_sub = AlignedExpr::new(lhs, false);
+        let mut all_some_any_sub = AlignedExpr::new(lhs);
 
         all_some_any_sub.add_rhs(
             Some(format!("{op}\t{all_some_any_keyword}")),

@@ -99,7 +99,7 @@ pub(crate) struct AlignedExpr {
 }
 
 impl AlignedExpr {
-    pub(crate) fn new(lhs: Expr, _is_alias: bool) -> AlignedExpr {
+    pub(crate) fn new(lhs: Expr) -> AlignedExpr {
         let loc = lhs.loc();
         AlignedExpr {
             lhs,

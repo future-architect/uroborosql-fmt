@@ -31,8 +31,7 @@ WHERE
 			ELSE
 				1
 		END
-AND
-	CASE
+AND	CASE
 		WHEN
 			COL	IS	NULL
 		THEN
