@@ -4,7 +4,7 @@ use crate::{
     config::CONFIG,
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, ComplementKind, Visitor},
+    visitor::{create_clause, ensure_kind, Visitor},
 };
 
 impl Visitor {
@@ -33,8 +33,7 @@ impl Visitor {
         cursor.goto_next_sibling();
 
         // テーブル名だが補完は行わない
-        let table =
-            self.visit_aliasable_expr(cursor, src, Some(&ComplementKind::TableName), false, false)?;
+        let table = self.visit_aliasable_expr(cursor, src, None)?;
         let body = Body::from(Expr::Aligned(Box::new(table)));
         join_clause.set_body(body);
 

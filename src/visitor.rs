@@ -9,6 +9,8 @@ pub(crate) const COMMA: &str = ",";
 
 use crate::{config::CONFIG, cst::*, error::UroboroSQLFmtError, util::convert_identifier_case};
 
+use self::expr::ComplementConfig;
+
 pub(crate) struct Visitor {
     /// select文、insert文などが複数回出てきた際に1度だけSQL_IDを補完する、という処理を実現するためのフラグ
     should_complement_sql_id: bool,
@@ -131,23 +133,14 @@ impl Visitor {
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
-        // 補完する場合の補完の種類
-        complement_kind: Option<&ComplementKind>,
-        // ASキーワードを補完/省略するかどうか
-        complement_as: bool,
-        // エイリアスを補完するかどうか
-        complement_alias: bool,
+        // エイリアス/AS補完に関する設定
+        // Noneの場合は補完を行わない
+        complement_config: Option<&ComplementConfig>,
     ) -> Result<Body, UroboroSQLFmtError> {
         let mut separated_lines = SeparatedLines::new();
 
         // commaSep(_aliasable_expression)
-        let alias = self.visit_aliasable_expr(
-            cursor,
-            src,
-            complement_kind,
-            complement_as,
-            complement_alias,
-        )?;
+        let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
         separated_lines.add_expr(alias, None, vec![]);
 
         // ("," _aliasable_expression)*
@@ -157,13 +150,7 @@ impl Visitor {
                 COMMA => {
                     cursor.goto_next_sibling();
                     // _aliasable_expression
-                    let alias = self.visit_aliasable_expr(
-                        cursor,
-                        src,
-                        complement_kind,
-                        complement_as,
-                        complement_alias,
-                    )?;
+                    let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
                     separated_lines.add_expr(alias, Some(COMMA.to_string()), vec![]);
                 }
                 COMMENT => {
@@ -225,14 +212,6 @@ impl Visitor {
 
         Ok(())
     }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum ComplementKind {
-    /// テーブル名
-    TableName,
-    /// カラム名
-    ColumnName,
 }
 
 /// cursorが指定した種類のノードを指しているかどうかをチェックする関数

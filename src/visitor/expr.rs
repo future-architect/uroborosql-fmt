@@ -15,6 +15,8 @@ use tree_sitter::TreeCursor;
 
 use crate::{cst::*, error::UroboroSQLFmtError, util::convert_identifier_case};
 
+pub(crate) use aliasable::{ComplementConfig, ComplementKind};
+
 use super::{ensure_kind, Visitor, COMMENT};
 
 impl Visitor {

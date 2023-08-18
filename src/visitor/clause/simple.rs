@@ -31,7 +31,7 @@ impl Visitor {
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
         // SimpleClauseは現状補完を行わない
-        let body = self.visit_comma_sep_alias(cursor, src, None, false, false)?;
+        let body = self.visit_comma_sep_alias(cursor, src, None)?;
 
         clause.set_body(body);
 
