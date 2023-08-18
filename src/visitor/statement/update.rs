@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, ComplementKind, Visitor, COMMENT},
+    visitor::{create_clause, ensure_kind, Visitor, COMMENT},
 };
 
 impl Visitor {
@@ -41,8 +41,7 @@ impl Visitor {
         // update句のエイリアスはASを省略するため
         //
         // UPDATE句は基本的にテーブルエイリアスは書けないため、AS、エイリアス共に補完しない
-        let table_name =
-            self.visit_aliasable_expr(cursor, src, Some(&ComplementKind::TableName), false, false)?;
+        let table_name = self.visit_aliasable_expr(cursor, src, None)?;
 
         // update句を追加する
         let mut sep_lines = SeparatedLines::new();

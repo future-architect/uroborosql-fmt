@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{create_clause, ensure_kind, ComplementKind, Visitor, COMMA, COMMENT},
+    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -53,11 +53,7 @@ impl Visitor {
 
         // table_nameは_aliasable_identifierであるが、CST上では_aliasable_expressionと等しいため、
         // visit_aliasable_exprを使用する
-        //
-        // エイリアス補完は行わず、AS補完のみを行う
-        // INSERTのテーブルエイリアスにおいてASは必須なので、テーブル名だが、カラム名ルール(ASがなければASを補完)でAS補完を行う
-        let table_name =
-            self.visit_aliasable_expr(cursor, src, Some(&ComplementKind::ColumnName), true, false)?;
+        let table_name = self.visit_aliasable_expr(cursor, src, None)?;
         let mut insert_body = InsertBody::new(loc, table_name);
 
         cursor.goto_next_sibling();

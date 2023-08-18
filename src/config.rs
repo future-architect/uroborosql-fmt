@@ -41,7 +41,12 @@ fn default_complement_outer_keyword() -> bool {
 }
 
 /// complement_as_keywordのデフォルト値(true)
-fn default_complement_as_keyword() -> bool {
+fn default_complement_column_as_keyword() -> bool {
+    true
+}
+
+/// remove_table_as_keywordのデフォルト値(true)
+fn default_remove_table_as_keyword() -> bool {
     true
 }
 
@@ -114,8 +119,11 @@ pub(crate) struct Config {
     #[serde(default = "default_complement_outer_keyword")]
     pub(crate) complement_outer_keyword: bool,
     /// カラムエイリアスにおける AS キーワードの自動補完を有効にする
-    #[serde(default = "default_complement_as_keyword")]
-    pub(crate) complement_as_keyword: bool,
+    #[serde(default = "default_complement_column_as_keyword")]
+    pub(crate) complement_column_as_keyword: bool,
+    /// テーブルエイリアスにおける AS キーワードの自動除去を有効にする
+    #[serde(default = "default_remove_table_as_keyword")]
+    pub(crate) remove_table_as_keyword: bool,
     /// 余分な括弧を自動で除去する
     #[serde(default = "default_remove_redundant_nest")]
     pub(crate) remove_redundant_nest: bool,
@@ -136,10 +144,11 @@ impl Config {
             keyword_case: Case::default(),
             identifier_case: Case::default(),
             max_char_per_line: default_max_char_per_line(),
-            complement_sql_id: default_complement_sql_id(),
             complement_outer_keyword: default_complement_outer_keyword(),
-            complement_as_keyword: default_complement_as_keyword(),
+            complement_column_as_keyword: default_complement_column_as_keyword(),
+            remove_table_as_keyword: default_remove_table_as_keyword(),
             remove_redundant_nest: default_remove_redundant_nest(),
+            complement_sql_id: default_complement_sql_id(),
         }
     }
 
@@ -179,7 +188,8 @@ pub(crate) fn load_never_complement_settings() {
         max_char_per_line: default_max_char_per_line(),
         complement_sql_id: false,
         complement_outer_keyword: false,
-        complement_as_keyword: false,
+        complement_column_as_keyword: false,
+        remove_table_as_keyword: false,
         remove_redundant_nest: false,
     };
 

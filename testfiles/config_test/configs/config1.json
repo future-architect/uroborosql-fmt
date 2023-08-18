@@ -7,7 +7,8 @@
   "identifier_case": "upper",
   "max_char_per_line": -1,
   "complement_outer_keyword": false,
-  "complement_as_keyword": false,
+  "complement_column_as_keyword": true,
+  "remove_table_as_keyword": false,
   "remove_redundant_parentheses": true,
   "complement_sql_id": true
 }

@@ -5,8 +5,74 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{create_alias, ensure_kind, ComplementKind, Visitor, COMMENT},
+    visitor::{create_alias, ensure_kind, Visitor, COMMENT},
 };
+
+/// 補完の種類
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ComplementKind {
+    /// テーブル名
+    TableName,
+    /// カラム名
+    ColumnName,
+}
+
+/// AS補完/除去、エイリアス補完に関する設定
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ComplementConfig {
+    /// 補完の種類
+    kind: ComplementKind,
+    /// kindに合わせてASキーワードを補完/除去するかどうか
+    complement_or_remove_as: bool,
+    /// kindに合わせてエイリアスを補完するかどうか
+    complement_alias: bool,
+}
+
+impl Default for ComplementConfig {
+    fn default() -> Self {
+        ComplementConfig {
+            // デフォルト値としてTableNameを設定しているが、デフォルトでは補完しないのでTableNameとColumnNameのどちらを設定していても変わらない
+            kind: ComplementKind::TableName,
+            complement_or_remove_as: false,
+            complement_alias: false,
+        }
+    }
+}
+
+impl ComplementConfig {
+    pub(crate) fn new(
+        kind: ComplementKind,
+        complement_or_remove_as: bool,
+        complement_alias: bool,
+    ) -> ComplementConfig {
+        ComplementConfig {
+            kind,
+            complement_or_remove_as,
+            complement_alias,
+        }
+    }
+
+    /// 自身の設定と定義ファイルの設定を考慮してASを補完をすべきかどうか返す
+    fn complement_as_keyword(&self) -> bool {
+        self.complement_or_remove_as
+            && CONFIG.read().unwrap().complement_column_as_keyword
+            && self.kind == ComplementKind::ColumnName
+    }
+
+    /// 自身の設定と定義ファイルの設定を考慮してASを削除をすべきかどうか返す
+    fn remove_as_keyword(&self) -> bool {
+        self.complement_or_remove_as
+            && CONFIG.read().unwrap().remove_table_as_keyword
+            && self.kind == ComplementKind::TableName
+    }
+
+    /// 自身の設定と定義ファイルの設定を考慮してエイリアスを補完すべきかどうか返す
+    pub(crate) fn complement_alias(&self) -> bool {
+        self.complement_alias
+            && CONFIG.read().unwrap().complement_alias
+            && self.kind == ComplementKind::ColumnName
+    }
+}
 
 impl Visitor {
     /// エイリアス可能な式
@@ -15,16 +81,10 @@ impl Visitor {
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
-        // 補完する場合の補完の種類
-        complement_kind: Option<&ComplementKind>,
-        // ASキーワードを補完/省略するかどうか
-        complement_as: bool,
-        // エイリアスを補完するかどうか
-        complement_alias: bool,
+        // エイリアス/AS補完に関する設定
+        // Noneの場合は補完しない
+        complement_config: Option<&ComplementConfig>,
     ) -> Result<AlignedExpr, UroboroSQLFmtError> {
-        let complement_as = complement_as && CONFIG.read().unwrap().complement_as_keyword;
-        let complement_alias = complement_alias && CONFIG.read().unwrap().complement_alias;
-
         // エイリアス可能な式の定義
         //    _aliasable_expression =
         //        alias | _expression
@@ -33,6 +93,9 @@ impl Visitor {
         //        _expression
         //        ["AS"]
         //        identifier
+
+        // 設定ファイルがNoneの場合はデフォルト値 (エイリアス/AS補完を共に行わない)
+        let complement_config = complement_config.cloned().unwrap_or_default();
 
         let comment = if cursor.node().kind() == COMMENT {
             let comment = Comment::new(cursor.node(), src);
@@ -94,22 +157,19 @@ impl Visitor {
                         let keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
                         cursor.goto_next_sibling();
 
-                        Some(keyword)
+                        // ASキーワードが存在する場合
+                        if complement_config.remove_as_keyword() {
+                            None
+                        } else {
+                            Some(convert_keyword_case(keyword))
+                        }
                     } else {
-                        None
-                    };
-
-                    let as_keyword = match (complement_kind, as_keyword) {
-                        (Some(ComplementKind::TableName), Some(_)) if complement_as => {
-                            // テーブル名ルールを適用する、かつAS補完ONの場合、ASを省略
+                        // ASキーワードが存在しない場合
+                        if complement_config.complement_as_keyword() {
+                            Some(convert_keyword_case("AS"))
+                        } else {
                             None
                         }
-                        (Some(ComplementKind::ColumnName), None) if complement_as => {
-                            // カラム名ルールを適用する、かつAS補完ONの場合、ASを補完
-                            Some(convert_keyword_case("AS"))
-                        }
-                        (_, Some(as_keyword)) => Some(convert_keyword_case(as_keyword)),
-                        _ => None,
                     };
 
                     //右辺に移動
@@ -124,7 +184,7 @@ impl Visitor {
                     aligned.add_rhs(as_keyword, Expr::Primary(Box::new(rhs_expr)));
                 }
 
-                // cursorをalias に戻す
+                // cursorをaliasに戻す
                 cursor.goto_parent();
 
                 Ok(aligned)
@@ -139,20 +199,10 @@ impl Visitor {
 
                 let mut aligned = AlignedExpr::new(expr.clone());
 
-                if complement_alias {
-                    // エイリアス名を生成できた場合に、エイリアス補完を行う
+                if complement_config.complement_alias() {
+                    // エイリアス名を生成できた場合にエイリアス補完を行う
                     if let Some(alias_name) = create_alias(&expr) {
-                        match complement_kind {
-                            Some(ComplementKind::TableName) => {
-                                // テーブル名ルールでエイリアス補完
-                                aligned.add_rhs(None, alias_name);
-                            }
-                            Some(ComplementKind::ColumnName) => {
-                                // カラム名ルールでエイリアス補完
-                                aligned.add_rhs(Some(convert_keyword_case("AS")), alias_name);
-                            }
-                            _ => {}
-                        }
+                        aligned.add_rhs(Some(convert_keyword_case("AS")), alias_name);
                     }
                 }
 

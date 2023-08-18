@@ -3,7 +3,11 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, ComplementKind, Visitor},
+    visitor::{
+        create_clause, ensure_kind,
+        expr::{ComplementConfig, ComplementKind},
+        Visitor,
+    },
 };
 
 impl Visitor {
@@ -58,8 +62,8 @@ impl Visitor {
         // cursor -> _aliasable_expression
         // commaSep1(_aliasable_expression)
         // カラム名ルール(ASがなければASを補完)でエイリアス補完、AS補完を行う
-        let body =
-            self.visit_comma_sep_alias(cursor, src, Some(&ComplementKind::ColumnName), true, true)?;
+        let complement_config = ComplementConfig::new(ComplementKind::ColumnName, true, true);
+        let body = self.visit_comma_sep_alias(cursor, src, Some(&complement_config))?;
 
         // cursorをselect_clause_bodyに
         cursor.goto_parent();
