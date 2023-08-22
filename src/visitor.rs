@@ -147,21 +147,31 @@ impl Visitor {
         while cursor.goto_next_sibling() {
             // cursor -> , または comment または _aliasable_expression
             match cursor.node().kind() {
-                COMMA => {
-                    cursor.goto_next_sibling();
-                    // _aliasable_expression
-                    let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
-                    separated_lines.add_expr(alias, Some(COMMA.to_string()), vec![]);
-                }
+                // tree-sitter-sqlにより、構文エラーは検出されるはずなので、"," は読み飛ばしてもよい。
+                "," => {}
                 COMMENT => {
-                    separated_lines.add_comment_to_child(Comment::new(cursor.node(), src))?;
+                    let comment_node = cursor.node();
+                    let comment = Comment::new(comment_node, src);
+
+                    // tree-sitter-sqlの性質上、コメントが最後の子供になることはないはずなので、panicしない。
+                    let sibling_node = cursor.node().next_sibling().unwrap();
+
+                    // コメントノードがバインドパラメータであるかを判定し、バインドパラメータならば式として処理し、
+                    // そうでなければ単にコメントとして処理する。
+                    if comment.is_block_comment()
+                        && comment
+                            .loc()
+                            .is_next_to(&Location::new(sibling_node.range()))
+                    {
+                        let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
+                        separated_lines.add_expr(alias, Some(COMMA.to_string()), vec![]);
+                    } else {
+                        separated_lines.add_comment_to_child(comment)?;
+                    }
                 }
                 _ => {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_comma_sep_alias(): expected node is ',' or COMMENT, but actual {}\n{:?}",
-                    cursor.node().kind(),
-                    cursor.node().range()
-                )))
+                    let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
+                    separated_lines.add_expr(alias, Some(COMMA.to_string()), vec![]);
                 }
             }
         }
