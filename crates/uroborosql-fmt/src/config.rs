@@ -87,7 +87,7 @@ impl Case {
 
 /// 設定を保持する構造体
 #[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct Config {
+pub struct Config {
     /// デバッグモード
     #[serde(default = "default_debug")]
     pub(crate) debug: bool,
@@ -153,7 +153,7 @@ impl Config {
     }
 
     /// Json 文字列から Config 構造体を生成する
-    pub(crate) fn from_json_str(json_str: &str) -> Result<Config, UroboroSQLFmtError> {
+    pub fn from_json_str(json_str: &str) -> Result<Config, UroboroSQLFmtError> {
         serde_json::from_str(json_str).map_err(|e| {
             UroboroSQLFmtError::Runtime(format!("Setting json is invalid.{}", &e.to_string()))
         })
