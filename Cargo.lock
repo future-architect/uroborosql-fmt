@@ -226,3 +226,17 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-sql",
 ]
+
+[[package]]
+name = "uroborosql-fmt-cli"
+version = "0.1.0"
+dependencies = [
+ "uroborosql-fmt",
+]
+
+[[package]]
+name = "uroborosql-fmt-wasm"
+version = "0.1.0"
+dependencies = [
+ "uroborosql-fmt",
+]
