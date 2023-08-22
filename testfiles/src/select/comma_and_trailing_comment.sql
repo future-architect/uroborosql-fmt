@@ -1,0 +1,6 @@
+select
+  col1, -- column 1
+  col2 -- column 2
+from
+  tbl1, -- table 1
+  tbl2 -- table 2
