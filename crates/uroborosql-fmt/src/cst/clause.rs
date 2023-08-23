@@ -60,6 +60,8 @@ impl Clause {
 
     /// Nodeでキーワードを延長する (延長にはタブ文字を使用)
     /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
+    /// ※ 一時的に使用しない状態になったが、今後使用するかもしれないので警告を抑制しておく
+    #[allow(dead_code)]
     pub(crate) fn extend_kw_with_tab(&mut self, node: Node, src: &str) {
         let loc = Location::new(node.range());
         self.loc.append(loc);
