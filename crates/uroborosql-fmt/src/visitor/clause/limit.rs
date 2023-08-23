@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{ensure_kind, Visitor},
+    visitor::{ensure_kind, Visitor, COMMENT},
 };
 
 impl Visitor {
@@ -21,6 +21,12 @@ impl Visitor {
         cursor.goto_next_sibling();
         // cursor -> number | ALL
 
+        if cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            cursor.goto_next_sibling();
+            limit_clause.add_comment_to_child(comment)?;
+        }
+
         match cursor.node().kind() {
             "number" => {
                 // numberをExprに格納
@@ -31,7 +37,10 @@ impl Visitor {
             }
             "ALL" => {
                 // "LIMIT ALL"というキーワードと捉えて構造体に格納
-                limit_clause.extend_kw_with_tab(cursor.node(), src);
+                let all_kw = PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
+                let expr: Expr = Expr::Primary(Box::new(all_kw));
+                let body = Body::SingleLine(Box::new(SingleLine::new(expr)));
+                limit_clause.set_body(body);
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
