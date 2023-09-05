@@ -10,7 +10,6 @@
   },
   "scripts": {
     "serve": "http-server -o ./wasm/index.html",
-    "build-wasm": "bash build.sh" 
+    "build-wasm": "bash build.sh"
   }
 }
-
