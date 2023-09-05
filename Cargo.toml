@@ -2,8 +2,14 @@
 members = [
     "crates/uroborosql-fmt",
     "crates/uroborosql-fmt-cli",
-    "crates/uroborosql-fmt-wasm"
+    "crates/uroborosql-fmt-wasm",
 ]
+
+[workspace.package]
+authors = ["Future Corporation"]
+edition = "2021"
+license = "BUSL-1.1"
+repository = "https://github.com/future-architect/uroborosql-fmt"
 
 [workspace.dependencies]
 # Internal crates

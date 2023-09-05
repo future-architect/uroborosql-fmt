@@ -1,7 +1,11 @@
 [package]
 name = "uroborosql-fmt-wasm"
 version = "0.1.0"
-edition = "2021"
+description = "Crate to build uroborosql-fmt wasm"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
