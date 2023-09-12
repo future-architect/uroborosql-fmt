@@ -1,0 +1,5 @@
+SELECT /* _SQL_ID_ */
+	CAST(''	AS	JSONB)
+FROM
+	TBL
+;

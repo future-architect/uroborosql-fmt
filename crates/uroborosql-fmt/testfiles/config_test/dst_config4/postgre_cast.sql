@@ -1,0 +1,5 @@
+SELECT
+	''::JSONB
+from
+	TBL
+;

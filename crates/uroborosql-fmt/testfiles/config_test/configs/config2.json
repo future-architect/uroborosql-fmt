@@ -10,5 +10,6 @@
   "complement_column_as_keyword": true,
   "remove_table_as_keyword": true,
   "remove_redundant_nest": false,
-  "complement_sql_id": false
+  "complement_sql_id": false,
+  "convert_double_colon_cast": true
 }

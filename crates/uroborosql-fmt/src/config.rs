@@ -60,6 +60,11 @@ fn default_complement_sql_id() -> bool {
     false
 }
 
+/// convert_double_colon_castのデフォルト値(true)
+fn default_convert_double_colon_cast() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Case {
@@ -130,6 +135,8 @@ pub struct Config {
     /// /* _SQL_ID_ */がない場合に自動で補完する
     #[serde(default = "default_complement_sql_id")]
     pub(crate) complement_sql_id: bool,
+    /// `X::type`のキャストを`CAST(X AS type)`に変換する
+    pub(crate) convert_double_colon_cast: bool,
 }
 
 impl Config {
@@ -149,6 +156,7 @@ impl Config {
             remove_table_as_keyword: default_remove_table_as_keyword(),
             remove_redundant_nest: default_remove_redundant_nest(),
             complement_sql_id: default_complement_sql_id(),
+            convert_double_colon_cast: default_convert_double_colon_cast(),
         }
     }
 
@@ -191,6 +199,7 @@ pub(crate) fn load_never_complement_settings() {
         complement_column_as_keyword: false,
         remove_table_as_keyword: false,
         remove_redundant_nest: false,
+        convert_double_colon_cast: false,
     };
 
     *CONFIG.write().unwrap() = config;

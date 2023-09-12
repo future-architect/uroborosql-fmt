@@ -8,13 +8,15 @@ pub(crate) mod function;
 pub(crate) mod paren;
 pub(crate) mod primary;
 pub(crate) mod subquery;
+pub(crate) mod type_cast;
 pub(crate) mod unary;
 
 use crate::{error::UroboroSQLFmtError, util::to_tab_num};
 
 use self::{
     aligned::AlignedExpr, asterisk::AsteriskExpr, cond::CondExpr, function::FunctionCall,
-    paren::ParenExpr, primary::PrimaryExpr, subquery::SubExpr, unary::UnaryExpr,
+    paren::ParenExpr, primary::PrimaryExpr, subquery::SubExpr, type_cast::TypeCast,
+    unary::UnaryExpr,
 };
 
 use super::{ColumnList, Comment, ExistsSubquery, ExprSeq, Location, SeparatedLines};
@@ -48,6 +50,8 @@ pub(crate) enum Expr {
     FunctionCall(Box<FunctionCall>),
     /// N個の式の連続
     ExprSeq(Box<ExprSeq>),
+    /// `::`を用いたキャスト
+    TypeCast(Box<TypeCast>),
 }
 
 impl Expr {
@@ -65,6 +69,7 @@ impl Expr {
             Expr::ColumnList(cols) => cols.loc(),
             Expr::FunctionCall(func_call) => func_call.loc(),
             Expr::ExprSeq(n_expr) => n_expr.loc(),
+            Expr::TypeCast(type_cast) => type_cast.loc(),
         }
     }
 
@@ -86,6 +91,7 @@ impl Expr {
             Expr::ColumnList(cols) => cols.render(depth),
             Expr::FunctionCall(func_call) => func_call.render(depth),
             Expr::ExprSeq(n_expr) => n_expr.render(depth),
+            Expr::TypeCast(type_cast) => type_cast.render(depth),
         }
     }
 
@@ -121,6 +127,7 @@ impl Expr {
             Expr::FunctionCall(func_call) => func_call.last_line_len_from_left(acc),
             Expr::Boolean(_) => unimplemented!(),
             Expr::ExprSeq(n_expr) => n_expr.last_line_len_from_left(acc),
+            Expr::TypeCast(type_cast) => type_cast.last_line_len_from_left(acc),
         }
     }
 
@@ -198,6 +205,7 @@ impl Expr {
             Expr::FunctionCall(func_call) => func_call.is_multi_line(),
             Expr::ColumnList(col_list) => col_list.is_multi_line(),
             Expr::ExprSeq(n_expr) => n_expr.is_multi_line(),
+            Expr::TypeCast(type_cast) => type_cast.is_multi_line(),
         }
     }
 
@@ -216,7 +224,8 @@ impl Expr {
             | Expr::Unary(_)
             | Expr::ColumnList(_)
             | Expr::FunctionCall(_)
-            | Expr::ExprSeq(_) => false,
+            | Expr::ExprSeq(_)
+            | Expr::TypeCast(_) => false,
         }
     }
 

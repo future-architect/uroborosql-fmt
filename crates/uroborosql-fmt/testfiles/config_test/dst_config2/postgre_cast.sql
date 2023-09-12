@@ -1,0 +1,5 @@
+SELECT
+	CAST(''	AS	JSONB)
+FROM
+	tbl
+;
