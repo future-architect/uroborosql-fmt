@@ -21,6 +21,9 @@ impl Visitor {
         //      [from_clause]
         //      [where_clause]
         //      [_combining_query]
+        //      [order_by_clause]
+        //      [limit_clause]
+        //      [offset_clause]
 
         let mut statement = Statement::new();
 
@@ -108,6 +111,10 @@ impl Visitor {
                 "offset_clause" => {
                     let clause = self.visit_offset_clause(cursor, src)?;
                     statement.add_clause(clause);
+                }
+                "for_update_clause" => {
+                    let clause = self.visit_for_update_clause(cursor, src)?;
+                    statement.add_clauses(clause);
                 }
                 COMMENT => {
                     statement.add_comment_to_child(Comment::new(cursor.node(), src))?;
