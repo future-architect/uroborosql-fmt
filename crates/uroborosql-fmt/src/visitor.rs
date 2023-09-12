@@ -179,6 +179,66 @@ impl Visitor {
         Ok(Body::SepLines(separated_lines))
     }
 
+    /// identifierが,で区切られた構造をBodyにして返す
+    /// 呼び出し後、cursorは区切られた構造の次の要素を指す
+    fn visit_comma_sep_identifier(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Body, UroboroSQLFmtError> {
+        let mut separated_lines = SeparatedLines::new();
+
+        // commaSep(identifier)
+        let identifier = self.visit_expr(cursor, src)?;
+        separated_lines.add_expr(identifier.to_aligned(), None, vec![]);
+
+        // ("," identifier)*
+        while cursor.goto_next_sibling() {
+            // cursor -> , または comment または identifier
+            match cursor.node().kind() {
+                // tree-sitter-sqlにより、構文エラーは検出されるはずなので、"," は読み飛ばしてもよい。
+                "," => {}
+                COMMENT => {
+                    let comment_node = cursor.node();
+                    let comment = Comment::new(comment_node, src);
+
+                    // tree-sitter-sqlの性質上、コメントが最後の子供になることはないはずなので、panicしない。
+                    let sibling_node = cursor.node().next_sibling().unwrap();
+
+                    // コメントノードがバインドパラメータであるかを判定し、バインドパラメータならば式として処理し、
+                    // そうでなければ単にコメントとして処理する。
+                    if comment.is_block_comment()
+                        && comment
+                            .loc()
+                            .is_next_to(&Location::new(sibling_node.range()))
+                    {
+                        let identifier = self.visit_expr(cursor, src)?;
+                        separated_lines.add_expr(
+                            identifier.to_aligned(),
+                            Some(COMMA.to_string()),
+                            vec![],
+                        );
+                    } else {
+                        separated_lines.add_comment_to_child(comment)?;
+                    }
+                }
+                "identifier" => {
+                    let identifier = self.visit_expr(cursor, src)?;
+                    separated_lines.add_expr(
+                        identifier.to_aligned(),
+                        Some(COMMA.to_string()),
+                        vec![],
+                    );
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+
+        Ok(Body::SepLines(separated_lines))
+    }
+
     /// カーソルが指すノードがSQL_IDであれば、clauseに追加する
     /// もし (_SQL_ID_が存在していない) && (_SQL_ID_がまだ出現していない) && (_SQL_ID_の補完がオン)
     /// の場合は補完する

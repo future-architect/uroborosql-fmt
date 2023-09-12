@@ -37,6 +37,13 @@ impl Statement {
         self.clauses.push(clause);
     }
 
+    // 文に複数の句を追加する
+    pub(crate) fn add_clauses(&mut self, clauses: Vec<Clause>) {
+        for clause in clauses {
+            self.add_clause(clause);
+        }
+    }
+
     pub(crate) fn add_comment_to_child(
         &mut self,
         comment: Comment,
