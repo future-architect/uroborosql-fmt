@@ -10,6 +10,7 @@ mod in_expr;
 mod is;
 mod paren;
 mod subquery;
+mod type_cast;
 
 use tree_sitter::TreeCursor;
 
@@ -126,7 +127,7 @@ impl Visitor {
             }
             "is_expression" => Expr::Aligned(Box::new(self.visit_is_expr(cursor, src)?)),
             "in_expression" => Expr::Aligned(Box::new(self.visit_in_expr(cursor, src)?)),
-            "type_cast" => Expr::FunctionCall(Box::new(self.visit_type_cast(cursor, src)?)),
+            "type_cast" => self.visit_type_cast(cursor, src)?,
             "exists_subquery_expression" => {
                 Expr::ExistsSubquery(Box::new(self.visit_exists_subquery(cursor, src)?))
             }
