@@ -1,4 +1,5 @@
 pub(crate) mod insert;
+pub(crate) mod select;
 pub(crate) mod separeted_lines;
 pub(crate) mod single_line;
 pub(crate) mod with;
@@ -6,7 +7,8 @@ pub(crate) mod with;
 use crate::error::UroboroSQLFmtError;
 
 use self::{
-    insert::InsertBody, separeted_lines::SeparatedLines, single_line::SingleLine, with::WithBody,
+    insert::InsertBody, select::SelectBody, separeted_lines::SeparatedLines,
+    single_line::SingleLine, with::WithBody,
 };
 
 use super::{Comment, Expr, Location};
@@ -18,6 +20,7 @@ use super::{Comment, Expr, Location};
 pub(crate) enum Body {
     SepLines(SeparatedLines),
     Insert(Box<InsertBody>),
+    Select(Box<SelectBody>),
     With(Box<WithBody>),
     /// Clause と Expr を単一行で描画する際の Body
     SingleLine(Box<SingleLine>),
@@ -51,6 +54,7 @@ impl Body {
             Body::Insert(insert) => Some(insert.loc()),
             Body::With(with) => with.loc(),
             Body::SingleLine(expr_body) => Some(expr_body.loc()),
+            Body::Select(select) => select.loc(),
         }
     }
 
@@ -60,6 +64,7 @@ impl Body {
             Body::Insert(insert) => insert.render(depth),
             Body::With(with) => with.render(depth),
             Body::SingleLine(single_line) => single_line.render(depth),
+            Body::Select(select) => select.render(depth),
         }
     }
 
@@ -72,6 +77,7 @@ impl Body {
             Body::Insert(insert) => insert.add_comment_to_child(comment)?,
             Body::With(with) => with.add_comment_to_child(comment)?,
             Body::SingleLine(single_line) => single_line.add_comment_to_child(comment)?,
+            Body::Select(select) => select.add_comment_to_child(comment)?,
         }
 
         Ok(())
@@ -84,6 +90,7 @@ impl Body {
             Body::With(_) => false, // WithBodyには必ずwith_contentsが含まれる
             Body::Insert(_) => false, // InsertBodyには必ずtable_nameが含まれる
             Body::SingleLine(_) => false,
+            Body::Select(select) => select.is_empty(),
         }
     }
 
@@ -100,6 +107,7 @@ impl Body {
             Body::Insert(_) => false,
             Body::With(_) => false,
             Body::SingleLine(single_line) => single_line.try_set_head_comment(comment),
+            Body::Select(_) => false,
         }
     }
 }
