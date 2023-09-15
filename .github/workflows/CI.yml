@@ -12,8 +12,6 @@ permissions:
   id-token: write
 'on':
   push:
-    branches:
-      - main
     tags-ignore:
       - '**'
     paths-ignore:
