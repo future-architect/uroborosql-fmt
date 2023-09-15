@@ -136,6 +136,7 @@ pub struct Config {
     #[serde(default = "default_complement_sql_id")]
     pub(crate) complement_sql_id: bool,
     /// `X::type`のキャストを`CAST(X AS type)`に変換する
+    #[serde(default = "default_convert_double_colon_cast")]
     pub(crate) convert_double_colon_cast: bool,
 }
 
