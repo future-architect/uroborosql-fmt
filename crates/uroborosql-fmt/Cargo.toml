@@ -21,4 +21,4 @@ thiserror = "1.0.38"
 tree-sitter = "~0.20.3"
 
 # git config --global core.longpaths true を管理者権限で実行しないといけない
-tree-sitter-sql = { git = "https://gitlab.nasa.future.co.jp/oss-incubate/rust-sql-formatter/tree-sitter-sql" }
+tree-sitter-sql = { git = "https://github.com/future-architect/tree-sitter-sql" }
