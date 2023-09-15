@@ -1,7 +1,7 @@
 use tree_sitter::TreeCursor;
 
 use crate::{
-    cst::*,
+    cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
     visitor::{
         create_clause, ensure_kind,
@@ -19,9 +19,10 @@ impl Visitor {
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
         // SELECT句の定義
-        //    select_clause =
-        //        "SELECT"
-        //        [select_clause_body]
+        //      select_clause =
+        //          SELECT
+        //          [ ALL | DISTINCT [ ON ( expression [, ...] ) ] ] ]
+        //          [ select_clause_body ]
 
         // select_clauseは必ずSELECTを子供に持っているはずである
         cursor.goto_first_child();
@@ -34,11 +35,60 @@ impl Visitor {
         self.consume_or_complement_sql_id(cursor, src, &mut clause);
         self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
+        let mut select_body = SelectBody::new();
+
+        // [ ALL | DISTINCT [ ON ( expression [, ...] ) ] ] ]
+        match cursor.node().kind() {
+            "ALL" => {
+                let all_clause = create_clause(cursor, src, "ALL")?;
+
+                select_body.set_all_distinct(all_clause);
+
+                cursor.goto_next_sibling();
+            }
+            "DISTINCT" => {
+                let mut distinct_clause = create_clause(cursor, src, "DISTINCT")?;
+
+                cursor.goto_next_sibling();
+
+                // ON ( expression [, ...] )
+                if cursor.node().kind() == "ON" {
+                    // DISTINCTにONキーワードを追加
+                    distinct_clause.extend_kw(cursor.node(), src);
+
+                    cursor.goto_next_sibling();
+
+                    // ( expression [, ...] ) をColumnList構造体に格納
+                    let mut column_list = self.visit_column_list(cursor, src)?;
+                    // 改行によるフォーマットを強制
+                    column_list.set_force_multi_line(true);
+
+                    // ColumntListをSeparatedLinesに格納してBody
+                    let mut sep_lines = SeparatedLines::new();
+
+                    sep_lines.add_expr(
+                        Expr::ColumnList(Box::new(column_list)).to_aligned(),
+                        None,
+                        vec![],
+                    );
+
+                    distinct_clause.set_body(Body::SepLines(sep_lines));
+                }
+
+                select_body.set_all_distinct(distinct_clause);
+
+                cursor.goto_next_sibling();
+            }
+            _ => {}
+        }
+
         // cursor -> select_caluse_body
         if cursor.node().kind() == "select_clause_body" {
-            let body = self.visit_select_clause_body(cursor, src)?;
-            clause.set_body(body);
+            let select_clause_body = self.visit_select_clause_body(cursor, src)?;
+            select_body.set_select_clause_body(select_clause_body)
         }
+
+        clause.set_body(Body::Select(Box::new(select_body)));
 
         // cursorをselect_clauseに戻す
         cursor.goto_parent();
