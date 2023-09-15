@@ -35,7 +35,9 @@ jobs:
               yarn build
               strip -x *.node
           - host: windows-latest
-            build: yarn build
+            build: |
+              git config --system core.longpaths true 
+              yarn build
             target: x86_64-pc-windows-msvc
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -57,7 +59,9 @@ jobs:
               yarn build --target aarch64-unknown-linux-gnu &&
               strip *.node
           - host: windows-latest
-            build: yarn build --target aarch64-pc-windows-msvc
+            build: |
+              git config --system core.longpaths true
+              yarn build --target aarch64-pc-windows-msvc
             target: aarch64-pc-windows-msvc
     name: stable - ${{ matrix.settings.target }} - node@18
     runs-on: ${{ matrix.settings.host }}
