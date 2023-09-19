@@ -2,9 +2,6 @@
   "name": "uroborosql-fmt",
   "version": "1.0.0",
   "description": "To make it easy for you to get started with GitLab, here's a list of recommended next steps.",
-  "dependencies": {
-    "monaco-editor": "^0.37.1"
-  },
   "devDependencies": {
     "http-server": "^14.1.1"
   },
