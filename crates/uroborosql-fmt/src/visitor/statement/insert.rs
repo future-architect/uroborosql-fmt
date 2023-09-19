@@ -109,41 +109,60 @@ impl Visitor {
 
         cursor.goto_next_sibling();
 
-        // values句
-        if cursor.node().kind() == "values_clause" {
-            cursor.goto_first_child();
-            ensure_kind(cursor, "VALUES")?;
+        // {VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+        match cursor.node().kind() {
+            "values_clause" => {
+                cursor.goto_first_child();
+                ensure_kind(cursor, "VALUES")?;
 
-            let mut items = vec![];
-            // commaSep1(values_clause_item)
-            while cursor.goto_next_sibling() {
-                match cursor.node().kind() {
-                    "values_clause_item" => {
-                        items.push(self.visit_values_clause_item(cursor, src)?);
-                    }
-                    COMMA => continue,
-                    _ => {
-                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                            "visit_insert_stmt(): unexpected token {}\n{:#?}",
-                            cursor.node().kind(),
-                            cursor.node().range()
-                        )))
+                let mut items = vec![];
+                // commaSep1(values_clause_item)
+                while cursor.goto_next_sibling() {
+                    match cursor.node().kind() {
+                        "values_clause_item" => {
+                            items.push(self.visit_values_clause_item(cursor, src)?);
+                        }
+                        COMMA => continue,
+                        _ => {
+                            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                                "visit_insert_stmt(): unexpected token {}\n{:#?}",
+                                cursor.node().kind(),
+                                cursor.node().range()
+                            )))
+                        }
                     }
                 }
+
+                if items.len() == 1 {
+                    // カラムリストが一つのみであるとき、複数行で描画する
+                    items
+                        .iter_mut()
+                        .for_each(|col_list| col_list.set_force_multi_line(true));
+                }
+                insert_body.set_values_clause(&convert_keyword_case("VALUES"), items);
+
+                cursor.goto_parent();
+                ensure_kind(cursor, "values_clause")?;
+
+                cursor.goto_next_sibling();
             }
+            "select_statement" => {
+                // select文
+                let stmt = self.visit_select_stmt(cursor, src)?;
 
-            if items.len() == 1 {
-                // カラムリストが一つのみであるとき、複数行で描画する
-                items
-                    .iter_mut()
-                    .for_each(|col_list| col_list.set_force_multi_line(true));
+                insert_body.set_query(stmt);
+
+                cursor.goto_next_sibling();
             }
-            insert_body.set_values_clause(&convert_keyword_case("VALUES"), items);
+            "select_subexpression" => {
+                // 括弧付きSELECT
+                let selct_sub = self.visit_select_subexpr(cursor, src)?;
 
-            cursor.goto_parent();
-            ensure_kind(cursor, "values_clause")?;
+                insert_body.set_paren_query(Expr::Sub(Box::new(selct_sub)));
 
-            cursor.goto_next_sibling();
+                cursor.goto_next_sibling();
+            }
+            _ => {}
         }
 
         // on_conflict句
@@ -153,19 +172,9 @@ impl Visitor {
             cursor.goto_next_sibling();
         }
 
-        // InsertBodyに含めるのは、テーブル名、カラム名、VALUES句, ON CONFLICT句である
-        // そのため、ここでstatementに追加する
         clause.set_body(Body::Insert(Box::new(insert_body)));
         statement.add_clause(clause);
 
-        // select文
-        if cursor.node().kind() == "select_statement" {
-            let stmt = self.visit_select_stmt(cursor, src)?;
-            for clause in stmt.get_clauses() {
-                statement.add_clause(clause);
-            }
-            cursor.goto_next_sibling();
-        }
         // returning句
         if cursor.node().kind() == "returning_clause" {
             let returning =

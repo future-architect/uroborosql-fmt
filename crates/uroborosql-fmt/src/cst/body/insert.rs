@@ -1,7 +1,10 @@
 use itertools::{repeat_n, Itertools};
 
 use crate::{
-    cst::{AlignedExpr, Clause, ColumnList, Comment, ConflictTargetColumnList, Location},
+    cst::{
+        AlignedExpr, Clause, ColumnList, Comment, ConflictTargetColumnList, Expr, Location,
+        Statement,
+    },
     error::UroboroSQLFmtError,
 };
 
@@ -218,6 +221,93 @@ impl OnConflict {
     }
 }
 
+/// INSERTにおけるVALUES句を格納
+#[derive(Debug, Clone)]
+pub(crate) struct Values {
+    kw: String,
+    rows: Vec<ColumnList>,
+}
+
+impl Values {
+    fn new(kw: &str, rows: Vec<ColumnList>) -> Values {
+        Values {
+            kw: kw.to_string(),
+            rows,
+        }
+    }
+
+    fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        let mut result = String::new();
+
+        // VALUES句
+        result.push(' ');
+        result.push_str(&self.kw);
+
+        // 要素が一つか二つ以上かでフォーマット方針が異なる
+        let is_one_row = self.rows.len() == 1;
+
+        if !is_one_row {
+            result.push('\n');
+            result.extend(repeat_n('\t', depth));
+        } else {
+            // "VALUES" と "(" の間の空白
+            result.push(' ');
+        }
+
+        let mut separator = String::from('\n');
+        separator.extend(repeat_n('\t', depth - 1));
+        separator.push_str(",\t");
+
+        result.push_str(
+            &self
+                .rows
+                .iter()
+                .filter_map(|cols| cols.render(depth - 1).ok())
+                .join(&separator),
+        );
+        result.push('\n');
+
+        Ok(result)
+    }
+}
+
+/// INSERT句におけるクエリを格納
+#[derive(Debug, Clone)]
+pub(crate) enum Query {
+    Normal(Statement),
+    Paren(Expr),
+}
+
+impl Query {
+    fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        let mut result = String::new();
+        result.push('\n');
+
+        let formatted_query = match self {
+            Query::Normal(normal) => normal.render(depth - 1)?,
+            Query::Paren(paren) => paren.to_aligned().render(depth - 1)?,
+        };
+        result.push_str(&formatted_query);
+
+        Ok(result)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ValuesOrQuery {
+    Values(Values),
+    Query(Query),
+}
+
+impl ValuesOrQuery {
+    fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        match self {
+            ValuesOrQuery::Values(values) => values.render(depth),
+            ValuesOrQuery::Query(query) => query.render(depth),
+        }
+    }
+}
+
 /// INSERT文の本体。
 /// テーブル名、対象のカラム名、VALUES句を含む
 #[derive(Debug, Clone)]
@@ -225,8 +315,7 @@ pub(crate) struct InsertBody {
     loc: Location,
     table_name: AlignedExpr,
     columns: Option<SeparatedLines>,
-    values_kw: Option<String>,
-    values_rows: Vec<ColumnList>,
+    values_or_query: Option<ValuesOrQuery>,
     on_conflict: Option<OnConflict>,
 }
 
@@ -236,8 +325,7 @@ impl InsertBody {
             loc,
             table_name,
             columns: None,
-            values_kw: None,
-            values_rows: vec![],
+            values_or_query: None,
             on_conflict: None,
         }
     }
@@ -253,8 +341,18 @@ impl InsertBody {
 
     /// VALUES句をセットする
     pub(crate) fn set_values_clause(&mut self, kw: &str, body: Vec<ColumnList>) {
-        self.values_kw = Some(kw.to_string());
-        self.values_rows = body;
+        let values = Values::new(kw, body);
+        self.values_or_query = Some(ValuesOrQuery::Values(values));
+    }
+
+    /// SELECT文をセットする
+    pub(crate) fn set_query(&mut self, query: Statement) {
+        self.values_or_query = Some(ValuesOrQuery::Query(Query::Normal(query)))
+    }
+
+    /// 括弧付きSELECTをセットする
+    pub(crate) fn set_paren_query(&mut self, query: Expr) {
+        self.values_or_query = Some(ValuesOrQuery::Query(Query::Paren(query)))
     }
 
     pub(crate) fn set_on_conflict(&mut self, on_conflict: OnConflict) {
@@ -314,38 +412,8 @@ impl InsertBody {
             result.push(')');
         }
 
-        // VALUES句
-        if let Some(kw) = &self.values_kw {
-            result.push(' ');
-            result.push_str(kw);
-
-            // 要素が一つか二つ以上かでフォーマット方針が異なる
-            let is_one_row = self.values_rows.len() == 1;
-
-            if !is_one_row {
-                result.push('\n');
-                result.extend(repeat_n('\t', depth));
-            } else {
-                // "VALUES" と "(" の間の空白
-                result.push(' ');
-            }
-
-            let mut separator = String::from('\n');
-            separator.extend(repeat_n('\t', depth - 1));
-            separator.push_str(",\t");
-
-            result.push_str(
-                &self
-                    .values_rows
-                    .iter()
-                    .filter_map(|cols| cols.render(depth - 1).ok())
-                    .join(&separator),
-            );
-            result.push('\n');
-        } else {
-            // VALUES句があるときは、改行を入れずに`VALUES`キーワードを出力している
-            // そのため、VALUES句がない場合はここで改行
-            result.push('\n');
+        if let Some(values_or_query) = &self.values_or_query {
+            result.push_str(&values_or_query.render(depth)?);
         }
 
         if let Some(oc) = &self.on_conflict {
