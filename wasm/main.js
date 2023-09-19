@@ -67,7 +67,7 @@ function initialize() {
       remove_table_as_keyword: true,
       remove_redundant_nest: true,
       complement_sql_id: true,
-      convert_double_colon_cast: false,
+      convert_double_colon_cast: true,
     };
     const config_str = JSON.stringify(config);
 
