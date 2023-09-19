@@ -8,7 +8,11 @@ let src_editor = null;
 let dst_editor = null;
 
 // monaco editor
-require.config({ paths: { vs: "../node_modules/monaco-editor/min/vs" } });
+require.config({
+  paths: {
+    vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.43.0/min/vs",
+  },
+});
 require(["vs/editor/editor.main"], function () {
   src_editor = monaco.editor.create(document.getElementById("src_editor"), {
     value: sql_value,
