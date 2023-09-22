@@ -13,11 +13,17 @@
       左側にフォーマットしたいSQLソースを入力し「format」ボタンを押すと、
       右側にフォーマット結果が出力されます。
     </p>
-    <p>
-    フォーマット結果は
-    <a href="https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88Oracle%EF%BC%89.html">フューチャー株式会社のSQLコーディング規約</a>
-    に従った形式になっています。
-    </p>
+    <p>サポート</p>
+    <ul>
+      <li><a href="https://www.postgresql.org/">PostgreSQL</a>構文</li>
+      <li>2WaySQL(
+          <a href="https://future-architect.github.io/uroborosql-doc/background/">uroboroSQL</a>,
+          <a href="https://doma.readthedocs.io/en/2.54.0/">Doma 2</a>,
+          <a href="https://github.com/future-architect/go-twowaysql">go-twowaysql</a>
+          )
+      </li>
+      <li><a href="https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html">SQLコーディング規約（PostgreSQL） | Future Enterprise Coding Standards</a> 準拠</li>
+    </ul>
     <div class="options">
       <div>
         <input type="checkbox" id="complement_alias" name="complement_alias">
@@ -69,7 +75,7 @@
       </div>
     </div>
   
-    <script src="../node_modules/monaco-editor/min/vs/loader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.43.0/min/vs/loader.min.js"></script>
     <script src="main.js"></script>
     <script async src=uroborosql-fmt.js></script>
   </body>

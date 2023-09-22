@@ -8,7 +8,11 @@ let src_editor = null;
 let dst_editor = null;
 
 // monaco editor
-require.config({ paths: { vs: "../node_modules/monaco-editor/min/vs" } });
+require.config({
+  paths: {
+    vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.43.0/min/vs",
+  },
+});
 require(["vs/editor/editor.main"], function () {
   src_editor = monaco.editor.create(document.getElementById("src_editor"), {
     value: sql_value,
@@ -57,11 +61,13 @@ function initialize() {
       trim_bind_param: trim_bind_param,
       keyword_case: keyword_case,
       identifier_case: identifier_case,
-      max_char_per_line: -1,
+      max_char_per_line: 50,
       complement_outer_keyword: true,
-      complement_as_keyword: true,
-      reduce_redundant_nest: true,
+      complement_column_as_keyword: true,
+      remove_table_as_keyword: true,
+      remove_redundant_nest: true,
       complement_sql_id: true,
+      convert_double_colon_cast: true,
     };
     const config_str = JSON.stringify(config);
 

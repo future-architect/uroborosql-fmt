@@ -1,0 +1,46 @@
+name: Build Wasm
+on:
+  push:
+    branches: main
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v11
+        with:
+          version: 3.1.35
+
+      - name: Setup cargo
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-emscripten
+
+      - name: Build tree-sitter-sql
+        run: cargo build --package tree-sitter-sql --target wasm32-unknown-emscripten --release
+        env:
+          EMCC_CFLAGS: -O3
+
+      - name: Build
+        run: cargo build --package uroborosql-fmt-wasm --target wasm32-unknown-emscripten --release
+        env:
+          EMCC_CFLAGS: |
+            -O3
+            -o ./wasm/uroborosql-fmt.js
+            -s ALLOW_MEMORY_GROWTH=1
+            -s STACK_SIZE=5MB
+            -s EXPORTED_FUNCTIONS=['_format_sql','_free_format_string']
+            -s EXPORTED_RUNTIME_METHODS=ccall
+
+      - name: Deploy to Github pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./wasm
+          force_orphan: true
