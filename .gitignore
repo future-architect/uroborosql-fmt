@@ -1,2 +1,4 @@
 /target
 /node_modules
+uroborosql-fmt.js
+uroborosql-fmt.wasm
