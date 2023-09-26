@@ -1,30 +1,25 @@
-name: Build Napi
-defaults:
-  run:
-    working-directory: ./crates/uroborosql-fmt-napi
+name: Build and Deploy
 env:
   DEBUG: napi:*
   APP_NAME: uroborosql-fmt-napi
   WORKING_DIR: crates/uroborosql-fmt-napi
-  MACOSX_DEPLOYMENT_TARGET: '10.13'
+  MACOSX_DEPLOYMENT_TARGET: "10.13"
 permissions:
   contents: write
   id-token: write
-'on':
+"on":
   push:
-    branches:
-      - main
-    tags-ignore:
-      - '**'
+    branches: main
     paths-ignore:
-      - '**/*.md'
+      - "**/*.md"
       - LICENSE
-      - '**/*.gitignore'
+      - "**/*.gitignore"
       - .editorconfig
       - docs/**
   pull_request: null
+  workflow_dispatch: null
 jobs:
-  build:
+  build-napi:
     strategy:
       fail-fast: false
       matrix:
@@ -35,8 +30,20 @@ jobs:
               yarn build
               strip -x *.node
           - host: windows-latest
-            build: yarn build
+            build: |
+              git config --system core.longpaths true 
+              yarn build
             target: x86_64-pc-windows-msvc
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            build: |
+              yarn build --target aarch64-apple-darwin
+              strip -x *.node
+          - host: windows-latest
+            build: |
+              git config --system core.longpaths true
+              yarn build --target aarch64-pc-windows-msvc
+            target: aarch64-pc-windows-msvc
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
@@ -44,23 +51,20 @@ jobs:
               set -e &&
               yarn build --target x86_64-unknown-linux-gnu &&
               strip *.node
-          - host: macos-latest
-            target: aarch64-apple-darwin
-            build: |
-              yarn build --target aarch64-apple-darwin
-              strip -x *.node
-          - host: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
-            build: |-
-              set -e &&
-              yarn build --target aarch64-unknown-linux-gnu &&
-              strip *.node
-          - host: windows-latest
-            build: yarn build --target aarch64-pc-windows-msvc
-            target: aarch64-pc-windows-msvc
+          # TODO: support for aarch64-unknown-linux-gnu
+          # - host: ubuntu-latest
+          #   target: aarch64-unknown-linux-gnu
+          #   docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
+          #   build: |-
+          #     set -e &&
+          #     yarn build --target aarch64-unknown-linux-gnu &&
+          #     aarch64-unknown-linux-gnu-strip *.node
+
     name: stable - ${{ matrix.settings.target }} - node@18
     runs-on: ${{ matrix.settings.host }}
+    defaults:
+      run:
+        working-directory: ./crates/uroborosql-fmt-napi
     steps:
       - uses: actions/checkout@v3
       - name: Setup node
@@ -115,7 +119,7 @@ jobs:
         if: ${{ matrix.settings.docker }}
         with:
           image: ${{ matrix.settings.docker }}
-          options: '--user 0:0 -v ${{ github.workspace }}/.cargo-cache/git/db:/usr/local/cargo/git/db -v ${{ github.workspace }}/.cargo/registry/cache:/usr/local/cargo/registry/cache -v ${{ github.workspace }}/.cargo/registry/index:/usr/local/cargo/registry/index -v ${{ github.workspace }}:/build -w /build/${{ env.WORKING_DIR }}'
+          options: "--user 0:0 -v ${{ github.workspace }}/.cargo-cache/git/db:/usr/local/cargo/git/db -v ${{ github.workspace }}/.cargo/registry/cache:/usr/local/cargo/registry/cache -v ${{ github.workspace }}/.cargo/registry/index:/usr/local/cargo/registry/index -v ${{ github.workspace }}:/build -w /build/${{ env.WORKING_DIR }}"
           run: ${{ matrix.settings.build }}
       - name: Build
         run: ${{ matrix.settings.build }}
@@ -127,117 +131,120 @@ jobs:
           name: bindings-${{ matrix.settings.target }}
           path: ${{ env.WORKING_DIR }}/${{ env.APP_NAME }}.*.node
           if-no-files-found: error
-  test-macOS-windows-binding:
-    name: Test bindings on ${{ matrix.settings.target }} - node@${{ matrix.node }}
-    needs:
-      - build
-    strategy:
-      fail-fast: false
-      matrix:
-        settings:
-          - host: macos-latest
-            target: x86_64-apple-darwin
-          - host: windows-latest
-            target: x86_64-pc-windows-msvc
-        node:
-          - '14'
-          - '16'
-          - '18'
-    runs-on: ${{ matrix.settings.host }}
+
+  build-wasm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v3
-      - name: Setup node
-        uses: actions/setup-node@v3
+
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v11
         with:
-          node-version: ${{ matrix.node }}
-          check-latest: true
-          cache: yarn
-          cache-dependency-path: ./${{ env.WORKING_DIR }}
-      - name: Install dependencies
-        run: yarn install
-      - name: Download artifacts
-        uses: actions/download-artifact@v3
+          version: 3.1.35
+
+      - name: Setup cargo
+        uses: dtolnay/rust-toolchain@stable
         with:
-          name: bindings-${{ matrix.settings.target }}
-          path: ./${{ env.WORKING_DIR }}
-      - name: List packages
-        run: ls -R .
-        shell: bash
-      - name: Test bindings
-        run: yarn test
-  test-linux-x64-gnu-binding:
-    name: Test bindings on Linux-x64-gnu - node@${{ matrix.node }}
-    needs:
-      - build
-    strategy:
-      fail-fast: false
-      matrix:
-        node:
-          - '14'
-          - '16'
-          - '18'
+          toolchain: stable
+          targets: wasm32-unknown-emscripten
+
+      - name: Build tree-sitter-sql
+        run: cargo build --package tree-sitter-sql --target wasm32-unknown-emscripten --release
+        env:
+          EMCC_CFLAGS: -O3
+
+      - name: Build
+        run: cargo build --package uroborosql-fmt-wasm --target wasm32-unknown-emscripten --release
+        env:
+          EMCC_CFLAGS: |
+            -O3
+            -o ./wasm/uroborosql-fmt.js
+            -s ALLOW_MEMORY_GROWTH=1
+            -s STACK_SIZE=5MB
+            -s EXPORTED_FUNCTIONS=['_format_sql','_free_format_string']
+            -s EXPORTED_RUNTIME_METHODS=ccall
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: wasm-and-js
+          path: |
+            wasm/uroborosql-fmt.js
+            wasm/uroborosql-fmt.wasm
+          if-no-files-found: error
+
+  deploy-to-gh-pages:
+    if: github.repository == 'future-architect/uroborosql-fmt' &&
+      contains('refs/heads/main', github.ref) && github.event_name == 'push'
+    needs: [build-wasm, build-napi]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Setup node
         uses: actions/setup-node@v3
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 18
           check-latest: true
           cache: yarn
+          cache-dependency-path: ./${{ env.WORKING_DIR }}/yarn.lock
       - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
         run: yarn install
-      - name: Download artifacts
+
+      # *.node のダウンロード
+      # TODO: まとめてダウンロードできないか？
+      - name: Download .node file for aarch64-apple-darwin
+        uses: actions/download-artifact@v3
+        with:
+          name: bindings-aarch64-apple-darwin
+          path: ./${{ env.WORKING_DIR }}
+      - name: Download .node file for x86_64-apple-darwin
+        uses: actions/download-artifact@v3
+        with:
+          name: bindings-x86_64-apple-darwin
+          path: ./${{ env.WORKING_DIR }}
+      - name: Download .node file for aarch64_pc_windows_msvc
+        uses: actions/download-artifact@v3
+        with:
+          name: bindings-aarch64-pc-windows-msvc
+          path: ./${{ env.WORKING_DIR }}
+      - name: Download .node file for x86_64_pc_windows_msvc
+        uses: actions/download-artifact@v3
+        with:
+          name: bindings-x86_64-pc-windows-msvc
+          path: ./${{ env.WORKING_DIR }}
+      - name: Download .node file for x86_64_unknown-linux-gnu
         uses: actions/download-artifact@v3
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: ./${{ env.WORKING_DIR }}
-      - name: List packages
-        run: ls -R .
-        shell: bash
-      - name: Test bindings
-        run: docker run --rm -v $(pwd):/build -w /build/${{ env.WORKING_DIR }} node:${{ matrix.node }}-slim yarn test
 
-  # TODO: publishをどうするか検討
-  # publish:
-  #   name: Publish
-  #   runs-on: ubuntu-latest
-  #   needs:
-  #     - test-macOS-windows-binding
-  #     - test-linux-x64-gnu-binding
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - name: Setup node
-  #       uses: actions/setup-node@v3
-  #       with:
-  #         node-version: 18
-  #         check-latest: true
-  #         cache: yarn
-  #     - name: Install dependencies
-  #       run: yarn install
-  #     - name: Download all artifacts
-  #       uses: actions/download-artifact@v3
-  #       with:
-  #         path: artifacts
-  #     - name: Move artifacts
-  #       run: yarn artifacts
-  #     - name: List packages
-  #       run: ls -R ./npm
-  #       shell: bash
-  #     - name: Publish
-  #       run: |
-  #         npm config set provenance true
-  #         if git log -1 --pretty=%B | grep "^[0-9]\+\.[0-9]\+\.[0-9]\+$";
-  #         then
-  #           echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-  #           npm publish --access public
-  #         elif git log -1 --pretty=%B | grep "^[0-9]\+\.[0-9]\+\.[0-9]\+";
-  #         then
-  #           echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-  #           npm publish --tag next --access public
-  #         else
-  #           echo "Not a release, skipping publish"
-  #         fi
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #         NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Package
+        run: |
+          cd ${{ env.WORKING_DIR }}
+          mkdir -p repo
+          cp index.js repo/index.js
+          cp index.d.ts repo/index.d.ts
+          cp package.json repo/package.json
+          mv *.node repo
+          cd repo
+          npm pack
+          cd ..
+          cd ..
+          cd ..
+          mv ${{ env.WORKING_DIR }}/repo/*.tgz ./wasm
+
+      - name: Download wasm
+        uses: actions/download-artifact@v3
+        with:
+          name: wasm-and-js
+          path: ./wasm
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./wasm
+          force_orphan: true
