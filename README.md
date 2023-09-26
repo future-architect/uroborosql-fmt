@@ -28,7 +28,7 @@ The main features:
  SELECT
  	A	AS	A
  ,	B	AS	B
- ,	C 	AS	C
+ ,	C	AS	C
  ```
 
 - [VSCode extension](https://marketplace.visualstudio.com/items?itemName=Future.uroborosql-fmt) is available.
