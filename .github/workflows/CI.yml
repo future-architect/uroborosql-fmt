@@ -176,6 +176,8 @@ jobs:
           if-no-files-found: error
 
   deploy-to-gh-pages:
+    if: github.repository == 'future-architect/uroborosql-fmt' &&
+      contains('refs/heads/main', github.ref) && github.event_name == 'push'
     needs: [build-wasm, build-napi]
     runs-on: ubuntu-latest
     steps:
