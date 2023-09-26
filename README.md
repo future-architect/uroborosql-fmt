@@ -25,14 +25,14 @@ The main features:
 - **Leading comma style**, not a trailing comma style.
 
 	```sql
-		SELECT
-			A	AS	A
-		,	B	AS	B
-		,	C	AS	C
+	SELECT
+		A	AS	A
+	,	B	AS	B
+	,	C	AS	C
 	```
 
-- [VSCode extension](TODO) is available.
-- You can try the [demo by wasm](TODO).
+- [VSCode extension](https://marketplace.visualstudio.com/items?itemName=Future.uroborosql-fmt) is available.
+- You can try the [demo by wasm](https://future-architect.github.io/uroborosql-fmt/).
 
 ![wasm_demo](images/wasm_demo.gif)
 
