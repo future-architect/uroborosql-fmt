@@ -9,6 +9,7 @@ permissions:
   id-token: write
 "on":
   push:
+    branches: main
     paths-ignore:
       - "**/*.md"
       - LICENSE
@@ -218,6 +219,7 @@ jobs:
           mv *.node repo
           cd repo
           npm pack
+          cd ..
           cd ..
           cd ..
           mv ${{ env.WORKING_DIR }}/repo/*.tgz ./wasm
