@@ -210,17 +210,17 @@ jobs:
           mv *.node repo
           cd repo
           npm pack
-          mv *.tgz ../../public
+          mv *.tgz ../../wasm
 
       - name: Download wasm
         uses: actions/download-artifact@v3
         with:
           name: wasm-and-js
-          path: ./public
+          path: ./wasm
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
+          publish_dir: ./wasm
           force_orphan: true
