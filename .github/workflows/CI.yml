@@ -201,8 +201,8 @@ jobs:
           path: ./${{ env.WORKING_DIR }}
 
       - name: Package
-        working-directory: ${{ env.WORKING_DIR }}
         run: |
+          cd ${{ env.WORKING_DIR }}
           mkdir -p repo
           cp index.js repo/index.js
           cp index.d.ts repo/index.d.ts
@@ -210,7 +210,9 @@ jobs:
           mv *.node repo
           cd repo
           npm pack
-          mv *.tgz ../../wasm
+          cd ..
+          cd ..
+          mv ${{ env.WORKING_DIR }}/repo/*.tgz ./wasm
 
       - name: Download wasm
         uses: actions/download-artifact@v3
