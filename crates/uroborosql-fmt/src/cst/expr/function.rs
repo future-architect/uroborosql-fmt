@@ -1,12 +1,10 @@
-use itertools::repeat_n;
+use itertools::{repeat_n, Itertools};
 
 use crate::{
-    cst::{Clause, Location},
+    cst::{AlignInfo, AlignedExpr, Clause, Comment, Location},
     error::UroboroSQLFmtError,
-    util::{convert_keyword_case, is_line_overflow, tab_size, to_tab_num},
+    util::{convert_keyword_case, is_line_overflow, tab_size, to_tab_num, trim_bind_param},
 };
-
-use super::column_list::ColumnList;
 
 /// FunctionCallがユーザ定義関数か組み込み関数か示すEnum
 #[derive(Debug, Clone)]
@@ -15,11 +13,181 @@ pub(crate) enum FunctionCallKind {
     BuiltIn,
 }
 
+/// 関数呼び出しの引数を表す
+#[derive(Debug, Clone)]
+pub(crate) struct FunctionCallArgs {
+    all_distinct: Option<Clause>,
+    exprs: Vec<AlignedExpr>,
+    order_by: Option<Clause>,
+    loc: Location,
+    /// 複数行で出力するかを指定するフラグ。
+    /// デフォルトでは false (つまり、単一行で出力する) になっている。
+    force_multi_line: bool,
+}
+
+impl FunctionCallArgs {
+    pub(crate) fn new(exprs: Vec<AlignedExpr>, loc: Location) -> FunctionCallArgs {
+        Self {
+            all_distinct: None,
+            exprs,
+            order_by: None,
+            loc,
+            force_multi_line: false,
+        }
+    }
+
+    pub(crate) fn force_multi_line(&self) -> bool {
+        self.force_multi_line
+    }
+
+    pub(crate) fn add_expr(&mut self, cols: AlignedExpr) {
+        self.loc.append(cols.loc());
+        self.exprs.push(cols);
+    }
+
+    pub(crate) fn set_all_distinct(&mut self, all_distinct: Clause) {
+        self.all_distinct = Some(all_distinct)
+    }
+
+    pub(crate) fn set_order_by(&mut self, order_by: Clause) {
+        self.order_by = Some(order_by)
+    }
+
+    pub(crate) fn append_loc(&mut self, loc: Location) {
+        self.loc.append(loc)
+    }
+
+    pub(crate) fn set_trailing_comment(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
+        // exprs は必ず1つ以上要素を持っている
+        let last = self.exprs.last_mut().unwrap();
+        if last.loc().is_same_line(&comment.loc()) {
+            last.set_trailing_comment(comment)
+        } else {
+            Err(UroboroSQLFmtError::IllegalOperation(format!(
+                "set_trailing_comment:{:?} is not trailing comment!",
+                comment
+            )))
+        }
+    }
+
+    pub(crate) fn last_line_len(&self, acc: usize) -> usize {
+        if self.is_multi_line() {
+            ")".len()
+        } else {
+            let mut current_len = acc + "(".len();
+
+            self.exprs.iter().enumerate().for_each(|(i, col)| {
+                current_len += col.last_line_len_from_left(current_len);
+                if i != self.exprs.len() - 1 {
+                    current_len += ", ".len()
+                }
+            });
+            current_len + ")".len()
+        }
+    }
+
+    /// 列リストを複数行で描画するかを指定する。
+    /// true を与えたら必ず複数行で描画され、false を与えたらできるだけ単一行で描画する。
+    pub(crate) fn set_force_multi_line(&mut self, b: bool) {
+        self.force_multi_line = b
+    }
+
+    /// 複数行で描画するかどうかを bool 型の値で取得する。
+    /// 複数行で描画する場合は true を返す。
+    /// 自身の is_multi_line のオプションの値だけでなく、各列が単一行かどうか、末尾コメントを持つかどうかも考慮する。
+    pub(crate) fn is_multi_line(&self) -> bool {
+        self.force_multi_line
+            || self.all_distinct.is_some()
+            || self.order_by.is_some()
+            || self
+                .exprs
+                .iter()
+                .any(|a| a.is_multi_line() || a.has_trailing_comment())
+    }
+
+    /// カラムリストをrenderする。
+    /// 自身の is_multi_line() が true になる場合には複数行で描画し、false になる場合単一行で描画する。
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        // depth は開きかっこを描画する行のインデントの深さ
+        let mut result = String::new();
+
+        if self.is_multi_line() {
+            // 各列を複数行に出力する
+            result.push_str("(\n");
+
+            // ALL/DISTINCT
+            if let Some(all_distinct) = &self.all_distinct {
+                result.push_str(&all_distinct.render(depth + 1)?);
+            }
+
+            // 各引数の描画
+            {
+                // ALL/DISTINCT、ORDER BYがある場合はインデントを1つ深くする
+                let depth = if self.all_distinct.is_some() || self.order_by.is_some() {
+                    depth + 1
+                } else {
+                    depth
+                };
+
+                // 最初の行のインデント
+                result.extend(repeat_n('\t', depth + 1));
+
+                // 各要素間の改行、カンマ、インデント
+                let mut separator = "\n".to_string();
+                separator.extend(repeat_n('\t', depth));
+                separator.push_str(",\t");
+
+                // Vec<AlignedExpr> -> Vec<&AlignedExpr>
+                let aligned_exprs = self.exprs.iter().collect_vec();
+                let align_info = AlignInfo::from(aligned_exprs);
+
+                result.push_str(
+                    &self
+                        .exprs
+                        .iter()
+                        .map(|a| a.render_align(depth + 1, &align_info))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .join(&separator),
+                );
+            }
+
+            // ORDER BY
+            if let Some(order_by) = &self.order_by {
+                result.push('\n');
+                result.push_str(&order_by.render(depth + 1)?);
+            } else {
+                result.push('\n');
+            }
+
+            result.extend(repeat_n('\t', depth));
+            result.push(')');
+        } else {
+            // 単一行で描画する
+            // ALL/DISTINCT、ORDER BYがある場合は複数行で描画するのでこの分岐には到達しない
+            result.push('(');
+            result.push_str(
+                &self
+                    .exprs
+                    .iter()
+                    .filter_map(|e| e.render(depth + 1).ok())
+                    .join(", "),
+            );
+            result.push(')');
+        }
+
+        // 閉じかっこの後の改行は呼び出し元が担当
+        Ok(result)
+    }
+}
+
 /// 関数呼び出しを表す
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionCall {
     name: String,
-    args: ColumnList,
+    args: FunctionCallArgs,
     /// OVER句が持つ句 (PARTITION BY、ORDER BY)
     /// None であるならば OVER句自体がない
     over_window_definition: Option<Vec<Clause>>,
@@ -33,7 +201,7 @@ pub(crate) struct FunctionCall {
 impl FunctionCall {
     pub(crate) fn new(
         name: impl Into<String>,
-        args: ColumnList,
+        args: FunctionCallArgs,
         kind: FunctionCallKind,
         loc: Location,
     ) -> FunctionCall {
