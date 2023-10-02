@@ -3,7 +3,7 @@ use itertools::{repeat_n, Itertools};
 use crate::{
     cst::{AlignInfo, AlignedExpr, Clause, Comment, Location},
     error::UroboroSQLFmtError,
-    util::{convert_keyword_case, is_line_overflow, tab_size, to_tab_num, trim_bind_param},
+    util::{convert_keyword_case, is_line_overflow, tab_size, to_tab_num},
 };
 
 /// FunctionCallがユーザ定義関数か組み込み関数か示すEnum

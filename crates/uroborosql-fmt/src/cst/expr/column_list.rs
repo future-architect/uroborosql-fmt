@@ -31,6 +31,8 @@ impl ColumnList {
     pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }
+
+    #[allow(dead_code)]
     pub(crate) fn force_multi_line(&self) -> bool {
         self.force_multi_line
     }
