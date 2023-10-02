@@ -1,4 +1,4 @@
-use itertools::{repeat_n, Itertools};
+use itertools::repeat_n;
 
 use crate::{
     cst::{
