@@ -6,7 +6,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{ensure_kind, Visitor},
+    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -25,7 +25,8 @@ impl Visitor {
         cursor.goto_next_sibling();
 
         ensure_kind(cursor, "(")?;
-        let args = self.visit_column_list(cursor, src)?;
+
+        let args = self.visit_function_call_args(cursor, src)?;
         cursor.goto_next_sibling();
 
         let mut func_call = FunctionCall::new(
@@ -111,5 +112,71 @@ impl Visitor {
         ensure_kind(cursor, "over_clause")?;
 
         Ok(clauses)
+    }
+
+    /// 関数の引数をFunctionCallArgsで返す
+    /// 引数は "(" [ ALL | DISTINCT ] expression [ , ... ] [ order_by_clause ] ")" という構造になっている
+    pub(crate) fn visit_function_call_args(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<FunctionCallArgs, UroboroSQLFmtError> {
+        let mut function_call_args =
+            FunctionCallArgs::new(vec![], Location::new(cursor.node().range()));
+
+        ensure_kind(cursor, "(")?;
+
+        cursor.goto_next_sibling();
+
+        // 引数が空の場合
+        if cursor.node().kind() == ")" {
+            return Ok(function_call_args);
+        }
+
+        match cursor.node().kind() {
+            "ALL" | "DISTINCT" => {
+                let all_distinct_clause = create_clause(cursor, src, cursor.node().kind())?;
+
+                function_call_args.set_all_distinct(all_distinct_clause);
+
+                cursor.goto_next_sibling();
+            }
+            _ => {}
+        }
+
+        let first_expr = self.visit_expr(cursor, src)?.to_aligned();
+        function_call_args.add_expr(first_expr);
+
+        // [ , ... ] [ order_by_clause ] ")"
+        while cursor.goto_next_sibling() {
+            function_call_args.append_loc(Location::new(cursor.node().range()));
+
+            match cursor.node().kind() {
+                COMMA => {
+                    cursor.goto_next_sibling();
+                    let expr = self.visit_expr(cursor, src)?.to_aligned();
+                    function_call_args.add_expr(expr);
+                }
+                ")" => break,
+                COMMENT => {
+                    // 末尾コメントを想定する
+                    let comment = Comment::new(cursor.node(), src);
+                    function_call_args.set_trailing_comment(comment)?
+                }
+                "order_by_clause" => {
+                    let order_by = self.visit_order_by_clause(cursor, src)?;
+                    function_call_args.set_order_by(order_by);
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                        "visit_function_call_args(): Unexpected node\nnode_kind: {}\n{:#?}",
+                        cursor.node().kind(),
+                        cursor.node().range(),
+                    )));
+                }
+            }
+        }
+
+        Ok(function_call_args)
     }
 }

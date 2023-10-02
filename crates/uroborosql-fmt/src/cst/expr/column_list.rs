@@ -31,6 +31,8 @@ impl ColumnList {
     pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }
+
+    #[allow(dead_code)]
     pub(crate) fn force_multi_line(&self) -> bool {
         self.force_multi_line
     }
@@ -128,7 +130,8 @@ impl ColumnList {
                 &self
                     .cols
                     .iter()
-                    .filter_map(|e| e.render(depth + 1).ok())
+                    .map(|e| e.render(depth + 1))
+                    .collect::<Result<Vec<_>, _>>()?
                     .join(", "),
             );
             result.push(')');

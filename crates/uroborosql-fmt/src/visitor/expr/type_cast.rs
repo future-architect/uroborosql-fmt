@@ -51,7 +51,7 @@ impl Visitor {
             aligned.add_rhs(Some(as_keyword), Expr::Primary(Box::new(type_name)));
             let loc = aligned.loc();
 
-            let args = ColumnList::new(vec![aligned], loc);
+            let args = FunctionCallArgs::new(vec![aligned], loc);
 
             let function =
                 FunctionCall::new(cast_keyword, args, FunctionCallKind::BuiltIn, cast_loc);
@@ -88,7 +88,7 @@ impl Visitor {
 
                 let function = FunctionCall::new(
                     cast_keyword,
-                    ColumnList::new(vec![aligned], expr.loc()),
+                    FunctionCallArgs::new(vec![aligned], expr.loc()),
                     FunctionCallKind::BuiltIn,
                     cast_loc,
                 );

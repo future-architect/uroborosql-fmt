@@ -1,4 +1,4 @@
-use itertools::{repeat_n, Itertools};
+use itertools::repeat_n;
 
 use crate::{
     cst::{
@@ -262,7 +262,8 @@ impl Values {
             &self
                 .rows
                 .iter()
-                .filter_map(|cols| cols.render(depth - 1).ok())
+                .map(|cols| cols.render(depth - 1))
+                .collect::<Result<Vec<_>, _>>()?
                 .join(&separator),
         );
         result.push('\n');
