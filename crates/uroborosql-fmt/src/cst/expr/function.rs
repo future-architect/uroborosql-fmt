@@ -172,7 +172,8 @@ impl FunctionCallArgs {
                 &self
                     .exprs
                     .iter()
-                    .filter_map(|e| e.render(depth + 1).ok())
+                    .map(|e| e.render(depth + 1))
+                    .collect::<Result<Vec<_>, _>>()?
                     .join(", "),
             );
             result.push(')');
