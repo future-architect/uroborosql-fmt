@@ -67,8 +67,7 @@ impl FunctionCallArgs {
             last.set_trailing_comment(comment)
         } else {
             Err(UroboroSQLFmtError::IllegalOperation(format!(
-                "set_trailing_comment:{:?} is not trailing comment!",
-                comment
+                "set_trailing_comment:{comment:?} is not trailing comment!"
             )))
         }
     }

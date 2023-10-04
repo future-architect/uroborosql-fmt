@@ -32,8 +32,7 @@ pub(crate) static RE: Lazy<Re> = Lazy::new(|| Re {
     begin_re: Regex::new(BEGIN_PATTERN).unwrap(),
     branching_keyword_re: Regex::new(
         format!(
-            "({})|({})|({})|({})|({})",
-            IF_PATTERN, ELIF_PATTERN, ELSE_PATTERN, END_PATTERN, BEGIN_PATTERN
+            "({IF_PATTERN})|({ELIF_PATTERN})|({ELSE_PATTERN})|({END_PATTERN})|({BEGIN_PATTERN})"
         )
         .as_str(),
     )

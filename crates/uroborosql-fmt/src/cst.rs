@@ -177,7 +177,7 @@ impl Comment {
                 .unwrap_or(0);
 
             // 開始キーワードを描画して改行
-            result.push_str(&format!("{}\n", start_keyword));
+            result.push_str(&format!("{start_keyword}\n"));
 
             // 各行を描画
             for line in &lines {

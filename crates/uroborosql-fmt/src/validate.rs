@@ -126,7 +126,7 @@ fn compare_tokens(
         } else {
             return Err(UroboroSQLFmtError::Validation {
                 format_result: format_result.to_owned(),
-                error_msg: format!("different kind token: src={:?}, dst={:?}", src_tok, dst_tok),
+                error_msg: format!("different kind token: src={src_tok:?}, dst={dst_tok:?}"),
             });
         }
     }
@@ -153,8 +153,7 @@ fn compare_token_text(
                 Err(UroboroSQLFmtError::Validation {
                     format_result: format_result.to_owned(),
                     error_msg: format!(
-                        r#"hint must start with "/*+" or "--+". src={:?}, dst={:?}"#,
-                        src_tok, dst_tok
+                        r#"hint must start with "/*+" or "--+". src={src_tok:?}, dst={dst_tok:?}"#
                     ),
                 })
             }

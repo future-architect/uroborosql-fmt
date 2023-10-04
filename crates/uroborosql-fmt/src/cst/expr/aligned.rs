@@ -149,8 +149,7 @@ impl AlignedExpr {
         if comment.is_block_comment() {
             // 複数行コメント
             Err(UroboroSQLFmtError::IllegalOperation(format!(
-                "set_trailing_comment:{:?} is not trailing comment!",
-                comment
+                "set_trailing_comment:{comment:?} is not trailing comment!"
             )))
         } else {
             let Comment { text, loc } = comment;
@@ -174,8 +173,7 @@ impl AlignedExpr {
         if comment.is_block_comment() {
             // 複数行コメント
             Err(UroboroSQLFmtError::IllegalOperation(format!(
-                "set_lhs_trailing_comment:{:?} is not trailing comment!",
-                comment
+                "set_lhs_trailing_comment:{comment:?} is not trailing comment!"
             )))
         } else {
             // 行コメント

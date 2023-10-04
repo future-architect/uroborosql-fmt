@@ -12,6 +12,6 @@ pub fn runfmt(input: String, config_path: Option<&str>) -> Result<String> {
 
   match result {
     Ok(res) => Ok(res),
-    Err(e) => Err(Error::new(Status::GenericFailure, format!("{}", e))),
+    Err(e) => Err(Error::new(Status::GenericFailure, format!("{e}"))),
   }
 }

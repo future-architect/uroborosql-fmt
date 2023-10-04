@@ -55,8 +55,7 @@ impl Cte {
         if comment.is_block_comment() {
             // 複数行コメント
             Err(UroboroSQLFmtError::IllegalOperation(format!(
-                "set_trailing_comment:{:?} is not trailing comment!",
-                comment
+                "set_trailing_comment:{comment:?} is not trailing comment!"
             )))
         } else {
             let Comment { text, loc } = comment;
@@ -80,8 +79,7 @@ impl Cte {
         if comment.is_block_comment() {
             // 複数行コメント
             Err(UroboroSQLFmtError::IllegalOperation(format!(
-                "set_name_trailing_comment:{:?} is not trailing comment!",
-                comment
+                "set_name_trailing_comment:{comment:?} is not trailing comment!"
             )))
         } else {
             // 行コメント

@@ -79,7 +79,7 @@ fn test_all_files() -> bool {
         eprintln!("-- test_all_files out --");
         eprintln!("failed files ...");
         failure_results.iter().for_each(|(path, error_msg)| {
-            eprintln!("{}: {}", path, error_msg);
+            eprintln!("{path}: {error_msg}");
         });
         eprintln!("{} files failed", failure_results.len());
         return false;
@@ -165,7 +165,7 @@ fn test_config_file() -> bool {
         eprintln!("-- test_config_file out --");
         eprintln!("failed files ...");
         failure_results.iter().for_each(|(path, error_msg)| {
-            eprintln!("{}: {}", path, error_msg);
+            eprintln!("{path}: {error_msg}");
         });
         eprintln!("{} files failed", failure_results.len());
         return false;
@@ -186,7 +186,7 @@ fn test_entry_with_config(
 
         // dstディレクトリに、対応するディレクトリを生成
         if let Err(e) = create_dir_all(path::Path::new(&directory_path)) {
-            panic!("create_dir: {:?}", e)
+            panic!("create_dir: {e:?}")
         }
 
         let entries = src_path.read_dir().unwrap();

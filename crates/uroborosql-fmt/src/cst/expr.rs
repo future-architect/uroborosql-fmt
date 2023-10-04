@@ -142,16 +142,13 @@ impl Expr {
                     aligned.set_trailing_comment(comment)?;
                 } else {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "add_comment_to_child(): this comment is not trailing comment\nexpr: {:?}comment: {:?}\n",
-                        aligned,
-                        comment
+                        "add_comment_to_child(): this comment is not trailing comment\nexpr: {aligned:?}comment: {comment:?}\n"
                     )));
                 }
             }
             Expr::Primary(primary) => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "add_comment_to_child(): unimplemented for primary\nexpr: {:?}",
-                    primary
+                    "add_comment_to_child(): unimplemented for primary\nexpr: {primary:?}"
                 )));
             }
 
@@ -166,8 +163,7 @@ impl Expr {
 
             Expr::Cond(cond) => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "add_comment_to_child(): unimplemented for conditional_expr\nexpr: {:?}",
-                    cond
+                    "add_comment_to_child(): unimplemented for conditional_expr\nexpr: {cond:?}"
                 )));
             }
             _ => {

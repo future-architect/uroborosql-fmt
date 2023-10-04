@@ -24,7 +24,7 @@ fn main() {
     let result = match format_sql(src.as_ref(), config_path) {
         Ok(res) => res,
         Err(e) => {
-            eprintln!("{}", e);
+            eprintln!("{e}");
             src
         }
     };
@@ -34,6 +34,6 @@ fn main() {
             let mut file = File::create(path).unwrap();
             file.write_all(result.as_bytes()).unwrap();
         }
-        None => println!("{}", result),
+        None => println!("{result}"),
     }
 }
