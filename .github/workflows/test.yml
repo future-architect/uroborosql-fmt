@@ -1,0 +1,35 @@
+name: Test and Check
+env:
+  TEST_FILES_DST_DIR: crates/uroborosql-fmt/testfiles/dst
+on:
+  workflow_call: null
+  workflow_dispatch: null
+jobs:
+  test-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup cargo
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Check error and warning
+        run: |
+          result=$(cargo check --quiet 2>&1)
+          echo ${result}
+          test -z ${result}
+
+      - name: Fmt
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy -- --deny warnings
+
+      - name: Execute test
+        run: cargo test --all
+
+      - name: Check test files diff
+        run: git diff --exit-code -- ${{ env.TEST_FILES_DST_DIR}})
