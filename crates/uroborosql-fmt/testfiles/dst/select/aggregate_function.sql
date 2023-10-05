@@ -1,22 +1,22 @@
-SELECT
-	COUNT(
-		DISTINCT
-			TBL.COL1
+select
+	count(
+		distinct
+			tbl.col1
 	)
 ;
-SELECT
-	COUNT(
-		ALL
-			TBL.COL1
+select
+	count(
+		all
+			tbl.col1
 	)
 ;
-SELECT
-	STRING_AGG(
-		DISTINCT
-			TBL.COLUMN1
+select
+	string_agg(
+		distinct
+			tbl.column1
 		,	','
-		ORDER BY
-			TBL.COLUMN2
-		,	TBL.COLUMN3
+		order by
+			tbl.column2
+		,	tbl.column3
 	)
 ;

@@ -1,44 +1,44 @@
-SELECT
-	CASE
-		WHEN
-			A	=	1
-		THEN
+select
+	case
+		when
+			a	=	1
+		then
 			'one'
-		ELSE
+		else
 			'other'
-	END
-		AS	GRADE
-FROM
-	STUDENT	STD
-WHERE
-	GRADE	BETWEEN		/*start1*/60	AND	/*end1*/100
-AND	GRADE	NOT BETWEEN	/*start2*/70	AND	/*end2*/80
+	end
+		as	grade
+from
+	student	std
+where
+	grade	between		/*start1*/60	and	/*end1*/100
+and	grade	not between	/*start2*/70	and	/*end2*/80
 ;
-UPDATE
-	WEATHER
-SET
-	(TEMP_LO, TEMP_HI, PRCP)	=	(TEMP_LO	+	1, TEMP_LO	+	15, DEFAULT)
-WHERE
-	CITY	=	'San Francisco'
+update
+	weather
+set
+	(temp_lo, temp_hi, prcp)	=	(temp_lo	+	1, temp_lo	+	15, default)
+where
+	city	=	'San Francisco'
 ;
-DELETE
-FROM
-	PRODUCTS
-WHERE
-	OBSOLETION_DATE	=	'today'
-RETURNING
+delete
+from
+	products
+where
+	obsoletion_date	=	'today'
+returning
 	*
 ;
-INSERT
-INTO
-	DISTRIBUTORS
+insert
+into
+	distributors
 (
-	DID
-,	DNAME
-) VALUES (
-	DEFAULT
+	did
+,	dname
+) values (
+	default
 ,	'XYZ Widgets'
 )
-RETURNING
-	DID
+returning
+	did
 ;

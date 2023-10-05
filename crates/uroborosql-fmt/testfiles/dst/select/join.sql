@@ -1,105 +1,105 @@
-SELECT
+select
 	*
-FROM
-	T1
-INNER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+inner join
+	t2
+on
+	t1.num	=	t2.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-LEFT OUTER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+left outer join
+	t2
+on
+	t1.num	=	t2.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-RIGHT OUTER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+right outer join
+	t2
+on
+	t1.num	=	t2.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-FULL OUTER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+full outer join
+	t2
+on
+	t1.num	=	t2.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-INNER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
-INNER JOIN
-	T3
-ON
-	T2.NUM	=	T3.NUM
+from
+	t1
+inner join
+	t2
+on
+	t1.num	=	t2.num
+inner join
+	t3
+on
+	t2.num	=	t3.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-LEFT OUTER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+left outer join
+	t2
+on
+	t1.num	=	t2.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-RIGHT OUTER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+right outer join
+	t2
+on
+	t1.num	=	t2.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-FULL OUTER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+full outer join
+	t2
+on
+	t1.num	=	t2.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-CROSS JOIN
-	T2
+from
+	t1
+cross join
+	t2
 ;
-SELECT
+select
 	*
-FROM
-	T1
-NATURAL INNER JOIN
-	T2
+from
+	t1
+natural inner join
+	t2
 ;
-SELECT
+select
 	*
-FROM
-	T1	-- table 1
-CROSS JOIN
-	T2	-- table 2
+from
+	t1	-- table 1
+cross join
+	t2	-- table 2
 ;
-SELECT
+select
 	*
-FROM
-	T1
-INNER JOIN
-	T2	-- tbl
-ON
-	T1.NUM	=	T2.NUM	-- cond
+from
+	t1
+inner join
+	t2	-- tbl
+on
+	t1.num	=	t2.num	-- cond

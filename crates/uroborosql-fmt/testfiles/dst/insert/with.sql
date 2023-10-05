@@ -1,91 +1,91 @@
-WITH /* _SQL_ID_ */
-	T	-- with句
-	AS	NOT MATERIALIZED	(
+with /* _SQL_ID_ */
+	t	-- with句
+	as	not materialized	(
 		--internal_comment
-		SELECT
+		select
 			*
-		FROM
-			FOO
+		from
+			foo
 	)	-- test
-,	T2	(
-		A	-- カラム1
-	,	B	-- カラム2
-	,	C	-- カラム3
-	,	D	-- カラム4
+,	t2	(
+		a	-- カラム1
+	,	b	-- カラム2
+	,	c	-- カラム3
+	,	d	-- カラム4
 	)	-- with句
-	AS	(
+	as	(
 		--internal_comment
-		UPDATE
-			PRODUCTS
-		SET
-			PRICE	=	PRICE	*	1.10
-		WHERE
-			PRICE	<=	99.99
-		RETURNING
-			NAME	AS	NAME
-		,	PRICE	AS	NEW_PRICE
+		update
+			products
+		set
+			price	=	price	*	1.10
+		where
+			price	<=	99.99
+		returning
+			name	as	name
+		,	price	as	new_price
 	)
-,	T3	AS	MATERIALIZED	(
+,	t3	as	materialized	(
 		--internal_comment
-		DELETE
-		FROM
-			PRODUCTS
-		WHERE
-			OBSOLETION_DATE	=	'today'
-		RETURNING
+		delete
+		from
+			products
+		where
+			obsoletion_date	=	'today'
+		returning
 			*
 	)
-,	T4	(
-		A	-- カラム1
-	,	B	-- カラム2
-	,	C	-- カラム3
-	,	D	-- カラム4
-	)	AS	(
+,	t4	(
+		a	-- カラム1
+	,	b	-- カラム2
+	,	c	-- カラム3
+	,	d	-- カラム4
+	)	as	(
 		--internal_comment
-		INSERT
-		INTO
-			DISTRIBUTORS
+		insert
+		into
+			distributors
 		(
-			DID
-		) VALUES (
-			DEFAULT
+			did
+		) values (
+			default
 		)
-		RETURNING
-			DID
+		returning
+			did
 	)
-INSERT
-INTO
-	TABLE1	-- table1
+insert
+into
+	table1	-- table1
 (
-	COLUMN1	-- col1
-,	COLUMN2	-- col2
-) VALUES (
-	VALUE1
-,	VALUE2
+	column1	-- col1
+,	column2	-- col2
+) values (
+	value1
+,	value2
 )
 ;
-WITH RECURSIVE
-	T4	AS	NOT MATERIALIZED	(
+with recursive
+	t4	as	not materialized	(
 		--internal_comment
-		INSERT
-		INTO
-			DISTRIBUTORS
+		insert
+		into
+			distributors
 		(
-			DID
-		) VALUES (
-			DEFAULT
+			did
+		) values (
+			default
 		)
-		RETURNING
-			DID	-- test
+		returning
+			did	-- test
 	)	-- comment
-INSERT
-INTO
-	TABLE1	-- table1
+insert
+into
+	table1	-- table1
 (
-	COLUMN1	-- col1
-,	COLUMN2	-- col2
-) VALUES (
-	VALUE1
-,	VALUE2
+	column1	-- col1
+,	column2	-- col2
+) values (
+	value1
+,	value2
 )
 ;

@@ -1,10 +1,10 @@
-INSERT
-INTO
-	TABLE1	-- table1
+insert
+into
+	table1	-- table1
 (
-	COLUMN1	-- col1
-,	COLUMN2	-- col2
-) VALUES (
-	VALUE1
-,	VALUE2
+	column1	-- col1
+,	column2	-- col2
+) values (
+	value1
+,	value2
 )

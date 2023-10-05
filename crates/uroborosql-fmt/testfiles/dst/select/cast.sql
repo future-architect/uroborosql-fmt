@@ -1,4 +1,4 @@
-SELECT
-	CAST('2023-01-01'	AS	DATE)
-,	CAST(100	AS	CHAR(3))
-,	CAST((1	+	2)	AS	CHAR(1))
+select
+	cast('2023-01-01'	as	date)
+,	cast(100	as	char(3))
+,	cast((1	+	2)	as	char(1))

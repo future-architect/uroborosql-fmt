@@ -1,7 +1,7 @@
-UPDATE
-	TABLE1	TBL1	-- テーブル1
-SET
-	TBL1.COLUMN2	=	100	-- カラム2
-,	TBL1.COLUMN3	=	100	-- カラム3
-WHERE
-	TBL1.COLUMN1	=	10
+update
+	table1	tbl1	-- テーブル1
+set
+	tbl1.column2	=	100	-- カラム2
+,	tbl1.column3	=	100	-- カラム3
+where
+	tbl1.column1	=	10

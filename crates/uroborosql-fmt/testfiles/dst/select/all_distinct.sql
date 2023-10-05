@@ -1,20 +1,20 @@
-SELECT
-	DISTINCT ON
+select
+	distinct on
 		(
-			QUANTITY
-		,	ITEMNAME
-		,	AREA
+			quantity
+		,	itemname
+		,	area
 		)
-	ITEMID		AS	ITEMID
-,	ITEMNAME	AS	ITEMNAME
+	itemid		as	itemid
+,	itemname	as	itemname
 ;
-SELECT
-	DISTINCT
-	ITEMID		AS	ITEMID
-,	ITEMNAME	AS	ITEMNAME
+select
+	distinct
+	itemid		as	itemid
+,	itemname	as	itemname
 ;
-SELECT
-	ALL
-	ITEMID		AS	ITEMID
-,	ITEMNAME	AS	ITEMNAME
+select
+	all
+	itemid		as	itemid
+,	itemname	as	itemname
 ;

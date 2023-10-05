@@ -1,5 +1,5 @@
-SELECT
-	CAST(''	AS	JSONB)
-FROM
-	TBL
+select
+	cast(''	as	jsonb)
+from
+	tbl
 ;

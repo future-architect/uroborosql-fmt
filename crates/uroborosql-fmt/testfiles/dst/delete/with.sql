@@ -1,81 +1,81 @@
-WITH /* _SQL_ID_ */
-	T	-- with句
-	AS	NOT MATERIALIZED	(
+with /* _SQL_ID_ */
+	t	-- with句
+	as	not materialized	(
 		--internal_comment
-		SELECT
+		select
 			*
-		FROM
-			FOO
+		from
+			foo
 	)	-- test
-,	T2	(
-		A	-- カラム1
-	,	B	-- カラム2
-	,	C	-- カラム3
-	,	D	-- カラム4
-	)	AS	(
+,	t2	(
+		a	-- カラム1
+	,	b	-- カラム2
+	,	c	-- カラム3
+	,	d	-- カラム4
+	)	as	(
 		--internal_comment
-		UPDATE
-			PRODUCTS
-		SET
-			PRICE	=	PRICE	*	1.10
-		WHERE
-			PRICE	<=	99.99
-		RETURNING
-			NAME	AS	NAME
-		,	PRICE	AS	NEW_PRICE
+		update
+			products
+		set
+			price	=	price	*	1.10
+		where
+			price	<=	99.99
+		returning
+			name	as	name
+		,	price	as	new_price
 	)
-,	T3	(
-		A	-- カラム1
-	,	B	-- カラム2
-	,	C	-- カラム3
-	,	D	-- カラム4
+,	t3	(
+		a	-- カラム1
+	,	b	-- カラム2
+	,	c	-- カラム3
+	,	d	-- カラム4
 	)	-- with句
-	AS	MATERIALIZED	(
+	as	materialized	(
 		--internal_comment
-		DELETE
-		FROM
-			PRODUCTS
-		WHERE
-			OBSOLETION_DATE	=	'today'
-		RETURNING
+		delete
+		from
+			products
+		where
+			obsoletion_date	=	'today'
+		returning
 			*
 	)
-,	T4	AS	(
+,	t4	as	(
 		--internal_comment
-		INSERT
-		INTO
-			DISTRIBUTORS
+		insert
+		into
+			distributors
 		(
-			DID
-		) VALUES (
-			DEFAULT
+			did
+		) values (
+			default
 		)
-		RETURNING
-			DID
+		returning
+			did
 	)
-DELETE
-FROM
-	TABLE1	TBL1	-- テーブル1
-WHERE
-	TBL1.VALUE	=	1
+delete
+from
+	table1	tbl1	-- テーブル1
+where
+	tbl1.value	=	1
 ;
-WITH RECURSIVE
-	T4	AS	NOT MATERIALIZED	(
+with recursive
+	t4	as	not materialized	(
 		--internal_comment
-		INSERT
-		INTO
-			DISTRIBUTORS
+		insert
+		into
+			distributors
 		(
-			DID
-		) VALUES (
-			DEFAULT
+			did
+		) values (
+			default
 		)
-		RETURNING
-			DID	-- test
+		returning
+			did	-- test
 	)	-- comment
-DELETE
-FROM
-	TABLE1	TBL1	-- テーブル1
-WHERE
-	TBL1.VALUE	=	1
+delete
+from
+	table1	tbl1	-- テーブル1
+where
+	tbl1.value	=	1
 ;

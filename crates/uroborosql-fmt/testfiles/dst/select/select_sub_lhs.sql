@@ -1,22 +1,22 @@
-SELECT
-	A	AS	A
+select
+	a	as	a
 ,	(
 		-- comm1
 		/* comm2 */
-		SELECT
-			Z	AS	Z
+		select
+			z	as	z
 		/* z */
-		FROM
-			TAB2
+		from
+			tab2
 		/* comm3*/
 	)
-FROM
-	LONGLONGTABLE	L
+from
+	longlongtable	l
 ,	(
-		SELECT
-			B	AS	B
-		,	C	AS	C
-		FROM
-			TAB1
+		select
+			b	as	b
+		,	c	as	c
+		from
+			tab1
 	)	-- trailing
-					BC
+					bc

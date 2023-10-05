@@ -1,6 +1,6 @@
-SELECT
-	COL1	AS	COL1	-- column 1
-,	COL2	AS	COL2	-- column 2
-FROM
-	TBL1	-- table 1
-,	TBL2	-- table 2
+select
+	col1	as	col1	-- column 1
+,	col2	as	col2	-- column 2
+from
+	tbl1	-- table 1
+,	tbl2	-- table 2

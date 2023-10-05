@@ -1,11 +1,11 @@
-SELECT
+select
 	*
-FROM
-	T
-WHERE
+from
+	t
+where
 	1										=		1
-AND	T.AGE_LOOOOOOOOOOOOOOOOOOOOOOOOOOOOOONG	>		10				-- hoge
-AND	-- fuga
-	T.NAME									LIKE	'%'				-- trailing1
-AND	-- foo
-	T.NAME									LIKE	'%'	ESCAPE	'$'	-- trailing2
+and	t.age_loooooooooooooooooooooooooooooong	>		10				-- hoge
+and	-- fuga
+	t.name									like	'%'				-- trailing1
+and	-- foo
+	t.name									like	'%'	escape	'$'	-- trailing2

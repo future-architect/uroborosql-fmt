@@ -1,74 +1,74 @@
-INSERT
-INTO
-	DISTRIBUTORS	AS	D
+insert
+into
+	distributors	as	d
 (
-	DID
-,	DNAME
-) VALUES (
+	did
+,	dname
+) values (
 	8
 ,	'Anvil Distribution'
 )
-ON
-	CONFLICT	(
-		DID
+on
+	conflict	(
+		did
 	)
-DO
-	UPDATE
-	SET
-		DNAME	=	EXCLUDED.DNAME	||	' (formerly '	||	D.DNAME	||	')'
-	WHERE
-		D.ZIPCODE	!=	'21201'
+do
+	update
+	set
+		dname	=	excluded.dname	||	' (formerly '	||	d.dname	||	')'
+	where
+		d.zipcode	!=	'21201'
 ;
-INSERT
-INTO
-	DISTRIBUTORS
+insert
+into
+	distributors
 (
-	DID
-,	DNAME
-) VALUES (
+	did
+,	dname
+) values (
 	9
 ,	'Antwerp Design'
 )
-ON
-	CONFLICT
-ON
-	CONSTRAINT	DISTRIBUTORS_PKEY
-DO
-	NOTHING
+on
+	conflict
+on
+	constraint	DISTRIBUTORS_PKEY
+do
+	nothing
 ;
-INSERT
-INTO
-	DISTRIBUTORS
+insert
+into
+	distributors
 (
-	DID
-,	DNAME
-) VALUES (
+	did
+,	dname
+) values (
 	9
 ,	'Antwerp Design'
 )
-ON
-	CONFLICT	(
-		DID1
-	,	DID2
-	,	DID3
+on
+	conflict	(
+		did1
+	,	did2
+	,	did3
 	)
-DO
-	NOTHING
+do
+	nothing
 ;
-INSERT
-INTO
-	DISTRIBUTORS
+insert
+into
+	distributors
 (
-	DID
-,	DNAME
-) VALUES (
+	did
+,	dname
+) values (
 	9
 ,	'Antwerp Design'
 )
-ON
-	CONFLICT	(
-		DID1	COLLATE	"x"	INT4_OPS
-	,	DID2	COLLATE	"x"	INT4_OPS
+on
+	conflict	(
+		did1	collate	"x"	int4_ops
+	,	did2	collate	"x"	int4_ops
 	)
-DO
-	NOTHING
+do
+	nothing

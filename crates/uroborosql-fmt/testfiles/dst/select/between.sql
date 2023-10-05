@@ -1,7 +1,7 @@
-SELECT
-	STD.GRADE	AS	GRADE
-FROM
-	STUDENT	STD
-WHERE
-	GRADE	BETWEEN		/*start1*/60	AND	/*end1*/100	-- between
-AND	GRADE	NOT BETWEEN	/*start2*/70	AND	/*end2*/80	-- not between
+select
+	std.grade	as	grade
+from
+	student	std
+where
+	grade	between		/*start1*/60	and	/*end1*/100	-- between
+and	grade	not between	/*start2*/70	and	/*end2*/80	-- not between

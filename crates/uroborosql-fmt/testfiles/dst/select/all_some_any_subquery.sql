@@ -1,45 +1,45 @@
-SELECT
+select
 	*
-FROM
-	STUDENTS
-WHERE
-	STUDENT_ID					<>	ALL	(
-		SELECT
-			STUDENT_ID	AS	STUDENT_ID
-		FROM
-			EXAM_RESULTS
-		WHERE
-			STUDENT_ID	IS	NOT	NULL
+from
+	students
+where
+	student_id					<>	all	(
+		select
+			student_id	as	student_id
+		from
+			exam_results
+		where
+			student_id	is	not	null
 	)
-AND	LONGLONGLONGLONGLONGLONG	=		TEST
+and	longlonglonglonglonglong	=		test
 ;
-SELECT
+select
 	*
-FROM
-	STUDENTS
-WHERE
-	STUDENT_ID					!=	SOME	(
-		SELECT
-			STUDENT_ID	AS	STUDENT_ID
-		FROM
-			EXAM_RESULTS
-		WHERE
-			STUDENT_ID	IS	NOT	NULL
+from
+	students
+where
+	student_id					!=	some	(
+		select
+			student_id	as	student_id
+		from
+			exam_results
+		where
+			student_id	is	not	null
 	)
-AND	LONGLONGLONGLONGLONGLONG	=		TEST
+and	longlonglonglonglonglong	=		test
 ;
-SELECT
+select
 	*
-FROM
-	STUDENTS
-WHERE
-	STUDENT_ID					=	ANY	(
-		SELECT
-			STUDENT_ID	AS	STUDENT_ID
-		FROM
-			EXAM_RESULTS
-		WHERE
-			STUDENT_ID	IS	NOT	NULL
+from
+	students
+where
+	student_id					=	any	(
+		select
+			student_id	as	student_id
+		from
+			exam_results
+		where
+			student_id	is	not	null
 	)
-AND	LONGLONGLONGLONGLONGLONG	=		TEST
+and	longlonglonglonglonglong	=		test
 ;

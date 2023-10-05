@@ -1,6 +1,6 @@
-SELECT
-	A	AS	A
-FROM
-	T
-WHERE
-	T.N	=	1
+select
+	a	as	a
+from
+	t
+where
+	t.n	=	1

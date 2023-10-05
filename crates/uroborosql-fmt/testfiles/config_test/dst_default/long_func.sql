@@ -1,39 +1,39 @@
-SELECT
-	NORMAL_FUNC(COL1	+	COL2, PARAM2)
+select
+	normal_func(col1	+	col2, param2)
 ;
-SELECT
-	MANY_ARGS_FUNC(PARAM1, PARAM2, PARAM3, PARAM4)
+select
+	many_args_func(param1, param2, param3, param4)
 ;
-SELECT
-	LONG_ARGS_FUNC(
-		COL1	+	LONGLONGLONGLONGLONGLONGLONG
-	,	PARAM2
+select
+	long_args_func(
+		col1	+	longlonglonglonglonglonglong
+	,	param2
 	)
 ;
-SELECT
-	LONGLONGLONGLONGLONGLONGLONGLONGLONGLONGLONGLONG_FUNC(
-		PARAM1
-	,	PARAM2
-	,	PARAM3
+select
+	longlonglonglonglonglonglonglonglonglonglonglong_func(
+		param1
+	,	param2
+	,	param3
 	)
 ;
-SELECT
-	FUNC1(
-		CASE
-			WHEN
-				Z	=	1
-			THEN
-				FUNC3(PARAM1, PARAM2, PARAM3, PARAM4, PARAM5)
-			ELSE
-				FUNC2(
-					CASE
-						WHEN
-							Z	=	1
-						THEN
+select
+	func1(
+		case
+			when
+				z	=	1
+			then
+				func3(param1, param2, param3, param4, param5)
+			else
+				func2(
+					case
+						when
+							z	=	1
+						then
 							'ONE'
-						ELSE
-							FUNC3(PARAM1, PARAM2, PARAM3, PARAM4, PARAM5)
-					END
+						else
+							func3(param1, param2, param3, param4, param5)
+					end
 				)
-		END
+		end
 	)

@@ -1,13 +1,13 @@
-INSERT
-INTO
-	DISTRIBUTORS
+insert
+into
+	distributors
 (
-	DID
-,	DNAME
-) VALUES (
-	DEFAULT
+	did
+,	dname
+) values (
+	default
 ,	'XYZ Widgets'
 )
-RETURNING
-	DID
+returning
+	did
 ;

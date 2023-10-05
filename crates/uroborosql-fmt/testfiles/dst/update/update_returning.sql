@@ -1,10 +1,10 @@
-UPDATE
-	PRODUCTS
-SET
-	PRICE	=	PRICE	*	1.10
-WHERE
-	PRICE	<=	99.99
-RETURNING
-	NAME
-,	PRICE	AS	NEW_PRICE
+update
+	products
+set
+	price	=	price	*	1.10
+where
+	price	<=	99.99
+returning
+	name
+,	price	as	new_price
 ;

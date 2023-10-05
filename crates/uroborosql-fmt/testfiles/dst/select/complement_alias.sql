@@ -1,8 +1,8 @@
-SELECT
-	TBL.A		AS	A	-- aliased
-,	TBL.B		AS	B	-- complement
+select
+	tbl.a		as	a	-- aliased
+,	tbl.b		as	b	-- complement
 ,	100					-- number
 ,	"str"				-- string
-,	COUNT(1)			-- count()
-FROM
-	TBL
+,	count(1)			-- count()
+from
+	tbl

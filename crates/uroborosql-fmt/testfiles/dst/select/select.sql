@@ -1,4 +1,4 @@
-SELECT
-	A	AS	A
-,	B	AS	B
-,	C	AS	C
+select
+	a	as	a
+,	b	as	b
+,	c	as	c

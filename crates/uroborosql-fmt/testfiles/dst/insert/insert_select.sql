@@ -1,35 +1,35 @@
-INSERT
-INTO
-	STAFFLIST
+insert
+into
+	stafflist
 (
-	NAME
-,	ADDRESS
-,	STAFF_CLS
+	name
+,	address
+,	staff_cls
 )
-SELECT
-	NAME							AS	NAME
-,	ADDRESS							AS	ADDRESS
+select
+	name							as	name
+,	address							as	address
 ,	/*#CLS_STAFF_CLS_NEW_COMER*/'0'
-FROM
-	NEWCOMER
-WHERE
-	FLAG	=	'TRUE'
+from
+	newcomer
+where
+	flag	=	'TRUE'
 ;
-INSERT
-INTO
-	STAFFLIST
+insert
+into
+	stafflist
 (
-	NAME
-,	ADDRESS
-,	STAFF_CLS
+	name
+,	address
+,	staff_cls
 )
 (
-	SELECT
-		NAME							AS	NAME
-	,	ADDRESS							AS	ADDRESS
+	select
+		name							as	name
+	,	address							as	address
 	,	/*#CLS_STAFF_CLS_NEW_COMER*/'0'
-	FROM
-		NEWCOMER
-	WHERE
-		FLAG	=	'TRUE'
+	from
+		newcomer
+	where
+		flag	=	'TRUE'
 );

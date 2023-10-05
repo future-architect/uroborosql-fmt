@@ -1,19 +1,19 @@
-SELECT
-	ID		AS	DATA_ID					-- ID
-,	CODE	AS	DATA_CODE				-- コード
-,	NAME	AS	DATA_NAME				-- 名称
-,	VALUE1	AS	VALUEAAAAAAAAAAAAAAAA
-,	VALUE2	AS	VALUE2					-- 値2
+select
+	id		as	data_id					-- ID
+,	code	as	data_code				-- コード
+,	name	as	data_name				-- 名称
+,	value1	as	valueaaaaaaaaaaaaaaaa
+,	value2	as	value2					-- 値2
 ,	(
-		SELECT
-			VALUE3	AS	VALUE3
-		FROM
-			TABLE2
+		select
+			value3	as	value3
+		from
+			table2
 	)									-- サブクエリ
-FROM
-	TABLE1
-WHERE
-	ID		=	'DUMMY'									-- IDが'DUMMY'
-AND	VAL1	=	1										-- VAL1が1
-AND	CODE	=	42										-- CODEが42
-OR	VALUE2	=	/*LONGLONGLONGLONG_BIND_PARAMETER*/42
+from
+	table1
+where
+	id		=	'DUMMY'									-- IDが'DUMMY'
+and	val1	=	1										-- VAL1が1
+and	code	=	42										-- CODEが42
+or	value2	=	/*LONGLONGLONGLONG_BIND_PARAMETER*/42

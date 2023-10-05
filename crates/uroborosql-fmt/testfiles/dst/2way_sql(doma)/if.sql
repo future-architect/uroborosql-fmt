@@ -1,11 +1,11 @@
-SELECT
+select
 	*
-FROM
-	EMPLOYEE	EMP
-WHERE
-	EMP.BIRTH_DATE	BETWEEN	/*birth_date_from*/'1990-01-01'	AND	/*birth_date_to*/'1999-12-31'
+from
+	employee	emp
+where
+	emp.birth_date	between	/*birth_date_from*/'1990-01-01'	and	/*birth_date_to*/'1999-12-31'
 /*%if SF.isNotEmpty(birth_date_from) and SF.isNotEmpty(birth_date_to)*/
-LIMIT	ALL
-OFFSET	5
+limit	all
+offset	5
 /*%end*/
 ;

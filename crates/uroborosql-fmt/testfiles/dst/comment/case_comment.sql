@@ -1,23 +1,23 @@
-SELECT
-	A	AS	A
-,	CASE
+select
+	a	as	a
+,	case
 		-- case trailing
 		/* case */
-		WHEN
+		when
 		-- cond_1
-			A	=	1	-- a equals 1
-		THEN
+			a	=	1	-- a equals 1
+		then
 		-- cond_1 == true
 			'one'	-- one
-		WHEN
+		when
 		-- cond_2
-			A	=	2	-- a equals 2
-		THEN
+			a	=	2	-- a equals 2
+		then
 		-- cond_2 == true
 			'two'	-- two
-		ELSE
+		else
 		-- forall i: cond_i == false
 			'other'	-- other
-	END
-FROM
-	TEST	-- test table
+	end
+from
+	test	-- test table

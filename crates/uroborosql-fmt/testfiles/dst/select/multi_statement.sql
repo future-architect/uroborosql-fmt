@@ -1,11 +1,11 @@
 -- セミコロンあり
-SELECT
-	A	AS	A
-FROM
-	TBL1
+select
+	a	as	a
+from
+	tbl1
 ;
 -- セミコロンなし
-SELECT
-	B	AS	B
-FROM
-	TBL2
+select
+	b	as	b
+from
+	tbl2

@@ -1,7 +1,7 @@
-SELECT
-	A				AS	A
-,	/*param*/'1'	AS	B
-FROM
-	T
-WHERE
-	T.A	=	/*var*/1
+select
+	a				as	a
+,	/*param*/'1'	as	b
+from
+	t
+where
+	t.a	=	/*var*/1

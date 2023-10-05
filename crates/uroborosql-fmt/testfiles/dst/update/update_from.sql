@@ -1,11 +1,11 @@
-UPDATE
-	TABLE1	TBL1	-- テーブル1
-SET
-	TBL1.COLUMN2	=	TBL2.COLUMNX	-- カラム2
-,	TBL1.COLUMN3	=	100				-- カラム3
+update
+	table1	tbl1	-- テーブル1
+set
+	tbl1.column2	=	tbl2.columnx	-- カラム2
+,	tbl1.column3	=	100				-- カラム3
 -- コメント
-FROM
-	TABLE2	TBL2	-- テーブル2
-WHERE
-	TBL1.COLUMN1	=	10
-AND	TBL1.COLUMN4	=	TBL2.COLUMNY
+from
+	table2	tbl2	-- テーブル2
+where
+	tbl1.column1	=	10
+and	tbl1.column4	=	tbl2.columny

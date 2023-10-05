@@ -1,14 +1,14 @@
-SELECT
+select
 	*
-FROM
-	DEPARTMENT
-WHERE
-	EXISTS(
-		SELECT
-			DEPARTMENT_ID	AS	DEPARTMENT_ID
-		FROM
-			USER
-		WHERE
-			ADDRESS	=	'TOKYO'
+from
+	department
+where
+	exists(
+		select
+			department_id	as	department_id
+		from
+			user
+		where
+			address	=	'TOKYO'
 	)
-AND	TEST	=	TEST
+and	test	=	test
