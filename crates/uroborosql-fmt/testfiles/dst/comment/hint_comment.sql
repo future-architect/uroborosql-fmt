@@ -1,13 +1,13 @@
-SELECT
+select
 /*+
     FULL(c) FULL(b) FULL(a) LEADING(a b c) USE_HASH(b c)
 */
 	*
-FROM
-	DEPARTMENTS	A
-,	EMPLOYEES	B
-,	LOCATIONS	C
-WHERE
-	A.MANAGER_ID	=	B.MANAGER_ID
-AND	A.LOCATION_ID	=	C.LOCATION_ID
+from
+	departments	a
+,	employees	b
+,	locations	c
+where
+	a.manager_id	=	b.manager_id
+and	a.location_id	=	c.location_id
 ;

@@ -1,23 +1,23 @@
-SELECT
+select
 	*
-FROM
+from
 /*%if hoge*/
-	EMPLOYEE	EMP
+	employee	emp
 /*%elseif huga*/
-	STUDENT	STD
+	student	std
 /*%elseif foo*/
-	TEACHER	TCR
+	teacher	tcr
 /*%else*/
-	PEOPLE	PPL
+	people	ppl
 /*%end*/
-WHERE
-	EMP.BIRTH_DATE	BETWEEN	/*birth_date_from*/'1990-01-01'	AND	/*birth_date_to*/'1999-12-31'
+where
+	emp.birth_date	between	/*birth_date_from*/'1990-01-01'	and	/*birth_date_to*/'1999-12-31'
 /*%if SF.isNotEmpty(birth_date_from) and SF.isNotEmpty(birth_date_to)*/
-AND	EMP.BIRTH_DATE	BETWEEN	/*birth_date_from*/'1990-01-01'	AND	/*birth_date_to*/'1999-12-31'
+and	emp.birth_date	between	/*birth_date_from*/'1990-01-01'	and	/*birth_date_to*/'1999-12-31'
 /*%elseif SF.isNotEmpty(birth_date_from)*/
-AND	EMP.BIRTH_DATE	>=		/*birth_date_from*/'1990-01-01'
+and	emp.birth_date	>=		/*birth_date_from*/'1990-01-01'
 /*%else*/
 /*%end*/
-LIMIT	ALL
-OFFSET	5
+limit	all
+offset	5
 ;

@@ -1,42 +1,42 @@
-SELECT
-	A	AS	A
+select
+	a	as	a
 ,	(
-		SELECT
-			Z	AS	Z
-		,	CASE
-				WHEN
-					Z	=	1
-				THEN
+		select
+			z	as	z
+		,	case
+				when
+					z	=	1
+				then
 					'ONE'
-				ELSE
+				else
 					'OTHER'
-			END
-		FROM
-			TAB2
+			end
+		from
+			tab2
 	)
-FROM
-	TAB1
+from
+	tab1
 ;
-SELECT
+select
 	*
-FROM
-	TBL
-WHERE
-	TBL.COL	=
-		CASE
-			WHEN
-				COL	IS	NULL
-			THEN
+from
+	tbl
+where
+	tbl.col	=
+		case
+			when
+				col	is	null
+			then
 				0
-			ELSE
+			else
 				1
-		END
-AND	CASE
-		WHEN
-			COL	IS	NULL
-		THEN
+		end
+and	case
+		when
+			col	is	null
+		then
 			0
-		ELSE
+		else
 			1
-	END
-			>	FUNC(HOGE)
+	end
+			>	func(hoge)

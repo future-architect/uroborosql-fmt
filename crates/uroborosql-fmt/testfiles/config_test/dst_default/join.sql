@@ -1,36 +1,36 @@
-SELECT
+select
 	*
-FROM
-	T1
-INNER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+inner join
+	t2
+on
+	t1.num	=	t2.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-LEFT OUTER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+left outer join
+	t2
+on
+	t1.num	=	t2.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-RIGHT OUTER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+right outer join
+	t2
+on
+	t1.num	=	t2.num
 ;
-SELECT
+select
 	*
-FROM
-	T1
-FULL OUTER JOIN
-	T2
-ON
-	T1.NUM	=	T2.NUM
+from
+	t1
+full outer join
+	t2
+on
+	t1.num	=	t2.num
 ;

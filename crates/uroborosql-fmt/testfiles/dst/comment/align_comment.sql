@@ -1,12 +1,12 @@
-SELECT
-	A		AS	A		-- c
-,	AAAAAAA	AS	AAAAAAA	-- c
+select
+	a		as	a		-- c
+,	aaaaaaa	as	aaaaaaa	-- c
 ;
-SELECT
-	AA	AS	A	-- c
-,	B	AS	B	-- c
+select
+	aa	as	a	-- c
+,	b	as	b	-- c
 ;
-SELECT
-	A			AS	A	-- c
-,	FUNC(B, C)	AS	F	-- c
+select
+	a			as	a	-- c
+,	func(b, c)	as	f	-- c
 ;

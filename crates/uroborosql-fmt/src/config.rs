@@ -74,9 +74,9 @@ pub(crate) enum Case {
 }
 
 impl Default for Case {
-    /// Caseのデフォルト値(upper)
+    /// Caseのデフォルト値(lower)
     fn default() -> Self {
-        Case::Upper
+        Case::Lower
     }
 }
 

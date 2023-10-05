@@ -1,36 +1,36 @@
-SELECT
-	TBL1.COLUMN1	AS	COLUMN1
-FROM
-	TABLE1	TBL1
-ORDER BY
-	TBL1.COLUMN2	DESC
-LIMIT	5
-OFFSET	5
+select
+	tbl1.column1	as	column1
+from
+	table1	tbl1
+order by
+	tbl1.column2	desc
+limit	5
+offset	5
 ;
-SELECT
-	TBL1.COLUMN1	AS	COLUMN1
-FROM
-	TABLE1	TBL1
-ORDER BY
-	TBL1.COLUMN2	DESC
-LIMIT	/*$hoge*/5
-OFFSET	5
+select
+	tbl1.column1	as	column1
+from
+	table1	tbl1
+order by
+	tbl1.column2	desc
+limit	/*$hoge*/5
+offset	5
 ;
-SELECT
-	TBL1.COLUMN1	AS	COLUMN1
-FROM
-	TABLE1	TBL1
-ORDER BY
-	TBL1.COLUMN2	DESC
-LIMIT	ALL
-OFFSET	5
+select
+	tbl1.column1	as	column1
+from
+	table1	tbl1
+order by
+	tbl1.column2	desc
+limit	all
+offset	5
 ;
-SELECT
-	TBL1.COLUMN1	AS	COLUMN1
-FROM
-	TABLE1	TBL1
-ORDER BY
-	TBL1.COLUMN2	DESC
-LIMIT	/*$hoge*/ALL
-OFFSET	5
+select
+	tbl1.column1	as	column1
+from
+	table1	tbl1
+order by
+	tbl1.column2	desc
+limit	/*$hoge*/all
+offset	5
 ;

@@ -1,7 +1,7 @@
-SELECT
-	A	AS	A
-FROM
-	T
-WHERE
-	(T.A	+	2)	=	3
-AND	T.B				=	3
+select
+	a	as	a
+from
+	t
+where
+	(t.a	+	2)	=	3
+and	t.b				=	3

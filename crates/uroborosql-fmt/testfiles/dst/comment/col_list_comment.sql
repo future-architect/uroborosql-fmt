@@ -1,36 +1,36 @@
-SELECT
+select
 	*
-FROM
-	TBL
-WHERE
-	TBL.A	IN	(
+from
+	tbl
+where
+	tbl.a	in	(
 		'AAA'	-- a
 	,	'bbbbb'	-- b
 	,	'c'		-- c
 	)
 ;
-SELECT
+select
 	*
-FROM
-	TBL
-WHERE
-	TBL.AB	IN	(/*var_a*/'A', /*var_b*/'B')
+from
+	tbl
+where
+	tbl.ab	in	(/*var_a*/'A', /*var_b*/'B')
 ;
-SELECT
+select
 	*
-FROM
-	TBL
-WHERE
-	TBL.XY	IN	/*var*/('X', 'Y')
+from
+	tbl
+where
+	tbl.xy	in	/*var*/('X', 'Y')
 ;
-SELECT
+select
 	*
-FROM
-	TBL
-WHERE
-	TBL.XY	IN	(/*var_a*/'A', /*var_b*/'B')	-- ab
-AND	TBL.XY	IN	/*var*/('X', 'Y')				-- xy
-AND	TBL.ST	IN	(
+from
+	tbl
+where
+	tbl.xy	in	(/*var_a*/'A', /*var_b*/'B')	-- ab
+and	tbl.xy	in	/*var*/('X', 'Y')				-- xy
+and	tbl.st	in	(
 		'S'	-- s
 	,	'T'	-- t
 	)											-- st

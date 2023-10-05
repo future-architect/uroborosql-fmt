@@ -1,13 +1,13 @@
-SELECT
-	DEPNAME	AS	DEPNAME
-,	EMPNO	AS	EMPNO
-,	SALARY	AS	SALARY
-,	RANK() OVER(
-		PARTITION BY
-			DEPNAME
-		ORDER BY
-			SALARY	DESC
+select
+	depname	as	depname
+,	empno	as	empno
+,	salary	as	salary
+,	rank() over(
+		partition by
+			depname
+		order by
+			salary	desc
 	)
-FROM
-	EMPSALARY
+from
+	empsalary
 ;

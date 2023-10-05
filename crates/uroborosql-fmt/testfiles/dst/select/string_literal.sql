@@ -1,8 +1,8 @@
-SELECT
-	COL1	AS	COL1
-FROM
-	TAB
-WHERE
-	TAB.COL2	=	"String"
-AND	TAB.COL3	=	'Character'
-AND	TAB.COL4	=	$Tag$Dollar$Tag$
+select
+	col1	as	col1
+from
+	tab
+where
+	tab.col2	=	"String"
+and	tab.col3	=	'Character'
+and	tab.col4	=	$Tag$Dollar$Tag$

@@ -1,28 +1,28 @@
 /* discription */
 -- hoge
-SELECT /* _SQL_ID_ */
+select /* _SQL_ID_ */
 /* select body */
 -- comment
-	STD.ID		AS	ID		-- identifier
-,	STD.GRADE	AS	GRADE
+	std.id		as	id		-- identifier
+,	std.grade	as	grade
 -- single line comment
 /*
     multi lines comment
     hoge hoge fuga
 */
-,	STD.AGE		AS	AGE		-- age
+,	std.age		as	age		-- age
 /* end select */
 -- from clause
-FROM
+from
 /* table lists */
-	STUDENT		STD
-,	PROFESSOR	PROF
-WHERE
+	student		std
+,	professor	prof
+where
 /* conditions */
-	ID		=	5	-- check id
+	id		=	5	-- check id
 /* others */
-AND	AGE		>=	18
+and	age		>=	18
 /* hoge */
 /* huga */
-AND	-- this comment follows "AND"
-	GRADE	>	50
+and	-- this comment follows "AND"
+	grade	>	50

@@ -1,9 +1,9 @@
-INSERT /* _SQL_ID_ */
-INTO
-	TABLE1	AS	TBL1
+insert /* _SQL_ID_ */
+into
+	table1	as	tbl1
 (
-	COL1
-,	COL2
-) VALUES
-	(VAL11, VAL12)
-,	(VAL21, VAL22)
+	col1
+,	col2
+) values
+	(val11, val12)
+,	(val21, val22)

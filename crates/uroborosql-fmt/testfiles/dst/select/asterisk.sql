@@ -1,6 +1,6 @@
-SELECT
+select
 	tab.*					-- asterisk
-,	TAB2.HOGE	AS	HOGE	-- hoge
-FROM
-	TAB
-,	TAB2
+,	tab2.hoge	as	hoge	-- hoge
+from
+	tab
+,	tab2

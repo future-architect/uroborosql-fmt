@@ -1,12 +1,12 @@
-SELECT
-	A	AS	A
-FROM
-	B
+select
+	a	as	a
+from
+	b
 /* select - union */
-UNION
+union
 -- union
 /* union - subselect */
-SELECT
-	C	AS	C
-FROM
-	B
+select
+	c	as	c
+from
+	b

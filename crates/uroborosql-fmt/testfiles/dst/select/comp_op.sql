@@ -1,15 +1,15 @@
-SELECT
-	A	AS	A
-FROM
-	TAB1
-WHERE
-	TAB1.NUM											=		1
-AND	TAB1.NUUUUUUUUUUUUM									=		2
-AND	TAB1.A												=		3
-AND	NOT	(TAB1.B	=	5)
-AND	TAB.A	+	FUNC1(TAB.S, TAB.T)	+	FUNC2(TAB.U)	=		2
-AND	TAB.T												IS		TRUE
-AND	TAB.F												IS		NOT	FALSE
-AND	TAB.N												IS		NULL
-AND	TBL.AB												IN		(/*param_a*/'A', /*param_b*/'B')
-AND	TBL.BC												NOT IN	('D', 'E')
+select
+	a	as	a
+from
+	tab1
+where
+	tab1.num											=		1
+and	tab1.nuuuuuuuuuuuum									=		2
+and	tab1.a												=		3
+and	not	(tab1.b	=	5)
+and	tab.a	+	func1(tab.s, tab.t)	+	func2(tab.u)	=		2
+and	tab.t												is		true
+and	tab.f												is		not	false
+and	tab.n												is		null
+and	tbl.ab												in		(/*param_a*/'A', /*param_b*/'B')
+and	tbl.bc												not in	('D', 'E')

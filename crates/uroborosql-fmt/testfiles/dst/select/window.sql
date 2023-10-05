@@ -1,49 +1,49 @@
-SELECT
-	DEPNAME	AS	DEPNAME
-,	EMPNO	AS	EMPNO
-,	SALARY	AS	SALARY
-,	RANK() OVER(
-		PARTITION BY
-			DEPNAME
-		ORDER BY
-			SALARY	DESC
+select
+	depname	as	depname
+,	empno	as	empno
+,	salary	as	salary
+,	rank() over(
+		partition by
+			depname
+		order by
+			salary	desc
 	)
-FROM
-	EMPSALARY
+from
+	empsalary
 ;
 -- 0 argument over
-SELECT
-	SALARY				AS	SALARY	-- salary
-,	SUM(SALARY) OVER()				-- sum
-FROM
-	EMPSALARY
+select
+	salary				as	salary	-- salary
+,	sum(salary) over()				-- sum
+from
+	empsalary
 ;
 -- frame_clause
-SELECT
-	ORDER_ID	AS	ORDER_ID
-,	ITEM		AS	ITEM
-,	QTY			AS	QTY
-,	SUM(QTY) OVER(
-		ORDER BY
-			ORDER_ID
-		ROWS	BETWEEN	1	PRECEDING	AND	1	FOLLOWING
-	)			AS	RESULT
-FROM
-	TEST_ORDERS
+select
+	order_id	as	order_id
+,	item		as	item
+,	qty			as	qty
+,	sum(qty) over(
+		order by
+			order_id
+		rows	between	1	preceding	and	1	following
+	)			as	result
+from
+	test_orders
 ;
-SELECT
+select
 	*
-,	STRING_AGG(V, ',') OVER(
-		PARTITION BY
-			COLOR
+,	string_agg(v, ',') over(
+		partition by
+			color
 		/* partition by */
-		ORDER BY
-			V
+		order by
+			v
 		/* order by */
-		GROUPS	BETWEEN	UNBOUNDED	PRECEDING	AND	CURRENT	ROW	EXCLUDE	NO	OTHERS
+		groups	between	unbounded	preceding	and	current	row	exclude	no	others
 		/* frame clause with exclusion */
 		/* over clause */
 	)
-FROM
-	T
+from
+	t
 ;

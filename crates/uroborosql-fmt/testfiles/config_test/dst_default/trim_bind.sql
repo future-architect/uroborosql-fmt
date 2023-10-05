@@ -1,6 +1,6 @@
-SELECT
-	IDENTIFIER	AS	IDENTIFIER
-FROM
-	JAPANESE_STUDENT_TABLE
-WHERE
-	SBJ.GRADE	>	/*               grade                 */50
+select
+	identifier	as	identifier
+from
+	japanese_student_table
+where
+	sbj.grade	>	/*               grade                 */50

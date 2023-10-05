@@ -1,8 +1,8 @@
-DELETE
-FROM
-	PRODUCTS
-WHERE
-	OBSOLETION_DATE	=	'today'
-RETURNING
+delete
+from
+	products
+where
+	obsoletion_date	=	'today'
+returning
 	*
 ;

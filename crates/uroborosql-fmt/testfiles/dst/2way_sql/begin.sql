@@ -1,15 +1,15 @@
-SELECT
+select
 	*
-FROM
-	EMPLOYEE	EMP
+from
+	employee	emp
 /*BEGIN*/
-WHERE
-	EMP.FIRST_NAME	=	/*first_name*/'Bob'
+where
+	emp.first_name	=	/*first_name*/'Bob'
 /*IF SF.isNotEmpty(first_name)*/
-AND	EMP.FIRST_NAME	=	/*first_name*/'Bob'
+and	emp.first_name	=	/*first_name*/'Bob'
 /*END*/
 /*IF SF.isNotEmpty(last_name)*/
-AND	EMP.LAST_NAME	=	/*last_name*/'Smith'
+and	emp.last_name	=	/*last_name*/'Smith'
 /*END*/
 /*END*/
 ;

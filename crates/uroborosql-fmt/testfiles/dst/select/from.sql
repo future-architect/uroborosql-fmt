@@ -1,6 +1,6 @@
-SELECT
-	HOGE	AS	HOGE
-,	FUGA	AS	FUGA
-FROM
-	TABLE1
-,	TABLE2
+select
+	hoge	as	hoge
+,	fuga	as	fuga
+from
+	table1
+,	table2

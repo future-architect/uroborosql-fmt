@@ -1,9 +1,9 @@
-SELECT
-	A	AS	A
-,	B	AS	B
-FROM
-	TAB1			T
-,	SOLONGLONGTAB	L
-,	TAB
-WHERE
-	T.A	=	L.B
+select
+	a	as	a
+,	b	as	b
+from
+	tab1			t
+,	solonglongtab	l
+,	tab
+where
+	t.a	=	l.b

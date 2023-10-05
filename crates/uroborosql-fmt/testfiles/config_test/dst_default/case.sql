@@ -1,61 +1,61 @@
-SELECT
-	ID	AS	ID
-,	CASE
-		WHEN
-			GRADE_POINT	>=	80
-		THEN
+select
+	id	as	id
+,	case
+		when
+			grade_point	>=	80
+		then
 			'A'
-		WHEN
-			GRADE_POINT	<	80
-		AND	GRADE_POINT	>=	70
-		THEN
+		when
+			grade_point	<	80
+		and	grade_point	>=	70
+		then
 			'B'
-		WHEN
-			GRADE_POINT	<	70
-		AND	GRADE_POINT	>=	60
-		THEN
+		when
+			grade_point	<	70
+		and	grade_point	>=	60
+		then
 			'C'
-		ELSE
+		else
 			'D'
-	END
-		AS	GRADE
-FROM
-	RISYU
-WHERE
-	SUBJECT_NUMBER	=	'005'
+	end
+		as	grade
+from
+	risyu
+where
+	subject_number	=	'005'
 ;
-SELECT
-	ID	AS	ID
-,	CASE
-		GRADE
-		WHEN
+select
+	id	as	id
+,	case
+		grade
+		when
 			'A'
-		THEN
+		then
 			5
-		WHEN
+		when
 			'B'
-		THEN
+		then
 			4
-		WHEN
+		when
 			'C'
-		THEN
+		then
 			3
-		ELSE
+		else
 			0
-	END
-		AS	P
-FROM
-	RISYU
-WHERE
-	SUBJECT_NUMBER	=	'006'
+	end
+		as	p
+from
+	risyu
+where
+	subject_number	=	'006'
 ;
-SELECT
-	CASE
-		/*param*/A	-- simple case cond
-		WHEN
+select
+	case
+		/*param*/a	-- simple case cond
+		when
 			/*a*/'a'
-		THEN
+		then
 			'A'
-		ELSE
+		else
 			'B'
-	END
+	end

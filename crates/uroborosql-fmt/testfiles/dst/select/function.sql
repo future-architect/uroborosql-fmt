@@ -1,40 +1,40 @@
-SELECT
-	ID			AS	ID
-,	AVG(GRADE)
-FROM
-	STUDENT
-GROUP BY
-	ID
+select
+	id			as	id
+,	avg(grade)
+from
+	student
+group by
+	id
 ;
-SELECT
-	CONCAT_LOWER_OR_UPPER(
+select
+	concat_lower_or_upper(
 		'Hello'	-- hello
 	,	'World'	-- world
-	,	TRUE	-- true
+	,	true	-- true
 	)
 ;
-SELECT
-	FUNC(
-		CASE
-			WHEN
-				FLAG
-			THEN
-				A
-			ELSE
-				B
-		END
-	,	C
+select
+	func(
+		case
+			when
+				flag
+			then
+				a
+			else
+				b
+		end
+	,	c
 	)
 ;
-SELECT
-	CITY			AS	CITY
-,	MAX(TEMP_LO)
-FROM
-	WEATHER
-GROUP BY
-	CITY
-HAVING
-	MAX(TEMP_LO)	<	40
+select
+	city			as	city
+,	max(temp_lo)
+from
+	weather
+group by
+	city
+having
+	max(temp_lo)	<	40
 ;
-SELECT
-	FUNC((A	-	B), C)
+select
+	func((a	-	b), c)

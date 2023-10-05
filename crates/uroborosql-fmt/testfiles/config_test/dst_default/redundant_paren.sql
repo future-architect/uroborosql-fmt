@@ -1,10 +1,10 @@
-SELECT
-	A	AS	A
-FROM
-	B
-WHERE
+select
+	a	as	a
+from
+	b
+where
 	(1	=	1)
-AND	(
-		(A	=	B)
-	OR	(A)			=	(42)
+and	(
+		(a	=	b)
+	or	(a)			=	(42)
 	)

@@ -1,38 +1,38 @@
-SELECT
+select
 	*
-FROM
-	EMPLOYEE
-WHERE
-	ID	=	'1'
-FOR UPDATE
+from
+	employee
+where
+	id	=	'1'
+for update
 ;
-SELECT
+select
 	*
-FROM
-	EMPLOYEE
-WHERE
-	ID	=	'1'
-FOR UPDATE OF
-	TBL
-,	TBL2
+from
+	employee
+where
+	id	=	'1'
+for update of
+	tbl
+,	tbl2
 ;
-SELECT
+select
 	*
-FROM
-	EMPLOYEE
-WHERE
-	ID	=	'1'
-FOR UPDATE
-NOWAIT
+from
+	employee
+where
+	id	=	'1'
+for update
+nowait
 ;
-SELECT
+select
 	*
-FROM
-	EMPLOYEE
-WHERE
-	ID	=	'1'
-FOR UPDATE OF
-	TBL
-,	TBL2
-NOWAIT
+from
+	employee
+where
+	id	=	'1'
+for update of
+	tbl
+,	tbl2
+nowait
 ;

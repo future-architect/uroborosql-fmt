@@ -1,5 +1,5 @@
-DELETE
-FROM
-	TABLE1	TBL1	-- テーブル1
-WHERE
-	TBL1.VALUE	=	1
+delete
+from
+	table1	tbl1	-- テーブル1
+where
+	tbl1.value	=	1

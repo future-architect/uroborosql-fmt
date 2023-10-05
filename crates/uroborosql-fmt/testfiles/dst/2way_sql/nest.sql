@@ -1,28 +1,28 @@
-SELECT
+select
 	*
-FROM
+from
 /*IF test*/
-	EMPLOYEE	EMP1
+	employee	emp1
 /*ELSE*/
-	EMPLOYEE	EMP2
+	employee	emp2
 /*END*/
 /*BEGIN*/
-WHERE
+where
 /*IF test*/
-	EMP.FIRST_NAME	=	/*first_name*/'Bob1'
+	emp.first_name	=	/*first_name*/'Bob1'
 /*IF SF.isNotEmpty(first_name)*/
-AND	EMP.FIRST_NAME	=	/*first_name*/'Bob'
+and	emp.first_name	=	/*first_name*/'Bob'
 /*ELIF SF.isNotEmpty(last_name1)*/
-AND	EMP.LAST_NAME	=	/*last_name*/'Smith1'
+and	emp.last_name	=	/*last_name*/'Smith1'
 /*ELIF SF.isNotEmpty(last_name2)*/
-AND	EMP.LAST_NAME	=	/*last_name*/'Smith2'
+and	emp.last_name	=	/*last_name*/'Smith2'
 /*ELIF SF.isNotEmpty(last_name3)*/
-AND	EMP.LAST_NAME	=	/*last_name*/'Smith3'
+and	emp.last_name	=	/*last_name*/'Smith3'
 /*ELSE*/
-AND	EMP.LAST_NAME	=	/*last_name*/'Smith4'
+and	emp.last_name	=	/*last_name*/'Smith4'
 /*END*/
 /*ELSE*/
-	EMP.LAST_NAME	=	/*last_name*/'Smith4'
+	emp.last_name	=	/*last_name*/'Smith4'
 /*END*/
 /*END*/
 ;
