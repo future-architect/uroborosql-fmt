@@ -119,7 +119,7 @@ impl Visitor {
 
             if let Some(materialized_keyword) = &mut materialized_keyword {
                 // NOTがある場合にしかこの分岐に入らないのでMATERIALIZEDの前に空白を付与して挿入する
-                materialized_keyword.push_str(&format!(" {}", materialized));
+                materialized_keyword.push_str(&format!(" {materialized}"));
             } else {
                 // NOTがない場合
                 materialized_keyword = Some(materialized);

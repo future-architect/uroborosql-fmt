@@ -19,7 +19,10 @@ permissions:
   pull_request: null
   workflow_dispatch: null
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
   build-napi:
+    needs: test
     strategy:
       fail-fast: false
       matrix:
@@ -133,6 +136,7 @@ jobs:
           if-no-files-found: error
 
   build-wasm:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -59,8 +59,7 @@ impl Visitor {
                 column_list.set_head_comment(comment);
             } else {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_in_expr(): unexpected comment\n{:?}",
-                    comment
+                    "visit_in_expr(): unexpected comment\n{comment:?}"
                 )));
             }
         }

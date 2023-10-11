@@ -76,7 +76,7 @@ pub(crate) fn format(src: &str, language: Language) -> Result<String, UroboroSQL
     let stmts = visitor.visit_sql(root_node, src.as_ref())?;
 
     if CONFIG.read().unwrap().debug {
-        eprintln!("{:#?}", stmts);
+        eprintln!("{stmts:#?}");
     }
 
     let result = stmts

@@ -64,7 +64,7 @@ pub(crate) fn format_two_way_sql(
         eprintln!("{}", "-".repeat(100));
 
         for source in formatted_tree.to_vec_string() {
-            eprintln!("{}", source);
+            eprintln!("{source}");
             eprintln!("{}", "-".repeat(100));
         }
     }
