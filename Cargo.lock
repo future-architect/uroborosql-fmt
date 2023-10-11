@@ -324,7 +324,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-sql"
 version = "0.0.2"
-source = "git+https://github.com/future-architect/tree-sitter-sql#14516f801d050599317295d3610cdc48f74749c1"
+source = "git+https://github.com/future-architect/tree-sitter-sql#8e0ba268920ced1de29727533aeab6c22286e773"
 dependencies = [
  "cc",
  "tree-sitter",
