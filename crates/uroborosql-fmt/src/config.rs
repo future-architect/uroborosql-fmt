@@ -65,6 +65,11 @@ fn default_convert_double_colon_cast() -> bool {
     true
 }
 
+/// unify_not_equalのデフォルト値(true)
+fn default_unify_not_equal() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Case {
@@ -138,6 +143,9 @@ pub struct Config {
     /// `X::type`のキャストを`CAST(X AS type)`に変換する
     #[serde(default = "default_convert_double_colon_cast")]
     pub(crate) convert_double_colon_cast: bool,
+    /// not_equalを!=に統一する
+    #[serde(default = "default_unify_not_equal")]
+    pub(crate) unify_not_equal: bool,
 }
 
 impl Config {
@@ -158,6 +166,7 @@ impl Config {
             remove_redundant_nest: default_remove_redundant_nest(),
             complement_sql_id: default_complement_sql_id(),
             convert_double_colon_cast: default_convert_double_colon_cast(),
+            unify_not_equal: default_unify_not_equal(),
         }
     }
 
@@ -201,6 +210,7 @@ pub(crate) fn load_never_complement_settings() {
         remove_table_as_keyword: false,
         remove_redundant_nest: false,
         convert_double_colon_cast: false,
+        unify_not_equal: false,
     };
 
     *CONFIG.write().unwrap() = config;

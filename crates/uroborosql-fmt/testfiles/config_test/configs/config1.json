@@ -11,5 +11,6 @@
   "remove_table_as_keyword": false,
   "remove_redundant_parentheses": true,
   "complement_sql_id": true,
-  "convert_double_colon_cast": true
+  "convert_double_colon_cast": true,
+  "unify_not_equal": true
 }

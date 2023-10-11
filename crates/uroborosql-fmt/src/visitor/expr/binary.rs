@@ -1,6 +1,7 @@
 use tree_sitter::TreeCursor;
 
 use crate::{
+    config::CONFIG,
     cst::*,
     error::UroboroSQLFmtError,
     visitor::{ensure_kind, Visitor},
@@ -27,7 +28,12 @@ impl Visitor {
 
         // 演算子
         let op_node = cursor.node();
-        let op_str = op_node.utf8_text(src.as_ref()).unwrap().to_string();
+        let mut op_str = op_node.utf8_text(src.as_ref()).unwrap().to_string();
+
+        // unify_not_equalがtrueの場合は <> を != に統一する
+        if CONFIG.read().unwrap().unify_not_equal && op_str == "<>" {
+            op_str = "!=".to_string();
+        }
 
         cursor.goto_next_sibling();
         // cursor -> _expression
