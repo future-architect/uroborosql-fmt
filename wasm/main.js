@@ -215,6 +215,9 @@ function initialize() {
 
     const config_str = JSON.stringify(config);
 
+    // 設定をjson形式でローカルストレージに保存
+    localStorage.setItem("config", config_str);
+
     // タイマースタート
     const startTime = performance.now();
 
@@ -240,10 +243,6 @@ function initialize() {
 
     src_editor.updateOptions({ tabSize: tab_size });
     dst_editor.updateOptions({ tabSize: tab_size });
-
-    // 設定をjson形式でローカルストレージに保存
-    const encodedConfig = JSON.stringify(config);
-    localStorage.setItem("config", encodedConfig);
   }
 
   // フォーマットボタンを押したときの処理
