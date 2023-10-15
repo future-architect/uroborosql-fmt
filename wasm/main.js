@@ -45,14 +45,60 @@ function initialize() {
 
     const target = sql_value;
 
+    // tab_size
     const tab_size = parseInt(document.getElementById("tab_size").value);
+
+    // complement_alias
     const complement_alias =
       document.getElementById("complement_alias").checked;
+
+    // trim_bind_param
     const trim_bind_param = document.getElementById("trim_bind_param").checked;
+
+    // keyword_case
     const keyword_case =
       document.getElementById("keyword_case").selectedOptions[0].value;
+
+    // identifier_case
     const identifier_case =
       document.getElementById("identifier_case").selectedOptions[0].value;
+
+    // max_char_per_line
+    const max_char_per_line = parseInt(
+      document.getElementById("max_char_per_line").value
+    );
+
+    // complement_outer_keyword
+    const compement_outer_keyword = document.getElementById(
+      "complement_outer_keyword"
+    ).checked;
+
+    // complement_column_as_keyword
+    const complement_column_as_keyword = document.getElementById(
+      "complement_column_as_keyword"
+    ).checked;
+
+    // remove_table_as_keyword
+    const remove_table_as_keyword = document.getElementById(
+      "remove_table_as_keyword"
+    ).checked;
+
+    // remove_redundant_nest
+    const remove_redundant_nest = document.getElementById(
+      "remove_redundant_nest"
+    ).checked;
+
+    // complement_sql_id
+    const complement_sql_id =
+      document.getElementById("complement_sql_id").checked;
+
+    // convert_double_colon_cast
+    const convert_double_colon_cast = document.getElementById(
+      "convert_double_colon_cast"
+    ).checked;
+
+    // unify_not_equal
+    const unify_not_equal = document.getElementById("unify_not_equal").checked;
 
     const config = {
       debug: false,
@@ -61,14 +107,16 @@ function initialize() {
       trim_bind_param: trim_bind_param,
       keyword_case: keyword_case,
       identifier_case: identifier_case,
-      max_char_per_line: 50,
-      complement_outer_keyword: true,
-      complement_column_as_keyword: true,
-      remove_table_as_keyword: true,
-      remove_redundant_nest: true,
-      complement_sql_id: true,
-      convert_double_colon_cast: true,
+      max_char_per_line: max_char_per_line,
+      complement_outer_keyword: compement_outer_keyword,
+      complement_column_as_keyword: complement_column_as_keyword,
+      remove_table_as_keyword: remove_table_as_keyword,
+      remove_redundant_nest: remove_redundant_nest,
+      complement_sql_id: complement_sql_id,
+      convert_double_colon_cast: convert_double_colon_cast,
+      unify_not_equal: unify_not_equal,
     };
+
     const config_str = JSON.stringify(config);
 
     // タイマースタート
