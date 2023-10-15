@@ -18,16 +18,29 @@ body {
   border: 1px solid gray;
 }
 
+.options {
+  text-indent: 10px;
+}
+
 /* button */
-.button_parent {
+.button_parent_center {
   display: flex;
   align-items: center;
+}
+
+.button_parent {
+  display: flex;
 }
 
 .button {
   height: 40px;
   width: 100px;
   font-size: 20px;
+}
+
+.small_button {
+  font-size: small;
+  text-align: center;
 }
 
 .format_btn {

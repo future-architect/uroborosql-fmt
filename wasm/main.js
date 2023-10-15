@@ -35,10 +35,7 @@ Module = {
   onAborted: abort,
 };
 
-// ローカルストレージから設定を復元
-const storedConfig = localStorage.getItem("config");
-if (storedConfig) {
-  const config = JSON.parse(storedConfig);
+function set_config(config) {
   Object.keys(config).forEach((key) => {
     const element = document.getElementById(key);
 
@@ -61,6 +58,78 @@ if (storedConfig) {
     }
   });
 }
+
+// ローカルストレージから設定を復元
+const storedConfig = localStorage.getItem("config");
+if (storedConfig) {
+  const config = JSON.parse(storedConfig);
+  set_config(config);
+}
+
+function set_default_config() {
+  const dafault_config = {
+    debug: false,
+    tab_size: 4,
+    complement_alias: true,
+    trim_bind_param: false,
+    keyword_case: "lower",
+    identifier_case: "lower",
+    max_char_per_line: 50,
+    complement_outer_keyword: true,
+    complement_column_as_keyword: true,
+    remove_table_as_keyword: true,
+    remove_redundant_nest: true,
+    complement_sql_id: false,
+    convert_double_colon_cast: true,
+    unify_not_equal: true,
+  };
+
+  set_config(dafault_config);
+}
+
+// dafaultボタンを押したときの処理
+const default_button = document.getElementById("default");
+default_button.addEventListener("click", () => set_default_config());
+
+function select_all_config() {
+  const all_selected_config = {
+    complement_alias: true,
+    trim_bind_param: true,
+    complement_outer_keyword: true,
+    complement_column_as_keyword: true,
+    remove_table_as_keyword: true,
+    remove_redundant_nest: true,
+    complement_sql_id: true,
+    convert_double_colon_cast: true,
+    unify_not_equal: true,
+  };
+
+  set_config(all_selected_config);
+}
+
+// select_allボタンを押したときの処理
+const select_all_button = document.getElementById("select_all");
+select_all_button.addEventListener("click", () => select_all_config());
+
+function clear_all_config() {
+  const all_cleared_config = {
+    complement_alias: false,
+    trim_bind_param: false,
+    complement_outer_keyword: false,
+    complement_column_as_keyword: false,
+    remove_table_as_keyword: false,
+    remove_redundant_nest: false,
+    complement_sql_id: false,
+    convert_double_colon_cast: false,
+    unify_not_equal: false,
+  };
+
+  set_config(all_cleared_config);
+}
+
+// clear_allボタンを押したときの処理
+const clear_all_button = document.getElementById("clear_all");
+clear_all_button.addEventListener("click", () => clear_all_config());
 
 // wasmの初期化が終了した際の処理
 function initialize() {
@@ -177,14 +246,17 @@ function initialize() {
     localStorage.setItem("config", encodedConfig);
   }
 
+  // フォーマットボタンを押したときの処理
   const button = document.getElementById("format");
   button.addEventListener("click", (event) => formatSql());
 
+  // コピーボタンを押したときの処理
   document.getElementById("copy").addEventListener("click", (event) => {
     const value = dst_editor.getValue();
     navigator.clipboard.writeText(value).catch((reason) => console.log(reason));
   });
 
+  // Ctrl + Shift + F が押されたときの処理
   addEventListener("keydown", (event) => {
     if (event.ctrlKey && event.shiftKey && event.code == "KeyF") {
       formatSql();
