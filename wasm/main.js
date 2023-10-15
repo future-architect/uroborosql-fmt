@@ -35,6 +35,33 @@ Module = {
   onAborted: abort,
 };
 
+// ローカルストレージから設定を復元
+const storedConfig = localStorage.getItem("config");
+if (storedConfig) {
+  const config = JSON.parse(storedConfig);
+  Object.keys(config).forEach((key) => {
+    const element = document.getElementById(key);
+
+    if (!element) return;
+
+    const value = config[key];
+
+    if (typeof value === "boolean") {
+      element.checked = value;
+    } else if (typeof value === "number") {
+      element.value = value;
+    } else {
+      let options = element.options;
+      for (let i = 0; i < options.length; i++) {
+        if (options[i].value === value) {
+          element.selectedIndex = i;
+          break;
+        }
+      }
+    }
+  });
+}
+
 // wasmの初期化が終了した際の処理
 function initialize() {
   function formatSql() {
@@ -144,6 +171,10 @@ function initialize() {
 
     src_editor.updateOptions({ tabSize: tab_size });
     dst_editor.updateOptions({ tabSize: tab_size });
+
+    // 設定をjson形式でローカルストレージに保存
+    const encodedConfig = JSON.stringify(config);
+    localStorage.setItem("config", encodedConfig);
   }
 
   const button = document.getElementById("format");
