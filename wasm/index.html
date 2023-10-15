@@ -42,100 +42,128 @@
       <!-- clear allボタン -->
       <input type="button" value="clear all" id="clear_all" class="small_button" />
     </div>
-    <div class="options">
-      <!-- complement_alias -->
-      <div>
-        <input type="checkbox" id="complement_alias" name="complement_alias" checked />
-        <label for="complement_alias">カラムのエイリアス名を補完する</label>
-      </div>
-
-      <!-- trim_bind_param -->
-      <div>
-        <input type="checkbox" id="trim_bind_param" name="trim_bind_param" />
-        <label for="trim_bind_param">バインドパラメータの空白をトリムする</label>
-      </div>
-
-      <!-- complement_outer_keyword -->
-      <div>
-        <input type="checkbox" id="complement_outer_keyword" name="complement_outer_keyword" checked />
-        <label for="complement_outer_keyword">省略可能なOUTERを補完する</label>
-      </div>
-
-      <!-- complement_column_as_keyword	 -->
-      <div>
-        <input type="checkbox" id="complement_column_as_keyword" name="complement_column_as_keyword" checked />
-        <label for="complement_column_as_keyword">カラムエイリアスのASを補完する</label>
-      </div>
-
-      <!-- remove_table_as_keyword -->
-      <div>
-        <input type="checkbox" id="remove_table_as_keyword" name="remove_table_as_keyword" checked />
-        <label for="remove_table_as_keyword">テーブルエイリアスのASを除去する</label>
-      </div>
-
-      <!-- remove_redundant_nest -->
-      <div>
-        <input type="checkbox" id="remove_redundant_nest" name="remove_redundant_nest" checked />
-        <label for="remove_redundant_nest">冗長な括弧を削除する</label>
-      </div>
-
-      <!-- complement_sql_id -->
-      <div>
-        <input type="checkbox" id="complement_sql_id" name="complement_sql_id" />
-        <label for="complement_sql_id">SQL_IDを補完する</label>
-      </div>
-
-      <!-- convert_double_colon_cast -->
-      <div>
-        <input type="checkbox" id="convert_double_colon_cast" name="convert_double_colon_cast" checked />
-        <label for="convert_double_colon_cast">X::typeをCAST(X AS type)に変換する</label>
-      </div>
-
-      <!-- unify_not_equal -->
-      <div>
-        <input type="checkbox" id="unify_not_equal" name="unify_not_equal" checked />
-        <label for="unify_not_equal">&lt;&gt;を!=に変換する</label>
-      </div>
-
-      <table>
-        <!-- tab_size -->
-        <tr>
-          <td>タブのサイズ:</td>
-          <td>
-            <input type="number" id="tab_size" name="tab_size" value="4" />
-          </td>
-        </tr>
-        <!-- keyword_case -->
-        <tr>
-          <td>予約語:</td>
-          <td>
-            <select id="keyword_case">
-              <option value="upper">upper</option>
-              <option value="lower" selected>lower</option>
-              <option value="preserve">preserve</option>
-            </select>
-          </td>
-        </tr>
-        <!-- identifier_case -->
-        <tr>
-          <td>テーブル・カラム名:</td>
-          <td>
-            <select id="identifier_case">
-              <option value="upper">upper</option>
-              <option value="lower" selected>lower</option>
-              <option value="preserve">preserve</option>
-            </select>
-          </td>
-        </tr>
-        <!-- max_char_per_line -->
-        <tr>
-          <td>1行の最大文字数:</td>
-          <td>
-            <input type="number" id="max_char_per_line" name="max_char_per_line" value="50" />
-          </td>
-        </tr>
-      </table>
+    <!-- complement_alias -->
+    <div class="option">
+      <input type="checkbox" id="complement_alias" name="complement_alias" checked />
+      <label for="complement_alias">カラムのエイリアス名を補完する</label>
+      <span class="option_balloon">カラムのエイリアスを同じ名前で自動補完する。</br>例: <code>COL1</code> → <code>COL1 AS COL1</code></span>
     </div>
+
+    <!-- trim_bind_param -->
+    <div class="option">
+      <input type="checkbox" id="trim_bind_param" name="trim_bind_param" />
+      <label for="trim_bind_param">バインドパラメータの空白をトリムする</label>
+      <span class="option_balloon">例: <code>/* foo */</code> → <code>/*foo*/</code></span>
+    </div>
+
+    <!-- complement_outer_keyword -->
+    <div class="option">
+      <input type="checkbox" id="complement_outer_keyword" name="complement_outer_keyword" checked />
+      <label for="complement_outer_keyword">省略可能なOUTERを補完する</label>
+      <span class="option_balloon">例: <code>JOIN</code> → <code>LEFT OUTER JOIN</code></span>
+    </div>
+
+    <!-- complement_column_as_keyword	 -->
+    <div class="option">
+      <input type="checkbox" id="complement_column_as_keyword" name="complement_column_as_keyword" checked />
+      <label for="complement_column_as_keyword">カラムエイリアスのASを補完する</label>
+      <span class="option_balloon">例: <code>SELECT COLUMN1 COL1</code> → <code>SELECT COLUMN1 AS COL1</code> </span>
+    </div>
+
+    <!-- remove_table_as_keyword -->
+    <div class="option">
+      <input type="checkbox" id="remove_table_as_keyword" name="remove_table_as_keyword" checked />
+      <label for="remove_table_as_keyword">テーブルエイリアスのASを除去する</label>
+      <span class="option_balloon">例: <code>FROM TABLE1 AS TBL1</code> → <code>FROM TABLE1 TBL1</code></span>
+    </div>
+
+    <!-- remove_redundant_nest -->
+    <div class="option">
+      <input type="checkbox" id="remove_redundant_nest" name="remove_redundant_nest" checked />
+      <label for="remove_redundant_nest">冗長な括弧を削除する</label>
+      <span class="option_balloon">例: <code>(((1 = 1)))</code> → <code>(1 = 1)</code> </span>
+    </div>
+
+    <!-- complement_sql_id -->
+    <div class="option">
+      <input type="checkbox" id="complement_sql_id" name="complement_sql_id" />
+      <label for="complement_sql_id">SQL_IDを補完する</label>
+      <span class="option_balloon">例: <code>SELECT COL1</code> → <code>SELECT /* _SQL_ID_ */ COL1</code></span>
+    </div>
+
+    <!-- convert_double_colon_cast -->
+    <div class="option">
+      <input type="checkbox" id="convert_double_colon_cast" name="convert_double_colon_cast" checked />
+      <label for="convert_double_colon_cast">X::typeをCAST(X AS type)に変換する</label>
+      <span class="option_balloon">例: <code>SELECT ''::JSONB</code> → <code>SELECT CAST('' AS JSONB)</code> </span>
+    </div>
+
+    <!-- unify_not_equal -->
+    <div class="option">
+      <input type="checkbox" id="unify_not_equal" name="unify_not_equal" checked />
+      <label for="unify_not_equal">&lt;&gt;を!=に変換する</label>
+      <span class="option_balloon">例: <code>STUDENT_ID &lt;&gt; 2</code> → <code>STUDENT_ID != 2</code></span>
+    </div>
+
+    <table>
+      <!-- tab_size -->
+      <tr>
+        <td>
+          <div class="option">
+            タブのサイズ:
+            <span class="option_balloon">1つのタブ文字のサイズを指定</span>
+          </div>
+        </td>
+        <td>
+          <input type="number" id="tab_size" name="tab_size" value="4" />
+        </td>
+      </tr>
+      <!-- keyword_case -->
+      <tr>
+        <td>
+          <div class="option">
+            予約語:
+            <span class="option_balloon">lower: 小文字に統一</br>upper: 大文字に統一</br>preserve: 大文字小文字を保持</span>
+          </div>
+        </td>
+        <td>
+          <select id="keyword_case">
+            <option value="upper">upper</option>
+            <option value="lower" selected>lower</option>
+            <option value="preserve">preserve</option>
+          </select>
+        </td>
+      </tr>
+      <!-- identifier_case -->
+      <tr>
+        <td>
+          <div class="option">
+            テーブル・カラム名:
+            <span class="option_balloon">lower: 小文字に統一</br>upper: 大文字に統一</br>preserve: 大文字小文字を保持</span>
+          </div>
+        </td>
+        <td>
+          <select id="identifier_case">
+            <option value="upper">upper</option>
+            <option value="lower" selected>lower</option>
+            <option value="preserve">preserve</option>
+          </select>
+        </td>
+      </tr>
+
+      <!-- max_char_per_line -->
+      <tr>
+        <td>
+          <div class="option">
+            1行の最大文字数:
+            <span class="option_balloon">関数名と引数の合計文字数がこの数値を超える場合は引数が改行して出力される</span>
+          </div>
+        </td>
+        <td>
+          <input type="number" id="max_char_per_line" name="max_char_per_line" value="50" />
+        </td>
+      </tr>
+    </table>
   </details>
 
   <!-- エディタ -->

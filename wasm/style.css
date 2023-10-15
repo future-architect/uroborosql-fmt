@@ -18,10 +18,6 @@ body {
   border: 1px solid gray;
 }
 
-.options {
-  text-indent: 10px;
-}
-
 /* button */
 .button_parent_center {
   display: flex;
@@ -49,6 +45,21 @@ body {
 
 .copy_btn {
   margin-right: auto;
+}
+
+.option:hover .option_balloon {
+  display: inline;
+}
+
+.option_balloon {
+  display: none;
+  position: absolute;
+  left: 300px;
+  padding: 16px;
+  border-radius: 5px;
+  background-color: gray;
+  color: white;
+  z-index: 10;
 }
 
 .format_btn:hover .format_balloon {
