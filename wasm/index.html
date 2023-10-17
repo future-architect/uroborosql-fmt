@@ -59,7 +59,7 @@
     <!-- complement_outer_keyword -->
     <div class="option">
       <input type="checkbox" id="complement_outer_keyword" name="complement_outer_keyword" checked />
-      <label for="complement_outer_keyword">省略可能なOUTERを補完する</label>
+      <label for="complement_outer_keyword">RIGHT/LEFT JOINのOUTERを補完する</label>
       <span class="option_balloon">例: <code>JOIN</code> → <code>LEFT OUTER JOIN</code></span>
     </div>
 
@@ -87,14 +87,15 @@
     <!-- complement_sql_id -->
     <div class="option">
       <input type="checkbox" id="complement_sql_id" name="complement_sql_id" />
-      <label for="complement_sql_id">SQL_IDを補完する</label>
+      <label for="complement_sql_id"><a
+          href="https://palette-doc.rtfa.as/coding-standards/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88uroboroSQL%EF%BC%89.html#sql-%E8%AD%98%E5%88%A5%E5%AD%90">SQL_ID</a>を補完する</label>
       <span class="option_balloon">例: <code>SELECT COL1</code> → <code>SELECT /* _SQL_ID_ */ COL1</code></span>
     </div>
 
     <!-- convert_double_colon_cast -->
     <div class="option">
       <input type="checkbox" id="convert_double_colon_cast" name="convert_double_colon_cast" checked />
-      <label for="convert_double_colon_cast">X::typeをCAST(X AS type)に変換する</label>
+      <label for="convert_double_colon_cast">COL1::typeをCAST(COL1 AS type)に変換する</label>
       <span class="option_balloon">例: <code>SELECT ''::JSONB</code> → <code>SELECT CAST('' AS JSONB)</code> </span>
     </div>
 
