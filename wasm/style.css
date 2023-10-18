@@ -1,50 +1,74 @@
 body {
-    font-size: small
+  font-size: small;
 }
 
 /* options */
 #tab_size {
-    width: 68px
+  width: 68px;
 }
 
 /* editor */
 .editor_parent {
-    display: flex;
+  display: flex;
 }
 
 .editor {
-    height: 360px;
-    width: 50%;
-    border: 1px solid gray
+  height: 360px;
+  width: 50%;
+  border: 1px solid gray;
 }
 
 /* button */
+.button_parent_center {
+  display: flex;
+  align-items: center;
+}
+
 .button_parent {
-    display: flex;
-    align-items: center;
+  display: flex;
 }
 
 .button {
-    height: 40px;
-    width: 100px;
-    font-size: 20px;
+  height: 40px;
+  width: 100px;
+  font-size: 20px;
+}
+
+.small_button {
+  font-size: small;
+  text-align: center;
 }
 
 .format_btn {
-    margin-left: auto;
+  margin-left: auto;
 }
 
 .copy_btn {
-    margin-right: auto;
+  margin-right: auto;
+}
+
+.option:hover .option_balloon {
+  display: inline;
+}
+
+.option_balloon {
+  display: none;
+  position: absolute;
+  left: 300px;
+  padding: 16px;
+  border-radius: 5px;
+  background-color: gray;
+  color: white;
+  z-index: 10;
 }
 
 .format_btn:hover .format_balloon {
-    display: inline;
+  display: inline;
 }
 
 .format_balloon {
-    position: absolute;
-    display: none;
-    background-color:gray;
-    color: white;
+  position: absolute;
+  display: none;
+  background-color: gray;
+  color: white;
 }
