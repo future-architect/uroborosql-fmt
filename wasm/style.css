@@ -54,7 +54,7 @@ body {
 .option_balloon {
   display: none;
   position: absolute;
-  left: 300px;
+  left: 450px;
   padding: 16px;
   border-radius: 5px;
   background-color: gray;

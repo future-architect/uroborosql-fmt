@@ -32,7 +32,7 @@ The main features:
 	```
 
 - [VSCode extension](https://marketplace.visualstudio.com/items?itemName=Future.uroborosql-fmt) is available.
-- You can try the [demo by wasm](https://future-architect.github.io/uroborosql-fmt/).
+- You can try the [demo by wasm](https://future-architect.github.io/uroborosql-fmt/) ([Japanese](https://future-architect.github.io/uroborosql-fmt/ja)).
 
 ![wasm_demo](images/wasm_demo.gif)
 
