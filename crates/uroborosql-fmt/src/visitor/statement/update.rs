@@ -69,6 +69,10 @@ impl Visitor {
                     let clause = self.visit_from_clause(cursor, src)?;
                     statement.add_clause(clause);
                 }
+                "join_clause" => {
+                    let clause = self.visit_join_clause(cursor, src)?;
+                    statement.add_clauses(clause);
+                }
                 "where_clause" => {
                     let clause = self.visit_where_clause(cursor, src)?;
                     statement.add_clause(clause);

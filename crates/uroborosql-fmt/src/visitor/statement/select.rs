@@ -61,7 +61,7 @@ impl Visitor {
                     statement.add_clause(clause);
                 }
                 "join_clause" => {
-                    let clauses = self.visit_join_cluase(cursor, src)?;
+                    let clauses = self.visit_join_clause(cursor, src)?;
                     clauses.into_iter().for_each(|c| statement.add_clause(c));
                 }
                 "UNION" | "INTERSECT" | "EXCEPT" => {
