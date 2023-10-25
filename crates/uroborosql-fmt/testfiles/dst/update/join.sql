@@ -5,7 +5,6 @@ set
 ,	t.col3	=	a.col3
 from
 	tbl_a	a
-
 left outer join
 	tbl_b	b
 on

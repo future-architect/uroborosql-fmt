@@ -9,7 +9,7 @@ use crate::{
 
 impl Visitor {
     /// JOIN句
-    pub(crate) fn visit_join_cluase(
+    pub(crate) fn visit_join_clause(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
