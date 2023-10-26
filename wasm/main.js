@@ -133,6 +133,10 @@ clear_all_button.addEventListener("click", () => clear_all_config());
 
 // wasmの初期化が終了した際の処理
 function initialize() {
+  // Rust側で確保したメモリのポインタを取得
+  const result_ptr = ccall("get_result_address", "number", [], []);
+  const error_ptr = ccall("get_error_msg_address", "number", [], []);
+
   function formatSql() {
     if (!src_editor || !dst_editor) {
       console.log("editors have not been loaded.");
@@ -221,9 +225,9 @@ function initialize() {
     // タイマースタート
     const startTime = performance.now();
 
-    const ptr = ccall(
+    ccall(
       "format_sql",
-      "number",
+      null,
       ["string", "string"],
       [target, config_str]
     );
@@ -234,12 +238,11 @@ function initialize() {
     console.log("format complete: " + (endTime - startTime) + "ms");
 
     // Module.UTF8ToString() でポインタを js の string に変換
-    const res = UTF8ToString(ptr);
-
-    // Rust 側で確保したフォーマット文字列の所有権を返す
-    ccall("free_format_string", null, ["number"], [ptr]);
+    const res = UTF8ToString(result_ptr);
+    const err = UTF8ToString(error_ptr);
 
     dst_editor.setValue(res);
+    document.getElementById("error_msg").innerText = err;
 
     src_editor.updateOptions({ tabSize: tab_size });
     dst_editor.updateOptions({ tabSize: tab_size });
