@@ -13,4 +13,5 @@ repository.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
+once_cell = "1.18.0"
 uroborosql-fmt = { workspace = true }

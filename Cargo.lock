@@ -378,6 +378,7 @@ dependencies = [
 name = "uroborosql-fmt-wasm"
 version = "0.1.0"
 dependencies = [
+ "once_cell",
  "uroborosql-fmt",
 ]
 

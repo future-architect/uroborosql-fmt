@@ -1,6 +1,33 @@
-use std::ffi::{c_char, CStr, CString};
+use once_cell::sync::Lazy;
+use std::{
+    ffi::{c_char, CStr, CString},
+    sync::Mutex,
+};
+
+static RESULT: Lazy<Mutex<CString>> = Lazy::new(|| Mutex::new(CString::new("").unwrap()));
+static ERROR_MSG: Lazy<Mutex<CString>> = Lazy::new(|| Mutex::new(CString::new("").unwrap()));
 
 use uroborosql_fmt::{config::Config, format_sql_with_config};
+
+/// Returns the address of the result string.
+///
+/// # Safety
+///
+/// This is unsafe because it returns a raw pointer.
+#[no_mangle]
+pub unsafe extern "C" fn get_result_address() -> *const c_char {
+    RESULT.lock().unwrap().as_c_str().as_ptr()
+}
+
+/// Returns the address of the error message string.
+///
+/// # Safety
+///
+/// This is unsafe because it returns a raw pointer.
+#[no_mangle]
+pub unsafe extern "C" fn get_error_msg_address() -> *const c_char {
+    ERROR_MSG.lock().unwrap().as_c_str().as_ptr()
+}
 
 /// Formats SQL code given as char pointer `src` by WASM (JavaScript).
 ///
@@ -10,31 +37,20 @@ use uroborosql_fmt::{config::Config, format_sql_with_config};
 /// [`CStr::from_ptr`](https://doc.rust-lang.org/stable/std/ffi/struct.CStr.html#method.from_ptr).
 #[export_name = "format_sql"]
 #[no_mangle]
-pub unsafe extern "C" fn format_sql_for_wasm(
-    src: *mut c_char,
-    config_json_str: *mut c_char,
-) -> *mut c_char {
+pub unsafe extern "C" fn format_sql_for_wasm(src: *const c_char, config_json_str: *const c_char) {
+    // Clear previous format result
+    *RESULT.lock().unwrap() = CString::new("").unwrap();
+    *ERROR_MSG.lock().unwrap() = CString::new("").unwrap();
+
     let src = CStr::from_ptr(src).to_str().unwrap().to_owned();
 
     let config_json_str = CStr::from_ptr(config_json_str).to_str().unwrap();
     let config = Config::from_json_str(config_json_str).unwrap();
 
-    // TODO: error handling
-    let result = format_sql_with_config(&src, config).unwrap();
+    let result = format_sql_with_config(&src, config);
 
-    CString::new(result).unwrap().into_raw()
-}
-
-/// Free the string `s` allocated by Rust.
-///
-/// # Safety
-///
-/// This is unsafe because it uses the unsafe function
-/// [`CString::from_war()`](https://doc.rust-lang.org/std/ffi/struct.CString.html#method.from_raw).
-#[no_mangle]
-pub unsafe extern "C" fn free_format_string(s: *mut c_char) {
-    if s.is_null() {
-        return;
+    match result {
+        Ok(result) => *RESULT.lock().unwrap() = CString::new(result).unwrap(),
+        Err(err) => *ERROR_MSG.lock().unwrap() = CString::new(err.to_string()).unwrap(),
     }
-    let _ = CString::from_raw(s);
 }
