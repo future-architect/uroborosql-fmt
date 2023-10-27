@@ -133,10 +133,6 @@ clear_all_button.addEventListener("click", () => clear_all_config());
 
 // wasmの初期化が終了した際の処理
 function initialize() {
-  // Rust側で確保したメモリのポインタを取得
-  const result_ptr = ccall("get_result_address", "number", [], []);
-  const error_ptr = ccall("get_error_msg_address", "number", [], []);
-
   function formatSql() {
     if (!src_editor || !dst_editor) {
       console.log("editors have not been loaded.");
@@ -236,6 +232,10 @@ function initialize() {
     const endTime = performance.now();
     // 何ミリ秒かかったかを表示する
     console.log("format complete: " + (endTime - startTime) + "ms");
+
+    // Rust側で確保したメモリのポインタを取得
+    const result_ptr = ccall("get_result_address", "number", [], []);
+    const error_ptr = ccall("get_error_msg_address", "number", [], []);
 
     // Module.UTF8ToString() でポインタを js の string に変換
     const res = UTF8ToString(result_ptr);

@@ -1,7 +1,11 @@
-use std::ffi::{c_char, CStr, CString};
+use once_cell::sync::Lazy;
+use std::{
+    ffi::{c_char, CStr, CString},
+    sync::Mutex,
+};
 
-static mut RESULT: &mut [u8] = &mut [0; 50000];
-static mut ERROR_MSG: &mut [u8] = &mut [0; 50000];
+static RESULT: Lazy<Mutex<CString>> = Lazy::new(|| Mutex::new(CString::new("").unwrap()));
+static ERROR_MSG: Lazy<Mutex<CString>> = Lazy::new(|| Mutex::new(CString::new("").unwrap()));
 
 use uroborosql_fmt::{config::Config, format_sql_with_config};
 
@@ -11,8 +15,8 @@ use uroborosql_fmt::{config::Config, format_sql_with_config};
 ///
 /// This is unsafe because it returns a raw pointer.
 #[no_mangle]
-pub unsafe extern "C" fn get_result_address() -> *const u8 {
-    &RESULT[0]
+pub unsafe extern "C" fn get_result_address() -> *const c_char {
+    RESULT.lock().unwrap().as_c_str().as_ptr()
 }
 
 /// Returns the address of the error message string.
@@ -21,8 +25,8 @@ pub unsafe extern "C" fn get_result_address() -> *const u8 {
 ///
 /// This is unsafe because it returns a raw pointer.
 #[no_mangle]
-pub unsafe extern "C" fn get_error_msg_address() -> *const u8 {
-    &ERROR_MSG[0]
+pub unsafe extern "C" fn get_error_msg_address() -> *const c_char {
+    ERROR_MSG.lock().unwrap().as_c_str().as_ptr()
 }
 
 /// Formats SQL code given as char pointer `src` by WASM (JavaScript).
@@ -33,7 +37,11 @@ pub unsafe extern "C" fn get_error_msg_address() -> *const u8 {
 /// [`CStr::from_ptr`](https://doc.rust-lang.org/stable/std/ffi/struct.CStr.html#method.from_ptr).
 #[export_name = "format_sql"]
 #[no_mangle]
-pub unsafe extern "C" fn format_sql_for_wasm(src: *mut c_char, config_json_str: *mut c_char) {
+pub unsafe extern "C" fn format_sql_for_wasm(src: *const c_char, config_json_str: *const c_char) {
+    // Clear previous format result
+    *RESULT.lock().unwrap() = CString::new("").unwrap();
+    *ERROR_MSG.lock().unwrap() = CString::new("").unwrap();
+
     let src = CStr::from_ptr(src).to_str().unwrap().to_owned();
 
     let config_json_str = CStr::from_ptr(config_json_str).to_str().unwrap();
@@ -42,43 +50,7 @@ pub unsafe extern "C" fn format_sql_for_wasm(src: *mut c_char, config_json_str: 
     let result = format_sql_with_config(&src, config);
 
     match result {
-        Ok(result) => {
-            CString::new(result)
-                .unwrap()
-                .as_bytes_with_nul()
-                .iter()
-                .enumerate()
-                .for_each(|(i, x)| {
-                    RESULT[i] = *x;
-                });
-
-            CString::new("")
-                .unwrap()
-                .as_bytes_with_nul()
-                .iter()
-                .enumerate()
-                .for_each(|(i, x)| {
-                    ERROR_MSG[i] = *x;
-                });
-        }
-        Err(err) => {
-            CString::new(err.to_string())
-                .unwrap()
-                .as_bytes_with_nul()
-                .iter()
-                .enumerate()
-                .for_each(|(i, x)| {
-                    ERROR_MSG[i] = *x;
-                });
-
-            CString::new("")
-                .unwrap()
-                .as_bytes_with_nul()
-                .iter()
-                .enumerate()
-                .for_each(|(i, x)| {
-                    RESULT[i] = *x;
-                });
-        }
+        Ok(result) => *RESULT.lock().unwrap() = CString::new(result).unwrap(),
+        Err(err) => *ERROR_MSG.lock().unwrap() = CString::new(err.to_string()).unwrap(),
     }
 }
