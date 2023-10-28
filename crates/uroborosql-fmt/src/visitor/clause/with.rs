@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, convert_keyword_case},
-    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
+    visitor::{create_clause, create_error_info, ensure_kind, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -149,10 +149,9 @@ impl Visitor {
             "update_statement" => self.visit_update_stmt(cursor, src)?,
             _ => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_cte(): Unimplemented statement\nnode_kind: {}\n{:#?}",
-                    cursor.node().kind(),
-                    cursor.node().range(),
-                )))
+                    "visit_cte(): Unimplemented statement\n{}",
+                    create_error_info(cursor, src)
+                )));
             }
         };
         stmt_loc.append(Location::new(cursor.node().range()));

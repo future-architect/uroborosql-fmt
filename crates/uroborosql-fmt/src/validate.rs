@@ -1,7 +1,9 @@
+use itertools::Itertools;
 use tree_sitter::{Language, Node, Tree};
 
 use crate::{
     config::{load_never_complement_settings, CONFIG},
+    cst::Location,
     format, print_cst,
     two_way_sql::format_two_way_sql,
     visitor::COMMENT,
@@ -75,13 +77,19 @@ struct Token {
     kind: String,
     /// すべてテキストを文字列で持つのに問題がある場合、tree_sitter::Node または tree_sitter::Range に変更
     text: String,
+    location: Option<Location>,
 }
 
 impl Token {
     fn new(node: &Node, src: &str) -> Self {
         let kind = node.kind().to_owned();
         let text = node.utf8_text(src.as_bytes()).unwrap().to_owned();
-        Token { kind, text }
+        let location = Location::new(node.range());
+        Token {
+            kind,
+            text,
+            location: Some(location),
+        }
     }
 
     fn is_same_kind(&self, other: &Token) -> bool {
@@ -109,25 +117,41 @@ fn compare_tokens(
 ) -> Result<(), UroboroSQLFmtError> {
     // トークン列の長さの違いは前処理で対処することを想定する。
     // 対処しきれない場合、この関数を変更する。
-    if src_tokens.len() != dst_tokens.len() {
-        return Err(UroboroSQLFmtError::Validation {
-            format_result: format_result.to_owned(),
-            error_msg: format!(
-                "different length. src={}, dst={}",
-                src_tokens.len(),
-                dst_tokens.len()
-            ),
-        });
-    }
+    // if src_tokens.len() != dst_tokens.len() {
+    //     return Err(UroboroSQLFmtError::Validation {
+    //         format_result: format_result.to_owned(),
+    //         error_msg: format!(
+    //             "different length. src={}, dst={}",
+    //             src_tokens.len(),
+    //             dst_tokens.len()
+    //         ),
+    //     });
+    // }
 
-    for (src_tok, dst_tok) in src_tokens.iter().zip(dst_tokens.iter()) {
-        if src_tok.is_same_kind(dst_tok) {
-            compare_token_text(src_tok, dst_tok, format_result)?
-        } else {
-            return Err(UroboroSQLFmtError::Validation {
-                format_result: format_result.to_owned(),
-                error_msg: format!("different kind token: src={src_tok:?}, dst={dst_tok:?}"),
-            });
+    for test in src_tokens.iter().zip_longest(dst_tokens.iter()) {
+        match test {
+            itertools::EitherOrBoth::Both(src_tok, dst_tok) => {
+                if src_tok.is_same_kind(dst_tok) {
+                    compare_token_text(src_tok, dst_tok, format_result)?
+                } else {
+                    return Err(UroboroSQLFmtError::Validation {
+                        format_result: format_result.to_owned(),
+                        error_msg: format!("different kind token: Errors have occurred near the following token\n{src_tok:#?}"),
+                    });
+                }
+            }
+            itertools::EitherOrBoth::Left(src_tok) => {
+                return Err(UroboroSQLFmtError::Validation {
+                    format_result: format_result.to_owned(),
+                    error_msg: format!("different kind token: Errors have occurred near the following token\n{src_tok:#?}"),
+                });
+            }
+            itertools::EitherOrBoth::Right(_) => {
+                return Err(UroboroSQLFmtError::Validation {
+                    format_result: format_result.to_owned(),
+                    error_msg: format!("different kind token: For some reason the number of tokens in the format result has increased"),
+                });
+            }
         }
     }
 
@@ -153,7 +177,7 @@ fn compare_token_text(
                 Err(UroboroSQLFmtError::Validation {
                     format_result: format_result.to_owned(),
                     error_msg: format!(
-                        r#"hint must start with "/*+" or "--+". src={src_tok:?}, dst={dst_tok:?}"#
+                        r#"hint must start with "/*+" or "--+". src={src_tok:#?}, dst={dst_tok:#?}"#
                     ),
                 })
             }
@@ -283,7 +307,11 @@ ORDER BY
     fn new_token(kind: impl Into<String>, text: impl Into<String>) -> Token {
         let kind = kind.into();
         let text = text.into();
-        Token { kind, text }
+        Token {
+            kind,
+            text,
+            location: None,
+        }
     }
 
     #[test]

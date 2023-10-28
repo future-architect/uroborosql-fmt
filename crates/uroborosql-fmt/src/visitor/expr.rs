@@ -18,7 +18,7 @@ use crate::{cst::*, error::UroboroSQLFmtError, util::convert_identifier_case};
 
 pub(crate) use aliasable::{ComplementConfig, ComplementKind};
 
-use super::{ensure_kind, Visitor, COMMENT};
+use super::{create_error_info, ensure_kind, Visitor, COMMENT};
 
 impl Visitor {
     /// 式のフォーマットを行う。
@@ -140,9 +140,8 @@ impl Visitor {
             _ => {
                 // todo
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_expr(): unimplemented expression \nnode_kind: {}\n{:#?}",
-                    cursor.node().kind(),
-                    cursor.node().range(),
+                    "visit_expr(): unimplemented expression \n{}",
+                    create_error_info(cursor, src)
                 )));
             }
         };
@@ -155,9 +154,8 @@ impl Visitor {
             } else {
                 // TODO: 隣接していないコメント
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_expr(): (bind parameter) separated comment\nnode_kind: {}\n{:#?}",
-                    cursor.node().kind(),
-                    cursor.node().range(),
+                    "visit_expr(): (bind parameter) separated comment\n{}",
+                    create_error_info(cursor, src)
                 )));
             }
         }

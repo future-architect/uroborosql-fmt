@@ -4,7 +4,7 @@ use crate::{
     config::CONFIG,
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, Visitor},
+    visitor::{create_clause, create_error_info, ensure_kind, Visitor},
 };
 
 impl Visitor {
@@ -80,9 +80,8 @@ impl Visitor {
                 cursor.node().range(),
             ))),
             _ => Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_join_condition(): unimplemented node {}\n{:?}",
-                cursor.node().kind(),
-                cursor.node().range(),
+                "visit_join_condition(): unimplemented node\n{}",
+                create_error_info(cursor, src)
             ))),
         }
     }

@@ -5,7 +5,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
+    visitor::{create_clause, create_error_info, ensure_kind, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -77,9 +77,8 @@ impl Visitor {
         let ret_value = match cursor.node().kind() {
             "grouping_sets_clause" | "rollup_clause" | "cube_clause" => {
                 Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_group_expression(): unimplemented node\nnode kind: {}\n{:?}",
-                    cursor.node().kind(),
-                    cursor.node().range()
+                    "visit_group_expression(): unimplemented node\n{}",
+                    create_error_info(cursor, src)
                 )))
             }
             _ => self.visit_expr(cursor, src),

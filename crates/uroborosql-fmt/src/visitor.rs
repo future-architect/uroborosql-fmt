@@ -82,10 +82,9 @@ impl Visitor {
                     // todo
                     _ => {
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_source(): Unimplemented statement\nnode_kind: {}\n{:#?}",
-                            cursor.node().kind(),
-                            cursor.node().range(),
-                        )))
+                            "visit_source(): Unimplemented statement\n{}",
+                            create_error_info(cursor, src)
+                        )));
                     }
                 };
 
@@ -345,4 +344,23 @@ fn create_clause(
     }
 
     Ok(clause)
+}
+
+/// cursorからエラー情報を生成する関数
+///
+/// node_kind: {nodeの種類}
+/// original_token: {元のソースコードのトークン}
+/// location: {nodeの位置情報}
+fn create_error_info(cursor: &TreeCursor, src: &str) -> String {
+    let original_token = cursor
+        .node()
+        .utf8_text(src.as_bytes())
+        .unwrap_or("<unknown token>");
+
+    format!(
+        "node_kind: {}\noriginal_token: {}\nlocation: {:#?}",
+        cursor.node().kind(),
+        original_token,
+        cursor.node().range(),
+    )
 }
