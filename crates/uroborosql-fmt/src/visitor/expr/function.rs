@@ -6,7 +6,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -24,7 +24,7 @@ impl Visitor {
         let function_name = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
         cursor.goto_next_sibling();
 
-        ensure_kind(cursor, "(")?;
+        ensure_kind(cursor, "(", src)?;
 
         let args = self.visit_function_call_args(cursor, src)?;
         cursor.goto_next_sibling();
@@ -56,7 +56,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "function_call")?;
+        ensure_kind(cursor, "function_call", src)?;
 
         Ok(func_call)
     }
@@ -68,14 +68,14 @@ impl Visitor {
     ) -> Result<Vec<Clause>, UroboroSQLFmtError> {
         cursor.goto_first_child();
         // over
-        ensure_kind(cursor, "OVER")?;
+        ensure_kind(cursor, "OVER", src)?;
         cursor.goto_next_sibling();
 
         // window_definition
-        ensure_kind(cursor, "window_definition")?;
+        ensure_kind(cursor, "window_definition", src)?;
         cursor.goto_first_child();
 
-        ensure_kind(cursor, "(")?;
+        ensure_kind(cursor, "(", src)?;
 
         cursor.goto_next_sibling();
 
@@ -103,13 +103,13 @@ impl Visitor {
             clauses.push(clause);
         }
 
-        ensure_kind(cursor, ")")?;
+        ensure_kind(cursor, ")", src)?;
 
         cursor.goto_parent();
         // cursor -> window_definition
 
         cursor.goto_parent();
-        ensure_kind(cursor, "over_clause")?;
+        ensure_kind(cursor, "over_clause", src)?;
 
         Ok(clauses)
     }
@@ -124,7 +124,7 @@ impl Visitor {
         let mut function_call_args =
             FunctionCallArgs::new(vec![], Location::new(cursor.node().range()));
 
-        ensure_kind(cursor, "(")?;
+        ensure_kind(cursor, "(", src)?;
 
         cursor.goto_next_sibling();
 
@@ -171,7 +171,7 @@ impl Visitor {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "visit_function_call_args(): Unexpected node\nnode_kind: {}\n{:#?}",
                         cursor.node().kind(),
-                        cursor.node().range(),
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }

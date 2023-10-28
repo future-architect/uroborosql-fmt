@@ -4,7 +4,7 @@ use crate::{
     config::CONFIG,
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, create_error_info, ensure_kind, Visitor},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
 impl Visitor {
@@ -23,7 +23,7 @@ impl Visitor {
             let mut clause = self.visit_join_type(cursor, src)?;
             cursor.goto_next_sibling();
 
-            ensure_kind(cursor, "JOIN")?;
+            ensure_kind(cursor, "JOIN", src)?;
             clause.extend_kw(cursor.node(), src);
 
             clause
@@ -50,7 +50,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "join_clause")?;
+        ensure_kind(cursor, "join_clause", src)?;
 
         Ok(clauses)
     }
@@ -76,12 +76,12 @@ impl Visitor {
                 Ok(on_clause)
             }
             "USING" => Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_join_clause(): JOIN USING(...) is unimplemented\n{:?}",
-                cursor.node().range(),
+                "visit_join_clause(): JOIN USING(...) is unimplemented\n{}",
+                error_annotation_from_cursor(cursor, src)
             ))),
             _ => Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_join_condition(): unimplemented node\n{}",
-                create_error_info(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             ))),
         }
     }
@@ -109,7 +109,7 @@ impl Visitor {
             "CROSS" | "NATURAL" | "INNER" | "OUTER" | "LEFT" | "RIGHT" | "FULL"
         ) {
             return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_join_type(): expected node is NATURAL, INNER, OUTER, LEFT , RIGHT or FULL, but actual {}\n{:?}", cursor.node().kind(), cursor.node().range()
+                    "visit_join_type(): expected node is NATURAL, INNER, OUTER, LEFT , RIGHT or FULL, but actual {}\n{}", cursor.node().kind(), error_annotation_from_cursor(cursor, src)
                 )));
         }
 
@@ -121,7 +121,7 @@ impl Visitor {
                 "INNER" | "OUTER" | "LEFT" | "RIGHT" | "FULL"
             ) {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                            "visit_join_type(): expected node is INNER, OUTER, LEFT, RIGHT or FULL, but actual {}\n{:?}", cursor.node().kind(), cursor.node().range()
+                            "visit_join_type(): expected node is INNER, OUTER, LEFT, RIGHT or FULL, but actual {}\n{}", cursor.node().kind(), error_annotation_from_cursor(cursor, src)
                         )));
             }
             clause.extend_kw(cursor.node(), src);
@@ -143,7 +143,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "join_type")?;
+        ensure_kind(cursor, "join_type", src)?;
 
         Ok(clause)
     }

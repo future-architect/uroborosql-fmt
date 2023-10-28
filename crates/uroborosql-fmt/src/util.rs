@@ -1,4 +1,10 @@
-use crate::config::CONFIG;
+use annotate_snippets::{
+    display_list::{DisplayList, FormatOptions},
+    snippet::{AnnotationType, Slice, Snippet, SourceAnnotation},
+};
+use itertools::Itertools;
+
+use crate::{config::CONFIG, cst::Location};
 
 /// 設定ファイルに合わせて予約後の大文字・小文字を変換する
 pub(crate) fn convert_keyword_case(keyword: &str) -> String {
@@ -71,4 +77,58 @@ pub(crate) fn is_line_overflow(char_len: usize) -> bool {
     } else {
         char_len >= max_char_per_line as usize
     }
+}
+
+/// エラー注釈を作成する関数
+/// 以下の形のエラー注釈を生成
+///
+/// ```sh
+///   |
+/// 2 | using tbl_b b
+///   | ^^^^^^^^^^^^^ {label}
+///   |
+/// ```
+pub(crate) fn create_error_annotation(location: &Location, label: &str, src: &str) -> String {
+    // 元のSQLのエラーが発生した行を取得
+    let source = src
+        .lines()
+        .enumerate()
+        .filter(|(i, _)| (location.start_position.row..=location.end_position.row).contains(i))
+        .map(|(_, x)| x)
+        .join("\n");
+
+    // エラー発生箇所の開始位置
+    let start_point = location.start_position.col;
+
+    // エラー発生箇所の終了位置
+    // = (終了位置までの行の文字数合計) + (終了位置の行の終了位置までの文字数)
+    let end_point = src
+        .lines()
+        .enumerate()
+        .filter(|(i, _)| (location.start_position.row..location.end_position.row).contains(i))
+        .map(|(_, x)| x.len())
+        .sum::<usize>()
+        + location.end_position.col;
+
+    let snippet = Snippet {
+        title: None,
+        footer: vec![],
+        slices: vec![Slice {
+            source: &source,
+            line_start: location.start_position.row + 1,
+            origin: None,
+            fold: true,
+            annotations: vec![SourceAnnotation {
+                label,
+                annotation_type: AnnotationType::Error,
+                range: (start_point, end_point),
+            }],
+        }],
+        opt: FormatOptions {
+            color: true,
+            ..Default::default()
+        },
+    };
+
+    DisplayList::from(snippet).to_string()
 }

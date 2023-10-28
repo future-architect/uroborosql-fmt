@@ -37,7 +37,7 @@ impl Visitor {
 
         // cursorをfrom_clauseに戻す
         cursor.goto_parent();
-        ensure_kind(cursor, "from_clause")?;
+        ensure_kind(cursor, "from_clause", src)?;
 
         Ok(clause)
     }

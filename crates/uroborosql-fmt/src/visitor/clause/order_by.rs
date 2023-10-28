@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -40,9 +40,9 @@ impl Visitor {
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_order_by_clause(): unexpected node\nnode kind: {}\n{:?}",
+                        "visit_order_by_clause(): unexpected node\nnode kind: {}\n{}",
                         cursor.node().kind(),
-                        cursor.node().range()
+                        error_annotation_from_cursor(cursor, src)
                     )))
                 }
             }
@@ -52,7 +52,7 @@ impl Visitor {
         clause.set_body(body);
 
         cursor.goto_parent();
-        ensure_kind(cursor, "order_by_clause")?;
+        ensure_kind(cursor, "order_by_clause", src)?;
 
         Ok(clause)
     }
@@ -72,7 +72,7 @@ impl Visitor {
         let order_expr = self.visit_order_option(cursor, src, expr)?;
 
         cursor.goto_parent();
-        ensure_kind(cursor, "order_expression")?;
+        ensure_kind(cursor, "order_expression", src)?;
 
         Ok(order_expr)
     }

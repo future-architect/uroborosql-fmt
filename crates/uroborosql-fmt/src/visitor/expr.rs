@@ -18,7 +18,7 @@ use crate::{cst::*, error::UroboroSQLFmtError, util::convert_identifier_case};
 
 pub(crate) use aliasable::{ComplementConfig, ComplementKind};
 
-use super::{create_error_info, ensure_kind, Visitor, COMMENT};
+use super::{ensure_kind, error_annotation_from_cursor, Visitor, COMMENT};
 
 impl Visitor {
     /// 式のフォーマットを行う。
@@ -63,8 +63,8 @@ impl Visitor {
                         "." => dotted_name.push('.'),
                         "ERROR" => {
                             return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                                "visit_expr: ERROR node appeared \n{:?}",
-                                cursor.node().range()
+                                "visit_expr: ERROR node appeared \n{}",
+                                error_annotation_from_cursor(cursor, src)
                             )));
                         }
                         _ => dotted_name.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
@@ -76,7 +76,7 @@ impl Visitor {
 
                 // cursorをdotted_nameに戻す
                 cursor.goto_parent();
-                ensure_kind(cursor, "dotted_name")?;
+                ensure_kind(cursor, "dotted_name", src)?;
 
                 Expr::Primary(Box::new(primary))
             }
@@ -141,7 +141,7 @@ impl Visitor {
                 // todo
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_expr(): unimplemented expression \n{}",
-                    create_error_info(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
@@ -155,7 +155,7 @@ impl Visitor {
                 // TODO: 隣接していないコメント
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_expr(): (bind parameter) separated comment\n{}",
-                    create_error_info(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }

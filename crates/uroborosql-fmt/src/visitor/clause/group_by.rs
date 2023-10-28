@@ -5,7 +5,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, create_error_info, ensure_kind, Visitor, COMMA, COMMENT},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -44,8 +44,8 @@ impl Visitor {
                 }
                 "ERROR" => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_group_by_clause: ERROR node appeared \n{:?}",
-                        cursor.node().range()
+                        "visit_group_by_clause: ERROR node appeared \n{}",
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
                 _ => {
@@ -62,7 +62,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "group_by_clause")?;
+        ensure_kind(cursor, "group_by_clause", src)?;
 
         Ok(clauses)
     }
@@ -78,14 +78,14 @@ impl Visitor {
             "grouping_sets_clause" | "rollup_clause" | "cube_clause" => {
                 Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_group_expression(): unimplemented node\n{}",
-                    create_error_info(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
             _ => self.visit_expr(cursor, src),
         };
 
         cursor.goto_parent();
-        ensure_kind(cursor, "group_expression")?;
+        ensure_kind(cursor, "group_expression", src)?;
 
         ret_value
     }

@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, convert_keyword_case},
-    visitor::{ensure_kind, Visitor, COMMA},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor, COMMA},
 };
 
 impl Visitor {
@@ -28,18 +28,18 @@ impl Visitor {
             cursor.goto_next_sibling();
             // cursor -> "ON_CONSTRAINT"
 
-            ensure_kind(cursor, "ON_CONSTRAINT")?;
+            ensure_kind(cursor, "ON_CONSTRAINT", src)?;
             let constraint_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
 
             cursor.goto_next_sibling();
             // cursor -> constraint_name
 
-            ensure_kind(cursor, "identifier")?;
+            ensure_kind(cursor, "identifier", src)?;
 
             let constraint_name = cursor.node().utf8_text(src.as_bytes()).unwrap();
 
             cursor.goto_parent();
-            ensure_kind(cursor, "conflict_target")?;
+            ensure_kind(cursor, "conflict_target", src)?;
 
             Ok(ConflictTarget::OnConstraint(OnConstraint::new(
                 (
@@ -61,7 +61,7 @@ impl Visitor {
                 specify_index_column.set_where_clause(where_clause);
             }
             cursor.goto_parent();
-            ensure_kind(cursor, "conflict_target")?;
+            ensure_kind(cursor, "conflict_target", src)?;
 
             Ok(ConflictTarget::SpecifyIndexColumn(specify_index_column))
         }
@@ -74,7 +74,7 @@ impl Visitor {
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<ConflictTargetColumnList, UroboroSQLFmtError> {
-        ensure_kind(cursor, "(")?;
+        ensure_kind(cursor, "(", src)?;
 
         // ConflictTargetColumnListの位置
         let mut loc = Location::new(cursor.node().range());
@@ -98,9 +98,9 @@ impl Visitor {
                     let collate_keyword =
                         convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
                     cursor.goto_next_sibling();
-                    ensure_kind(cursor, "collation")?;
+                    ensure_kind(cursor, "collation", src)?;
                     cursor.goto_first_child();
-                    ensure_kind(cursor, "identifier")?;
+                    ensure_kind(cursor, "identifier", src)?;
 
                     // collationはユーザが定義することも可能であるため、識別子ルールを適用
                     let collation =
@@ -115,7 +115,7 @@ impl Visitor {
                 }
                 "op_class" => {
                     cursor.goto_first_child();
-                    ensure_kind(cursor, "identifier")?;
+                    ensure_kind(cursor, "identifier", src)?;
                     let op_class =
                         convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
 
@@ -126,9 +126,9 @@ impl Visitor {
                 ")" => break,
                 _ => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_conflict_target_column_list(): Unexpected node\nnode_kind: {}\n{:#?}",
+                        "visit_conflict_target_column_list(): Unexpected node\nnode_kind: {}\n{}",
                         cursor.node().kind(),
-                        cursor.node().range(),
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }

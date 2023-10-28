@@ -20,7 +20,7 @@ impl Visitor {
         let lhs = self.visit_expr(cursor, src)?;
 
         cursor.goto_next_sibling();
-        ensure_kind(cursor, "IS")?;
+        ensure_kind(cursor, "IS", src)?;
         let op = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
         cursor.goto_next_sibling();
 
@@ -42,7 +42,7 @@ impl Visitor {
         aligned.add_rhs(Some(op), rhs);
 
         cursor.goto_parent();
-        ensure_kind(cursor, "is_expression")?;
+        ensure_kind(cursor, "is_expression", src)?;
 
         Ok(aligned)
     }

@@ -37,7 +37,7 @@ impl Visitor {
 
         // cursorを戻す
         cursor.goto_parent();
-        ensure_kind(cursor, clause_node_name)?;
+        ensure_kind(cursor, clause_node_name, src)?;
 
         Ok(clause)
     }

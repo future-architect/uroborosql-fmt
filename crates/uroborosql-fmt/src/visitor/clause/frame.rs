@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, Visitor},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
 impl Visitor {
@@ -15,7 +15,7 @@ impl Visitor {
     ) -> Result<Clause, UroboroSQLFmtError> {
         cursor.goto_first_child();
 
-        ensure_kind(cursor, "frame_kind")?;
+        ensure_kind(cursor, "frame_kind", src)?;
         cursor.goto_first_child();
 
         // RANGE | ROWS | GROUPS
@@ -47,9 +47,9 @@ impl Visitor {
                                 | "EXCLUDE_NO_OTHERS"
                         ) {
                             return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                                    "visit_frame_clause(): expected EXCLUDE_{{CULLENT_ROW | GROUP | TIES | NO_OTHERS}}, but actual {}\n{:?}",
+                                    "visit_frame_clause(): expected EXCLUDE_{{CULLENT_ROW | GROUP | TIES | NO_OTHERS}}, but actual {}\n{}",
                                     cursor.node().kind(),
-                                    cursor.node().range()
+                                    error_annotation_from_cursor(cursor, src)
                                 )));
                         }
                         let prim =
@@ -61,12 +61,12 @@ impl Visitor {
                         }
                     }
                     cursor.goto_parent();
-                    ensure_kind(cursor, "frame_exclusion")?;
+                    ensure_kind(cursor, "frame_exclusion", src)?;
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_frame_clause(): unexpected node {:?}",
-                        cursor.node()
+                        "visit_frame_clause(): unexpected node\n{}",
+                        error_annotation_from_cursor(cursor, src)
                     )))
                 }
             }
@@ -78,7 +78,7 @@ impl Visitor {
         clause.set_body(Body::to_single_line(Expr::ExprSeq(Box::new(n_expr))));
 
         cursor.goto_parent();
-        ensure_kind(cursor, "frame_clause")?;
+        ensure_kind(cursor, "frame_clause", src)?;
 
         Ok(clause)
     }
@@ -108,8 +108,9 @@ impl Visitor {
 
                 if !matches!(cursor.node().kind(), "PRECEDING" | "FOLLOWING") {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        r##"visit_frame_clause(): exprect "PRECEDING" or "FOLLOWING", but actual  {:?}"##,
-                        cursor.node()
+                        r##"visit_frame_clause(): expect "PRECEDING" or "FOLLOWING", but actual {}\n{}"##,
+                        cursor.node().kind(),
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
 
@@ -118,7 +119,7 @@ impl Visitor {
             }
         }
         cursor.goto_parent();
-        ensure_kind(cursor, "frame_bound")?;
+        ensure_kind(cursor, "frame_bound", src)?;
 
         Ok(exprs)
     }

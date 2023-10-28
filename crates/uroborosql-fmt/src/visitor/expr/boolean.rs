@@ -38,7 +38,7 @@ impl Visitor {
             let not_expr = UnaryExpr::new(convert_keyword_case(not_keyword), expr, loc);
 
             cursor.goto_parent();
-            ensure_kind(cursor, "boolean_expression")?;
+            ensure_kind(cursor, "boolean_expression", src)?;
 
             // Unaryとして返す
             return Ok(Expr::Unary(Box::new(not_expr)));
@@ -83,7 +83,7 @@ impl Visitor {
         }
         // cursorをboolean_expressionに戻す
         cursor.goto_parent();
-        ensure_kind(cursor, "boolean_expression")?;
+        ensure_kind(cursor, "boolean_expression", src)?;
 
         Ok(Expr::Boolean(Box::new(boolean_expr)))
     }
@@ -113,7 +113,7 @@ impl Visitor {
             cursor.goto_next_sibling();
         }
 
-        ensure_kind(cursor, "BETWEEN")?;
+        ensure_kind(cursor, "BETWEEN", src)?;
         let between_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
         operator += &convert_keyword_case(between_keyword);
         cursor.goto_next_sibling();
@@ -133,7 +133,7 @@ impl Visitor {
             None
         };
 
-        ensure_kind(cursor, "AND")?;
+        ensure_kind(cursor, "AND", src)?;
         let and_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
         cursor.goto_next_sibling();
         // cursor -> _expression
@@ -153,7 +153,7 @@ impl Visitor {
         aligned.add_rhs(Some(operator), Expr::Aligned(Box::new(rhs)));
 
         cursor.goto_parent();
-        ensure_kind(cursor, "between_and_expression")?;
+        ensure_kind(cursor, "between_and_expression", src)?;
 
         Ok(aligned)
     }
@@ -183,7 +183,7 @@ impl Visitor {
             cursor.goto_next_sibling();
         }
 
-        ensure_kind(cursor, "LIKE")?;
+        ensure_kind(cursor, "LIKE", src)?;
 
         let text = cursor.node().utf8_text(src.as_bytes()).unwrap();
         operator += &convert_keyword_case(text);
@@ -221,7 +221,7 @@ impl Visitor {
         aligned.add_rhs(Some(operator), expr_seq);
 
         cursor.goto_parent();
-        ensure_kind(cursor, "like_expression")?;
+        ensure_kind(cursor, "like_expression", src)?;
 
         Ok(aligned)
     }

@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{ensure_kind, Visitor, COMMENT},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
 };
 
 impl Visitor {
@@ -41,7 +41,7 @@ impl Visitor {
         }
 
         // cursor -> select_clause
-        ensure_kind(cursor, "select_clause")?;
+        ensure_kind(cursor, "select_clause", src)?;
 
         // select句を追加する
         statement.add_clause(self.visit_select_clause(cursor, src)?);
@@ -121,8 +121,8 @@ impl Visitor {
                 }
                 "ERROR" => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_select_stmt: ERROR node appeared \n{:?}",
-                        cursor.node().range()
+                        "visit_select_stmt: ERROR node appeared \n{}",
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
                 _ => {
@@ -132,7 +132,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "select_statement")?;
+        ensure_kind(cursor, "select_statement", src)?;
 
         Ok(statement)
     }

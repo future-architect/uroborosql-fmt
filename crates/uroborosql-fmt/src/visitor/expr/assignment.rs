@@ -16,14 +16,14 @@ impl Visitor {
         cursor.goto_first_child();
         let identifier = self.visit_expr(cursor, src)?;
         cursor.goto_next_sibling();
-        ensure_kind(cursor, "=")?;
+        ensure_kind(cursor, "=", src)?;
         cursor.goto_next_sibling();
         let expr = self.visit_expr(cursor, src)?;
 
         let mut aligned = AlignedExpr::new(identifier);
         aligned.add_rhs(Some("=".to_string()), expr);
         cursor.goto_parent();
-        ensure_kind(cursor, "assigment_expression")?;
+        ensure_kind(cursor, "assigment_expression", src)?;
 
         Ok(aligned)
     }

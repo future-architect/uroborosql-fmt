@@ -92,7 +92,7 @@ impl Visitor {
 
         // cursorをselect_clauseに戻す
         cursor.goto_parent();
-        ensure_kind(cursor, "select_clause")?;
+        ensure_kind(cursor, "select_clause", src)?;
 
         Ok(clause)
     }
@@ -117,7 +117,7 @@ impl Visitor {
 
         // cursorをselect_clause_bodyに
         cursor.goto_parent();
-        ensure_kind(cursor, "select_clause_body")?;
+        ensure_kind(cursor, "select_clause_body", src)?;
 
         Ok(body)
     }

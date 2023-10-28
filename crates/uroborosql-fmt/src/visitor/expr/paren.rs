@@ -67,7 +67,7 @@ impl Visitor {
 
         // tree-sitter-sqlを修正したら削除する
         cursor.goto_parent();
-        ensure_kind(cursor, "parenthesized_expression")?;
+        ensure_kind(cursor, "parenthesized_expression", src)?;
 
         Ok(paren_expr)
     }

@@ -6,6 +6,7 @@ use crate::{
     cst::Location,
     format, print_cst,
     two_way_sql::format_two_way_sql,
+    util::create_error_annotation,
     visitor::COMMENT,
     UroboroSQLFmtError,
 };
@@ -34,7 +35,7 @@ pub(crate) fn validate_format_result(
 
     let dst_ts_tree = parser.parse(&format_result, None).unwrap();
 
-    let validate_result = compare_tree(src, &format_result, &src_ts_tree, &dst_ts_tree);
+    let validate_result = compare_tree(src, &format_result, &src_ts_tree, &dst_ts_tree, src);
 
     if dbg && validate_result.is_err() {
         eprintln!(
@@ -60,6 +61,7 @@ fn compare_tree(
     format_result: &str,
     src_ts_tree: &Tree,
     dst_ts_tree: &Tree,
+    src: &str,
 ) -> Result<(), UroboroSQLFmtError> {
     let mut src_tokens: Vec<Token> = vec![];
     construct_tokens(&src_ts_tree.root_node(), src_str, &mut src_tokens);
@@ -69,7 +71,7 @@ fn compare_tree(
 
     swap_comma_and_trailing_comment(&mut src_tokens);
 
-    compare_tokens(&src_tokens, &dst_tokens, format_result)
+    compare_tokens(&src_tokens, &dst_tokens, format_result, src)
 }
 
 #[derive(Debug, PartialEq)]
@@ -77,7 +79,7 @@ struct Token {
     kind: String,
     /// すべてテキストを文字列で持つのに問題がある場合、tree_sitter::Node または tree_sitter::Range に変更
     text: String,
-    location: Option<Location>,
+    location: Location,
 }
 
 impl Token {
@@ -88,12 +90,31 @@ impl Token {
         Token {
             kind,
             text,
-            location: Some(location),
+            location,
         }
     }
 
     fn is_same_kind(&self, other: &Token) -> bool {
         self.kind == other.kind
+    }
+
+    /// エラー注釈を作成する関数
+    /// 以下の形のエラー注釈を生成
+    ///
+    /// ```sh
+    ///   |
+    /// 1 | select * from y y y y y y y y ;
+    ///   |                   ^^^^^^^^^^^ After format: "; (kind: ;)"
+    ///   |
+    /// ```
+    fn error_annotation(&self, src: &str, dst_tok: Option<&Token>) -> String {
+        let label = if let Some(other) = dst_tok {
+            format!(r#"After format: "{} (kind: {})""#, other.text, other.kind)
+        } else {
+            "".to_string()
+        };
+
+        create_error_annotation(&self.location, &label, src)
     }
 }
 
@@ -111,45 +132,38 @@ fn construct_tokens(node: &Node, src: &str, tokens: &mut Vec<Token>) {
 }
 
 fn compare_tokens(
-    src_tokens: &Vec<Token>,
-    dst_tokens: &Vec<Token>,
+    src_tokens: &[Token],
+    dst_tokens: &[Token],
     format_result: &str,
+    src: &str,
 ) -> Result<(), UroboroSQLFmtError> {
-    // トークン列の長さの違いは前処理で対処することを想定する。
-    // 対処しきれない場合、この関数を変更する。
-    // if src_tokens.len() != dst_tokens.len() {
-    //     return Err(UroboroSQLFmtError::Validation {
-    //         format_result: format_result.to_owned(),
-    //         error_msg: format!(
-    //             "different length. src={}, dst={}",
-    //             src_tokens.len(),
-    //             dst_tokens.len()
-    //         ),
-    //     });
-    // }
-
     for test in src_tokens.iter().zip_longest(dst_tokens.iter()) {
         match test {
             itertools::EitherOrBoth::Both(src_tok, dst_tok) => {
                 if src_tok.is_same_kind(dst_tok) {
-                    compare_token_text(src_tok, dst_tok, format_result)?
+                    compare_token_text(src_tok, dst_tok, format_result, src)?
                 } else {
                     return Err(UroboroSQLFmtError::Validation {
                         format_result: format_result.to_owned(),
-                        error_msg: format!("different kind token: Errors have occurred near the following token\n{src_tok:#?}"),
+                        error_msg: format!("different kind token: Errors have occurred near the following token\n{}", src_tok.error_annotation(src,  Some(dst_tok))),
                     });
                 }
             }
             itertools::EitherOrBoth::Left(src_tok) => {
+                // src.len() > dst.len() の場合
                 return Err(UroboroSQLFmtError::Validation {
                     format_result: format_result.to_owned(),
-                    error_msg: format!("different kind token: Errors have occurred near the following token\n{src_tok:#?}"),
+                    error_msg: format!(
+                        "different kind token: Errors have occurred near the following token\n{}",
+                        src_tok.error_annotation(src, None)
+                    ),
                 });
             }
             itertools::EitherOrBoth::Right(_) => {
+                // src.len() < dst.len() の場合
                 return Err(UroboroSQLFmtError::Validation {
                     format_result: format_result.to_owned(),
-                    error_msg: format!("different kind token: For some reason the number of tokens in the format result has increased"),
+                    error_msg: format!("different kind token: For some reason the number of tokens in the format result has increased\nformat_result: \n{}", format_result),
                 });
             }
         }
@@ -165,6 +179,7 @@ fn compare_token_text(
     src_tok: &Token,
     dst_tok: &Token,
     format_result: &str,
+    src: &str,
 ) -> Result<(), UroboroSQLFmtError> {
     let src_tok_text = &src_tok.text;
     let dst_tok_text = &dst_tok.text;
@@ -177,7 +192,8 @@ fn compare_token_text(
                 Err(UroboroSQLFmtError::Validation {
                     format_result: format_result.to_owned(),
                     error_msg: format!(
-                        r#"hint must start with "/*+" or "--+". src={src_tok:#?}, dst={dst_tok:#?}"#
+                        r#"hint must start with "/*+" or "--+".\n{}"#,
+                        src_tok.error_annotation(src, Some(dst_tok))
                     ),
                 })
             }
@@ -202,7 +218,11 @@ fn swap_comma_and_trailing_comment(tokens: &mut Vec<Token>) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{error::UroboroSQLFmtError, validate::compare_tree};
+    use crate::{
+        cst::{Location, Position},
+        error::UroboroSQLFmtError,
+        validate::compare_tree,
+    };
 
     use super::{construct_tokens, Token};
 
@@ -217,7 +237,7 @@ mod tests {
         let src_ts_tree = parser.parse(src, None).unwrap();
         let dst_ts_tree = parser.parse(dst, None).unwrap();
 
-        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree).is_err());
+        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
     }
 
     #[test]
@@ -231,7 +251,7 @@ mod tests {
         let src_ts_tree = parser.parse(src, None).unwrap();
         let dst_ts_tree = parser.parse(dst, None).unwrap();
 
-        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree).is_err());
+        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
     }
 
     #[test]
@@ -245,7 +265,7 @@ mod tests {
         let src_ts_tree = parser.parse(src, None).unwrap();
         let dst_ts_tree = parser.parse(dst, None).unwrap();
 
-        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree).is_err());
+        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
     }
 
     #[test]
@@ -272,7 +292,7 @@ ORDER BY
         let src_ts_tree = parser.parse(src, None).unwrap();
         let dst_ts_tree = parser.parse(dst, None).unwrap();
 
-        compare_tree(src, dst, &src_ts_tree, &dst_ts_tree)
+        compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src)
     }
 
     #[test]
@@ -301,16 +321,16 @@ ORDER BY
         let src_ts_tree = parser.parse(src, None).unwrap();
         let dst_ts_tree = parser.parse(dst, None).unwrap();
 
-        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree).is_err());
+        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
     }
 
-    fn new_token(kind: impl Into<String>, text: impl Into<String>) -> Token {
+    fn new_token(kind: impl Into<String>, text: impl Into<String>, location: Location) -> Token {
         let kind = kind.into();
         let text = text.into();
         Token {
             kind,
             text,
-            location: None,
+            location,
         }
     }
 
@@ -328,12 +348,54 @@ ORDER BY
         assert_eq!(
             tokens,
             vec![
-                new_token("SELECT", "select"),
-                new_token("identifier", "column_name"),
-                new_token("AS", "as"),
-                new_token("identifier", "col"),
-                new_token("FROM", "from"),
-                new_token("identifier", "table_name")
+                new_token(
+                    "SELECT",
+                    "select",
+                    Location {
+                        start_position: Position { row: 0, col: 0 },
+                        end_position: Position { row: 0, col: 6 },
+                    }
+                ),
+                new_token(
+                    "identifier",
+                    "column_name",
+                    Location {
+                        start_position: Position { row: 0, col: 7 },
+                        end_position: Position { row: 0, col: 18 },
+                    }
+                ),
+                new_token(
+                    "AS",
+                    "as",
+                    Location {
+                        start_position: Position { row: 0, col: 19 },
+                        end_position: Position { row: 0, col: 21 },
+                    }
+                ),
+                new_token(
+                    "identifier",
+                    "col",
+                    Location {
+                        start_position: Position { row: 0, col: 22 },
+                        end_position: Position { row: 0, col: 25 },
+                    }
+                ),
+                new_token(
+                    "FROM",
+                    "from",
+                    Location {
+                        start_position: Position { row: 0, col: 26 },
+                        end_position: Position { row: 0, col: 30 },
+                    }
+                ),
+                new_token(
+                    "identifier",
+                    "table_name",
+                    Location {
+                        start_position: Position { row: 0, col: 31 },
+                        end_position: Position { row: 0, col: 41 },
+                    }
+                )
             ]
         )
     }
@@ -356,6 +418,6 @@ select
         let src_ts_tree = parser.parse(src, None).unwrap();
         let dst_ts_tree = parser.parse(dst, None).unwrap();
 
-        compare_tree(src, dst, &src_ts_tree, &dst_ts_tree)
+        compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src)
     }
 }

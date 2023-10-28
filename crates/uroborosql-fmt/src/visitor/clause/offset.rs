@@ -15,7 +15,7 @@ impl Visitor {
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
         cursor.goto_first_child();
-        ensure_kind(cursor, "OFFSET")?;
+        ensure_kind(cursor, "OFFSET", src)?;
 
         let mut offset_clause = Clause::from_node(cursor.node(), src);
 
@@ -31,7 +31,7 @@ impl Visitor {
         offset_clause.set_body(body);
 
         cursor.goto_parent();
-        ensure_kind(cursor, "offset_clause")?;
+        ensure_kind(cursor, "offset_clause", src)?;
 
         Ok(offset_clause)
     }

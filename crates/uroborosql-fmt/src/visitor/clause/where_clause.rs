@@ -30,7 +30,7 @@ impl Visitor {
 
         // cursorをwhere_clauseに戻す
         cursor.goto_parent();
-        ensure_kind(cursor, "where_clause")?;
+        ensure_kind(cursor, "where_clause", src)?;
 
         Ok(clause)
     }
