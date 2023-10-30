@@ -23,5 +23,5 @@ pub fn runfmt_with_settings(
   config_path: Option<&str>,
 ) -> Result<String> {
   format_sql_with_settings_json(&input, &settings_json, config_path)
-    .or_else(|e| Err(Error::new(Status::GenericFailure, format!("{e}"))))
+    .map_err(|e| Error::new(Status::GenericFailure, format!("{e}")))
 }
