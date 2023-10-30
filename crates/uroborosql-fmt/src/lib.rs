@@ -26,6 +26,22 @@ pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, Urobor
     format_sql_with_config(src, config)
 }
 
+/// 設定ファイルより優先させるオプションを JSON 文字列で与えて、SQLのフォーマットを行う。
+///
+/// Format sql with json string that describes higher priority options than the configuration file.
+pub fn format_sql_with_settings_json(
+    src: &str,
+    settings_json: &str,
+    config_path: Option<&str>,
+) -> Result<String, UroboroSQLFmtError> {
+    let config = if let Some(path) = config_path {
+        Config::from_settings_json_and_config_path(settings_json, path)?
+    } else {
+        Config::from_json_str(settings_json)?
+    };
+    format_sql_with_config(src, config)
+}
+
 /// 設定をConfig構造体で渡して、SQLをフォーマットする。
 pub fn format_sql_with_config(src: &str, config: Config) -> Result<String, UroboroSQLFmtError> {
     // tree-sitter-sqlの言語を取得

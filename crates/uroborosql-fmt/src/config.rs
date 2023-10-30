@@ -187,6 +187,36 @@ impl Config {
         serde_json::from_reader(reader)
             .map_err(|e| UroboroSQLFmtError::IllegalSettingFile(e.to_string()))
     }
+
+    /// 設定ファイルより優先度の高い設定を記述した JSON 文字列と、設定ファイルのパスから Config 構造体を生成する。
+    ///
+    /// Returns `Config` that is created from the json string which describes higher priority options
+    /// than the configuration file and the configuration file path.
+    pub(crate) fn from_settings_json_and_config_path(
+        settings_json: &str,
+        path: &str,
+    ) -> Result<Config, UroboroSQLFmtError> {
+        let file = File::open(path)
+            .map_err(|_| UroboroSQLFmtError::FileNotFound("Setting file not found".to_string()))?;
+
+        let reader = BufReader::new(file);
+
+        let mut config: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_reader(reader)
+                .map_err(|e| UroboroSQLFmtError::IllegalSettingFile(e.to_string()))?;
+
+        let settings: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(settings_json).map_err(|e| {
+                UroboroSQLFmtError::Runtime(format!("Setting json is invalid.{}", &e.to_string()))
+            })?;
+
+        for (key, value) in settings {
+            config.insert(key, value);
+        }
+
+        serde_json::from_value(serde_json::Value::Object(config))
+            .map_err(|e| UroboroSQLFmtError::Runtime(e.to_string()))
+    }
 }
 
 /// 引数に与えた Config 構造体をグローバル変数 CONFIG に読み込む

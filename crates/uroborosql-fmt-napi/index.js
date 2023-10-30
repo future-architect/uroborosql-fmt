@@ -252,6 +252,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { runfmt } = nativeBinding
+const { runfmt, runfmtWithSettings } = nativeBinding
 
 module.exports.runfmt = runfmt
+module.exports.runfmtWithSettings = runfmtWithSettings
