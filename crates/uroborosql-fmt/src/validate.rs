@@ -114,7 +114,10 @@ impl Token {
             "".to_string()
         };
 
-        create_error_annotation(&self.location, &label, src)
+        match create_error_annotation(&self.location, &label, src) {
+            Ok(error_annotation) => error_annotation,
+            Err(_) => "".to_string(),
+        }
     }
 }
 

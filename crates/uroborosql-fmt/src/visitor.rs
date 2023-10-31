@@ -364,5 +364,8 @@ fn error_annotation_from_cursor(cursor: &TreeCursor, src: &str) -> String {
     let label = format!(r#"Appears as "{}" node on the CST"#, cursor.node().kind());
     let location = Location::new(cursor.node().range());
 
-    create_error_annotation(&location, &label, src)
+    match create_error_annotation(&location, &label, src) {
+        Ok(error_annotation) => error_annotation,
+        Err(_) => "".to_string(),
+    }
 }
