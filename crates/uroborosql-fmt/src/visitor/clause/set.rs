@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{ensure_kind, Visitor, COMMA, COMMENT},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -16,11 +16,11 @@ impl Visitor {
     ) -> Result<Clause, UroboroSQLFmtError> {
         cursor.goto_first_child();
 
-        ensure_kind(cursor, "SET")?;
+        ensure_kind(cursor, "SET", src)?;
         let mut set_clause = Clause::from_node(cursor.node(), src);
         cursor.goto_next_sibling();
 
-        ensure_kind(cursor, "set_clause_body")?;
+        ensure_kind(cursor, "set_clause_body", src)?;
         cursor.goto_first_child();
 
         let mut sep_lines = SeparatedLines::new();
@@ -44,13 +44,13 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "set_clause_body")?;
+        ensure_kind(cursor, "set_clause_body", src)?;
 
         // set_clauseにBodyをセット
         set_clause.set_body(Body::SepLines(sep_lines));
 
         cursor.goto_parent();
-        ensure_kind(cursor, "set_clause")?;
+        ensure_kind(cursor, "set_clause", src)?;
 
         Ok(set_clause)
     }
@@ -68,7 +68,7 @@ impl Visitor {
             let lhs = Expr::ColumnList(Box::new(self.visit_column_list(cursor, src)?));
 
             cursor.goto_next_sibling();
-            ensure_kind(cursor, "=")?;
+            ensure_kind(cursor, "=", src)?;
 
             cursor.goto_next_sibling();
 
@@ -84,9 +84,9 @@ impl Visitor {
             Ok(aligned)
         } else {
             Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                r#"visit_set_clause(): expected node is assigment_expression, "(" or select_subexpression, but actual {}\n{:#?}"#,
+                r#"visit_set_clause(): expected node is assigment_expression, "(" or select_subexpression, but actual {}\n{}"#,
                 cursor.node().kind(),
-                cursor.node().range()
+                error_annotation_from_cursor(cursor, src)
             )))
         }
     }

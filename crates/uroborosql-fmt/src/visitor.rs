@@ -7,7 +7,12 @@ use tree_sitter::{Node, TreeCursor};
 pub(crate) const COMMENT: &str = "comment";
 pub(crate) const COMMA: &str = ",";
 
-use crate::{config::CONFIG, cst::*, error::UroboroSQLFmtError, util::convert_identifier_case};
+use crate::{
+    config::CONFIG,
+    cst::*,
+    error::UroboroSQLFmtError,
+    util::{convert_identifier_case, create_error_annotation},
+};
 
 use self::expr::ComplementConfig;
 
@@ -57,9 +62,8 @@ impl Visitor {
             // source_fileに子供がない、つまり、ソースファイルが空である場合
             // todo
             return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_source(): source_file has no child \nnode_kind: {}\n{:#?}",
-                cursor.node().kind(),
-                cursor.node().range(),
+                "visit_source(): source_file has no child\n{}",
+                error_annotation_from_cursor(cursor, src)
             )));
         }
 
@@ -82,10 +86,9 @@ impl Visitor {
                     // todo
                     _ => {
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_source(): Unimplemented statement\nnode_kind: {}\n{:#?}",
-                            cursor.node().kind(),
-                            cursor.node().range(),
-                        )))
+                            "visit_source(): Unimplemented statement\n{}",
+                            error_annotation_from_cursor(cursor, src)
+                        )));
                     }
                 };
 
@@ -289,13 +292,14 @@ impl Visitor {
 fn ensure_kind<'a>(
     cursor: &'a TreeCursor<'a>,
     kind: &'a str,
+    src: &'a str,
 ) -> Result<&'a TreeCursor<'a>, UroboroSQLFmtError> {
     if cursor.node().kind() != kind {
         Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-            "ensure_kind(): excepted node is {}, but actual {}\n{:#?}",
+            "ensure_kind(): excepted node is {}, but actual {}\n{}",
             kind,
             cursor.node().kind(),
-            cursor.node().range()
+            error_annotation_from_cursor(cursor, src)
         )))
     } else {
         Ok(cursor)
@@ -335,14 +339,33 @@ fn create_clause(
     src: &str,
     keyword: &str,
 ) -> Result<Clause, UroboroSQLFmtError> {
-    ensure_kind(cursor, keyword)?;
+    ensure_kind(cursor, keyword, src)?;
     let mut clause = Clause::from_node(cursor.node(), src);
 
     for _ in 1..keyword.split('_').count() {
         cursor.goto_next_sibling();
-        ensure_kind(cursor, keyword)?;
+        ensure_kind(cursor, keyword, src)?;
         clause.extend_kw(cursor.node(), src);
     }
 
     Ok(clause)
+}
+
+/// cursorからエラー注釈を作成する関数
+/// 以下の形のエラー注釈を生成
+///
+/// ```sh
+///   |
+/// 2 | using tbl_b b
+///   | ^^^^^^^^^^^^^ Appears as "ERROR" node on the CST
+///   |
+/// ```
+fn error_annotation_from_cursor(cursor: &TreeCursor, src: &str) -> String {
+    let label = format!(r#"Appears as "{}" node on the CST"#, cursor.node().kind());
+    let location = Location::new(cursor.node().range());
+
+    match create_error_annotation(&location, &label, src) {
+        Ok(error_annotation) => error_annotation,
+        Err(_) => "".to_string(),
+    }
 }

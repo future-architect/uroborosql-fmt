@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, Visitor, COMMENT},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
 };
 
 impl Visitor {
@@ -28,7 +28,7 @@ impl Visitor {
         }
 
         // cursor -> update_clause
-        ensure_kind(cursor, "UPDATE")?;
+        ensure_kind(cursor, "UPDATE", src)?;
 
         let mut update_clause = create_clause(cursor, src, "UPDATE")?;
         cursor.goto_next_sibling();
@@ -58,7 +58,7 @@ impl Visitor {
         }
 
         // set句を処理する
-        ensure_kind(cursor, "set_clause")?;
+        ensure_kind(cursor, "set_clause", src)?;
         let set_clause = self.visit_set_clause(cursor, src)?;
         statement.add_clause(set_clause);
 
@@ -88,16 +88,15 @@ impl Visitor {
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_update_stmt(): unimplemented update_statement\nnode_kind: {}\n{:#?}",
-                        cursor.node().kind(),
-                        cursor.node().range(),
-                    )))
+                        "visit_update_stmt(): unimplemented update_statement\n{}",
+                        error_annotation_from_cursor(cursor, src)
+                    )));
                 }
             }
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "update_statement")?;
+        ensure_kind(cursor, "update_statement", src)?;
 
         Ok(statement)
     }

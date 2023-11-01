@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{ensure_kind, Visitor, COMMA, COMMENT},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -14,7 +14,7 @@ impl Visitor {
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<ColumnList, UroboroSQLFmtError> {
-        ensure_kind(cursor, "(")?;
+        ensure_kind(cursor, "(", src)?;
 
         // ColumnListの位置
         let mut loc = Location::new(cursor.node().range());
@@ -49,17 +49,17 @@ impl Visitor {
                     } else {
                         // バインドパラメータ、末尾コメント以外のコメントは想定していない
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_column_list(): Unexpected comment\nnode_kind: {}\n{:#?}",
+                            "visit_column_list(): Unexpected comment\nnode_kind: {}\n{}",
                             cursor.node().kind(),
-                            cursor.node().range(),
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     }
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_column_list(): Unexpected node\nnode_kind: {}\n{:#?}",
+                        "visit_column_list(): Unexpected node\nnode_kind: {}\n{}",
                         cursor.node().kind(),
-                        cursor.node().range(),
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }

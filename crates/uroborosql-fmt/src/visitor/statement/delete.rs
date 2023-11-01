@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, Visitor, COMMENT},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
 };
 
 impl Visitor {
@@ -29,7 +29,7 @@ impl Visitor {
         }
 
         // cursor -> delete_clause
-        ensure_kind(cursor, "DELETE")?;
+        ensure_kind(cursor, "DELETE", src)?;
 
         // DELETE
         let mut clause = create_clause(cursor, src, "DELETE")?;
@@ -60,16 +60,15 @@ impl Visitor {
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_delete_stmt(): unimplemented delete_statement\nnode_kind: {}\n{:#?}",
-                        cursor.node().kind(),
-                        cursor.node().range(),
-                    )))
+                        "visit_delete_stmt(): unimplemented delete_statement\n{}",
+                        error_annotation_from_cursor(cursor, src)
+                    )));
                 }
             }
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "delete_statement")?;
+        ensure_kind(cursor, "delete_statement", src)?;
 
         Ok(statement)
     }

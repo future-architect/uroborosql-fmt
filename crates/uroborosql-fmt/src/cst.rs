@@ -31,7 +31,7 @@ use tree_sitter::{Node, Point, Range};
 
 use crate::{config::CONFIG, error::UroboroSQLFmtError};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Position {
     pub(crate) row: usize,
     pub(crate) col: usize,
@@ -46,7 +46,7 @@ impl Position {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Location {
     pub(crate) start_position: Position,
     pub(crate) end_position: Position,

@@ -25,7 +25,7 @@ impl Visitor {
                 convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
 
             cursor.goto_next_sibling();
-            ensure_kind(cursor, "(")?;
+            ensure_kind(cursor, "(", src)?;
             cursor.goto_next_sibling();
 
             // キャストされる式
@@ -33,18 +33,18 @@ impl Visitor {
             // visit_aliasable_expr では対処できない。
             let expr = self.visit_expr(cursor, src)?;
             cursor.goto_next_sibling();
-            ensure_kind(cursor, "AS")?;
+            ensure_kind(cursor, "AS", src)?;
             let as_keyword = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
 
             cursor.goto_next_sibling();
 
-            ensure_kind(cursor, "type")?;
+            ensure_kind(cursor, "type", src)?;
             // 型は特殊な書き方をされていないことを想定し、ソースの文字列をそのまま PrimaryExpr に変換する。
             // 例えば、"CHAR   ( 3    )" などのように、途中に空白を含むような特殊な書き方をした場合、フォーマット結果にもその空白が現れてしまう。
             let type_name = PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
             cursor.goto_next_sibling();
 
-            ensure_kind(cursor, ")")?;
+            ensure_kind(cursor, ")", src)?;
 
             // expr AS type を AlignedExpr にする。
             let mut aligned = AlignedExpr::new(expr);
@@ -57,7 +57,7 @@ impl Visitor {
                 FunctionCall::new(cast_keyword, args, FunctionCallKind::BuiltIn, cast_loc);
 
             cursor.goto_parent();
-            ensure_kind(cursor, "type_cast")?;
+            ensure_kind(cursor, "type_cast", src)?;
 
             Ok(Expr::FunctionCall(Box::new(function)))
         } else {
@@ -67,15 +67,15 @@ impl Visitor {
 
             cursor.goto_next_sibling();
 
-            ensure_kind(cursor, "::")?;
+            ensure_kind(cursor, "::", src)?;
 
             cursor.goto_next_sibling();
 
             let type_name = PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
-            ensure_kind(cursor, "type")?;
+            ensure_kind(cursor, "type", src)?;
 
             cursor.goto_parent();
-            ensure_kind(cursor, "type_cast")?;
+            ensure_kind(cursor, "type_cast", src)?;
 
             if CONFIG.read().unwrap().convert_double_colon_cast {
                 // CAST関数に変換

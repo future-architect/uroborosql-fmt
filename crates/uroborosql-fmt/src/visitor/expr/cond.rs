@@ -116,7 +116,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "conditional_expression")?;
+        ensure_kind(cursor, "conditional_expression", src)?;
 
         Ok(cond_expr)
     }

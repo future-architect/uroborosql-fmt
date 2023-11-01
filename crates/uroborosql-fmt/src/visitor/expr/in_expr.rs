@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{ensure_kind, Visitor, COMMENT},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
 };
 
 impl Visitor {
@@ -30,7 +30,7 @@ impl Visitor {
             cursor.goto_next_sibling();
         }
 
-        ensure_kind(cursor, "IN")?;
+        ensure_kind(cursor, "IN", src)?;
         op.push_str(&convert_keyword_case(
             cursor.node().utf8_text(src.as_bytes()).unwrap(),
         ));
@@ -44,7 +44,7 @@ impl Visitor {
             None
         };
 
-        ensure_kind(cursor, "tuple")?;
+        ensure_kind(cursor, "tuple", src)?;
         // body のネスト分と、開きかっこのネストで、二重にネストさせる。
         // TODO: body の走査に入った時点で、ネストするべきかもしれない。
 
@@ -52,14 +52,15 @@ impl Visitor {
         let mut column_list = self.visit_column_list(cursor, src)?;
         cursor.goto_parent();
 
-        ensure_kind(cursor, "tuple")?;
+        ensure_kind(cursor, "tuple", src)?;
 
         if let Some(comment) = bind_param {
             if comment.is_block_comment() && comment.loc().is_next_to(&column_list.loc()) {
                 column_list.set_head_comment(comment);
             } else {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_in_expr(): unexpected comment\n{comment:?}"
+                    "visit_in_expr(): unexpected comment\n{comment:?}\n{}",
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }
@@ -70,7 +71,7 @@ impl Visitor {
         aligned.add_rhs(Some(op), rhs);
 
         cursor.goto_parent();
-        ensure_kind(cursor, "in_expression")?;
+        ensure_kind(cursor, "in_expression", src)?;
 
         Ok(aligned)
     }

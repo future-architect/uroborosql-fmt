@@ -2,6 +2,10 @@ body {
   font-size: small;
 }
 
+code {
+  font-family: Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}
+
 /* options */
 #tab_size {
   width: 68px;

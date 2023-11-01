@@ -5,7 +5,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{create_alias, ensure_kind, Visitor, COMMENT},
+    visitor::{create_alias, ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
 };
 
 /// 補完の種類
@@ -120,8 +120,8 @@ impl Visitor {
                     } else {
                         // エイリアス式の直前のコメントは、バインドパラメータしか考慮していない
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                            "visit_aliasable_expr(): unexpected comment\n{:?}",
-                            cursor.node().range()
+                            "visit_aliasable_expr(): unexpected comment\n{}",
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     }
                 }
@@ -142,9 +142,9 @@ impl Visitor {
                             // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
                             // エイリアスがない場合は、コメントノードがここに現れない
                             return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                                "visit_aliasable_expr(): unexpected syntax\nnode_kind: {}\n{:#?}",
+                                "visit_aliasable_expr(): unexpected syntax\nnode_kind: {}\n{}",
                                 cursor.node().kind(),
-                                cursor.node().range(),
+                                error_annotation_from_cursor(cursor, src)
                             )));
                         } else {
                             // 行末コメント
@@ -177,7 +177,7 @@ impl Visitor {
                     // cursor -> identifier
 
                     // identifier
-                    ensure_kind(cursor, "identifier")?;
+                    ensure_kind(cursor, "identifier", src)?;
 
                     let rhs_expr =
                         PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Expr);

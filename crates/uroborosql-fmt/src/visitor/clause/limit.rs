@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{ensure_kind, Visitor, COMMENT},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
 };
 
 impl Visitor {
@@ -15,7 +15,7 @@ impl Visitor {
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
         cursor.goto_first_child();
-        ensure_kind(cursor, "LIMIT")?;
+        ensure_kind(cursor, "LIMIT", src)?;
         let mut limit_clause = Clause::from_node(cursor.node(), src);
 
         cursor.goto_next_sibling();
@@ -44,15 +44,15 @@ impl Visitor {
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    r#"visit_limit_clause(): expected node is number or ALL, but actual {}\n{:#?}"#,
+                    r#"visit_limit_clause(): expected node is number or ALL, but actual {}\n{}"#,
                     cursor.node().kind(),
-                    cursor.node().range()
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "limit_clause")?;
+        ensure_kind(cursor, "limit_clause", src)?;
 
         Ok(limit_clause)
     }

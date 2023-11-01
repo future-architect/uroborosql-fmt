@@ -43,7 +43,7 @@ impl Visitor {
 
         // cursorを戻しておく
         cursor.goto_parent();
-        ensure_kind(cursor, "binary_expression")?;
+        ensure_kind(cursor, "binary_expression", src)?;
 
         if is_comp_op(&op_str) {
             // 比較演算子ならばそろえる必要があるため、AlignedExprとする

@@ -56,7 +56,7 @@ impl Visitor {
 
         // cursor -> )
         cursor.goto_parent();
-        ensure_kind(cursor, "select_subexpression")?;
+        ensure_kind(cursor, "select_subexpression", src)?;
 
         Ok(SubExpr::new(select_stmt, loc))
     }
@@ -74,7 +74,7 @@ impl Visitor {
         cursor.goto_first_child();
         // cursor -> "EXISTS"
 
-        ensure_kind(cursor, "EXISTS")?;
+        ensure_kind(cursor, "EXISTS", src)?;
         let exists_keyword = convert_keyword_case(cursor.node().utf8_text(src.as_bytes()).unwrap());
 
         cursor.goto_next_sibling();
@@ -85,7 +85,7 @@ impl Visitor {
         let exists_subquery = ExistsSubquery::new(&exists_keyword, select_subexpr, exists_loc);
 
         cursor.goto_parent();
-        ensure_kind(cursor, "exists_subquery_expression")?;
+        ensure_kind(cursor, "exists_subquery_expression", src)?;
 
         Ok(exists_subquery)
     }
@@ -122,21 +122,21 @@ impl Visitor {
             // cursor -> "IN"
         }
 
-        ensure_kind(cursor, "IN")?;
+        ensure_kind(cursor, "IN", src)?;
         op.push_str(&convert_keyword_case(
             cursor.node().utf8_text(src.as_bytes()).unwrap(),
         ));
         cursor.goto_next_sibling();
         // cursor -> select_subexpression
 
-        ensure_kind(cursor, "select_subexpression")?;
+        ensure_kind(cursor, "select_subexpression", src)?;
         let rhs = Expr::Sub(Box::new(self.visit_select_subexpr(cursor, src)?));
 
         let mut in_sub = AlignedExpr::new(lhs);
         in_sub.add_rhs(Some(op), rhs);
 
         cursor.goto_parent();
-        ensure_kind(cursor, "in_subquery_expression")?;
+        ensure_kind(cursor, "in_subquery_expression", src)?;
 
         Ok(in_sub)
     }
@@ -187,7 +187,7 @@ impl Visitor {
         );
 
         cursor.goto_parent();
-        ensure_kind(cursor, "all_some_any_subquery_expression")?;
+        ensure_kind(cursor, "all_some_any_subquery_expression", src)?;
 
         Ok(all_some_any_sub)
     }

@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -35,7 +35,7 @@ impl Visitor {
         }
 
         // cursor -> INSERT
-        ensure_kind(cursor, "INSERT")?;
+        ensure_kind(cursor, "INSERT", src)?;
 
         let mut insert = create_clause(cursor, src, "INSERT")?;
         cursor.goto_next_sibling();
@@ -98,8 +98,8 @@ impl Visitor {
                     }
                     "ERROR" => {
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                            "visit_insert_stmt: ERROR node appeared \n{:?}",
-                            cursor.node().range()
+                            "visit_insert_stmt: ERROR node appeared \n{}",
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     }
                     _ => continue,
@@ -113,7 +113,7 @@ impl Visitor {
         match cursor.node().kind() {
             "values_clause" => {
                 cursor.goto_first_child();
-                ensure_kind(cursor, "VALUES")?;
+                ensure_kind(cursor, "VALUES", src)?;
 
                 let mut items = vec![];
                 // commaSep1(values_clause_item)
@@ -125,9 +125,9 @@ impl Visitor {
                         COMMA => continue,
                         _ => {
                             return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                                "visit_insert_stmt(): unexpected token {}\n{:#?}",
+                                "visit_insert_stmt(): unexpected token {}\n{}",
                                 cursor.node().kind(),
-                                cursor.node().range()
+                                error_annotation_from_cursor(cursor, src)
                             )))
                         }
                     }
@@ -142,7 +142,7 @@ impl Visitor {
                 insert_body.set_values_clause(&convert_keyword_case("VALUES"), items);
 
                 cursor.goto_parent();
-                ensure_kind(cursor, "values_clause")?;
+                ensure_kind(cursor, "values_clause", src)?;
 
                 cursor.goto_next_sibling();
             }
@@ -184,7 +184,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "insert_statement")?;
+        ensure_kind(cursor, "insert_statement", src)?;
 
         Ok(statement)
     }
@@ -203,12 +203,12 @@ impl Visitor {
         cursor.goto_first_child();
 
         // cursor -> "ON_CONFLICT"
-        ensure_kind(cursor, "ON_CONFLICT")?;
+        ensure_kind(cursor, "ON_CONFLICT", src)?;
         let on_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
 
         cursor.goto_next_sibling();
         // cursor -> "ON_CONFLICT"
-        ensure_kind(cursor, "ON_CONFLICT")?;
+        ensure_kind(cursor, "ON_CONFLICT", src)?;
         let conflict_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
         let on_conflict_keyword = (
             convert_keyword_case(on_keyword),
@@ -231,7 +231,7 @@ impl Visitor {
             None
         };
 
-        ensure_kind(cursor, "conflict_action")?;
+        ensure_kind(cursor, "conflict_action", src)?;
 
         cursor.goto_first_child();
 
@@ -247,7 +247,7 @@ impl Visitor {
                 let do_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
 
                 cursor.goto_next_sibling();
-                ensure_kind(cursor, "DO_NOTHING")?;
+                ensure_kind(cursor, "DO_NOTHING", src)?;
 
                 let nothing_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
 
@@ -259,7 +259,7 @@ impl Visitor {
                 let do_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
 
                 cursor.goto_next_sibling();
-                ensure_kind(cursor, "DO_UPDATE")?;
+                ensure_kind(cursor, "DO_UPDATE", src)?;
 
                 let update_keyword = cursor.node().utf8_text(src.as_bytes()).unwrap();
                 let do_update_keyword = (convert_keyword_case(do_keyword), convert_keyword_case(update_keyword));
@@ -278,18 +278,18 @@ impl Visitor {
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_on_conflict: expected node is 'DO_NOTHING' or 'DO_UPDATE', but actual {}\n{:?}",
+                    "visit_on_conflict: expected node is 'DO_NOTHING' or 'DO_UPDATE', but actual {}\n{}",
                     cursor.node().kind(),
-                    cursor.node().range()
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
         };
 
         cursor.goto_parent();
-        ensure_kind(cursor, "conflict_action")?;
+        ensure_kind(cursor, "conflict_action", src)?;
 
         cursor.goto_parent();
-        ensure_kind(cursor, "on_conflict_clause")?;
+        ensure_kind(cursor, "on_conflict_clause", src)?;
 
         let on_conflict = OnConflict::new(on_conflict_keyword, conflict_target, conflict_action);
 
@@ -306,7 +306,7 @@ impl Visitor {
         cursor.goto_first_child();
         let column_list = self.visit_column_list(cursor, src)?;
         cursor.goto_parent();
-        ensure_kind(cursor, "values_clause_item")?;
+        ensure_kind(cursor, "values_clause_item", src)?;
 
         Ok(column_list)
     }

@@ -47,7 +47,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "for_update_clause")?;
+        ensure_kind(cursor, "for_update_clause", src)?;
 
         Ok(clauses)
     }

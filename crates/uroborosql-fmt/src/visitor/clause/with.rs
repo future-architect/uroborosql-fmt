@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, convert_keyword_case},
-    visitor::{create_clause, ensure_kind, Visitor, COMMA, COMMENT},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
@@ -43,8 +43,8 @@ impl Visitor {
                 }
                 "ERROR" => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_with_clause: ERROR node appeared \n{:?}",
-                        cursor.node().range()
+                        "visit_with_clause: ERROR node appeared \n{}",
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
                 _ => {
@@ -60,7 +60,7 @@ impl Visitor {
         with_clause.set_body(Body::With(Box::new(with_body)));
 
         cursor.goto_parent();
-        ensure_kind(cursor, "with_clause")?;
+        ensure_kind(cursor, "with_clause", src)?;
 
         Ok(with_clause)
     }
@@ -98,7 +98,7 @@ impl Visitor {
         }
 
         // cursor -> "AS"
-        ensure_kind(cursor, "AS")?;
+        ensure_kind(cursor, "AS", src)?;
 
         let as_keyword = convert_keyword_case(cursor.node().utf8_text(src.as_ref()).unwrap());
 
@@ -149,10 +149,9 @@ impl Visitor {
             "update_statement" => self.visit_update_stmt(cursor, src)?,
             _ => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_cte(): Unimplemented statement\nnode_kind: {}\n{:#?}",
-                    cursor.node().kind(),
-                    cursor.node().range(),
-                )))
+                    "visit_cte(): Unimplemented statement\n{}",
+                    error_annotation_from_cursor(cursor, src)
+                )));
             }
         };
         stmt_loc.append(Location::new(cursor.node().range()));
@@ -167,7 +166,7 @@ impl Visitor {
         }
 
         // cursor -> )
-        ensure_kind(cursor, ")")?;
+        ensure_kind(cursor, ")", src)?;
         stmt_loc.append(Location::new(cursor.node().range()));
 
         // 開きかっことstatementの間にあるコメントを追加
@@ -179,7 +178,7 @@ impl Visitor {
 
         // cursorを戻しておく
         cursor.goto_parent();
-        ensure_kind(cursor, "cte")?;
+        ensure_kind(cursor, "cte", src)?;
 
         let mut cte = Cte::new(
             loc,
