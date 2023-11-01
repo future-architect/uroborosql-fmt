@@ -3,7 +3,11 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
+    visitor::{
+        create_clause, ensure_kind, error_annotation_from_cursor,
+        expr::{ComplementConfig, ComplementKind},
+        Visitor, COMMENT,
+    },
 };
 
 impl Visitor {
@@ -45,6 +49,10 @@ impl Visitor {
 
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
+                "using_table_list" => {
+                    let clause = self.visit_using_table_list(cursor, src)?;
+                    statement.add_clause(clause);
+                }
                 "where_clause" => {
                     let clause = self.visit_where_clause(cursor, src)?;
                     statement.add_clause(clause);
@@ -71,5 +79,32 @@ impl Visitor {
         ensure_kind(cursor, "delete_statement", src)?;
 
         Ok(statement)
+    }
+
+    pub(crate) fn visit_using_table_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        // using_table_listは必ずUSINGを子供に持つ
+        cursor.goto_first_child();
+
+        // cursor -> USING
+        let mut clause = create_clause(cursor, src, "USING")?;
+        cursor.goto_next_sibling();
+        self.consume_comment_in_clause(cursor, src, &mut clause)?;
+
+        // ASがあれば除去する
+        // エイリアス補完は現状行わない
+        let complement_config = ComplementConfig::new(ComplementKind::TableName, true, false);
+        let body = self.visit_comma_sep_alias(cursor, src, Some(&complement_config))?;
+
+        clause.set_body(body);
+
+        // cursorをusing_table_listに戻す
+        cursor.goto_parent();
+        ensure_kind(cursor, "using_table_list", src)?;
+
+        Ok(clause)
     }
 }
