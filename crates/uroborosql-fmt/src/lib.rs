@@ -17,11 +17,7 @@ use validate::validate_format_result;
 
 /// 設定をファイルで渡して、SQLをフォーマットする。
 pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, UroboroSQLFmtError> {
-    let config = if let Some(path) = config_path {
-        Config::from_path(path)?
-    } else {
-        Config::new()
-    };
+    let config = Config::new(None, config_path)?;
 
     format_sql_with_config(src, config)
 }
@@ -34,11 +30,8 @@ pub fn format_sql_with_settings_json(
     settings_json: &str,
     config_path: Option<&str>,
 ) -> Result<String, UroboroSQLFmtError> {
-    let config = if let Some(path) = config_path {
-        Config::from_settings_json_and_config_path(settings_json, path)?
-    } else {
-        Config::from_json_str(settings_json)?
-    };
+    let config = Config::new(Some(settings_json), config_path)?;
+
     format_sql_with_config(src, config)
 }
 

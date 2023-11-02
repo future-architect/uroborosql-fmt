@@ -44,8 +44,8 @@ pub unsafe extern "C" fn format_sql_for_wasm(src: *const c_char, config_json_str
 
     let src = CStr::from_ptr(src).to_str().unwrap().to_owned();
 
-    let config_json_str = CStr::from_ptr(config_json_str).to_str().unwrap();
-    let config = Config::from_json_str(config_json_str).unwrap();
+    let settings_json = CStr::from_ptr(config_json_str).to_str().unwrap();
+    let config = Config::new(Some(settings_json), None).unwrap();
 
     let result = format_sql_with_config(&src, config);
 
