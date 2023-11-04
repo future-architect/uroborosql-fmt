@@ -56,6 +56,20 @@ impl SelectBody {
         Ok(())
     }
 
+    pub(crate) fn try_set_head_comment(&mut self, comment: Comment) -> bool {
+        // select_clause_bodyが存在し、空ではなく、先頭とコメントが隣接している場合
+        // select_clause_bodyの先頭要素にバインドパラメータをセットする
+        if let Some(select_clause_body) = &mut self.select_clause_body {
+            if let Some(select_clause_body_loc) = select_clause_body.loc() {
+                if comment.loc().is_next_to(&select_clause_body_loc) {
+                    return select_clause_body.try_set_head_comment(comment);
+                }
+            }
+        }
+
+        false
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.all_distinct.is_none() && self.select_clause_body.is_none()
     }
