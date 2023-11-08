@@ -107,7 +107,7 @@ impl Body {
             Body::Insert(_) => false,
             Body::With(_) => false,
             Body::SingleLine(single_line) => single_line.try_set_head_comment(comment),
-            Body::Select(_) => false,
+            Body::Select(select) => select.try_set_head_comment(comment),
         }
     }
 }
