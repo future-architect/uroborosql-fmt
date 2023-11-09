@@ -1,14 +1,14 @@
 #![deny(clippy::all)]
 
 use napi::{Error, Result, Status};
-use uroborosql_fmt::{format_sql, format_sql_with_settings_json};
+use uroborosql_fmt::format_sql;
 
 #[macro_use]
 extern crate napi_derive;
 
 #[napi]
 pub fn runfmt(input: String, config_path: Option<&str>) -> Result<String> {
-  let result = format_sql(&input, config_path);
+  let result = format_sql(&input, None, config_path);
 
   match result {
     Ok(res) => Ok(res),
@@ -22,6 +22,6 @@ pub fn runfmt_with_settings(
   settings_json: String,
   config_path: Option<&str>,
 ) -> Result<String> {
-  format_sql_with_settings_json(&input, &settings_json, config_path)
+  format_sql(&input, Some(&settings_json), config_path)
     .map_err(|e| Error::new(Status::GenericFailure, format!("{e}")))
 }

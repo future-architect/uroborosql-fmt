@@ -7,7 +7,7 @@ use std::{
 static RESULT: Lazy<Mutex<CString>> = Lazy::new(|| Mutex::new(CString::new("").unwrap()));
 static ERROR_MSG: Lazy<Mutex<CString>> = Lazy::new(|| Mutex::new(CString::new("").unwrap()));
 
-use uroborosql_fmt::{config::Config, format_sql_with_config};
+use uroborosql_fmt::format_sql;
 
 /// Returns the address of the result string.
 ///
@@ -45,9 +45,7 @@ pub unsafe extern "C" fn format_sql_for_wasm(src: *const c_char, config_json_str
     let src = CStr::from_ptr(src).to_str().unwrap().to_owned();
 
     let settings_json = CStr::from_ptr(config_json_str).to_str().unwrap();
-    let config = Config::new(Some(settings_json), None).unwrap();
-
-    let result = format_sql_with_config(&src, config);
+    let result = format_sql(&src, Some(settings_json), None);
 
     match result {
         Ok(result) => *RESULT.lock().unwrap() = CString::new(result).unwrap(),

@@ -15,28 +15,24 @@ use tree_sitter::{Language, Node};
 use two_way_sql::{format_two_way_sql, is_two_way_sql};
 use validate::validate_format_result;
 
-/// 設定をファイルで渡して、SQLをフォーマットする。
-pub fn format_sql(src: &str, config_path: Option<&str>) -> Result<String, UroboroSQLFmtError> {
-    let config = Config::new(None, config_path)?;
-
-    format_sql_with_config(src, config)
-}
-
 /// 設定ファイルより優先させるオプションを JSON 文字列で与えて、SQLのフォーマットを行う。
 ///
 /// Format sql with json string that describes higher priority options than the configuration file.
-pub fn format_sql_with_settings_json(
+pub fn format_sql(
     src: &str,
-    settings_json: &str,
+    settings_json: Option<&str>,
     config_path: Option<&str>,
 ) -> Result<String, UroboroSQLFmtError> {
-    let config = Config::new(Some(settings_json), config_path)?;
+    let config = Config::new(settings_json, config_path)?;
 
     format_sql_with_config(src, config)
 }
 
 /// 設定をConfig構造体で渡して、SQLをフォーマットする。
-pub fn format_sql_with_config(src: &str, config: Config) -> Result<String, UroboroSQLFmtError> {
+pub(crate) fn format_sql_with_config(
+    src: &str,
+    config: Config,
+) -> Result<String, UroboroSQLFmtError> {
     // tree-sitter-sqlの言語を取得
     let language = tree_sitter_sql::language();
 
