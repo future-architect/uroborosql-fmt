@@ -1,7 +1,14 @@
 import test from 'ava'
 
-import { sum } from '../index.js'
+import { runfmtWithSettings } from '../index.js'
 
-test('sum from native', (t) => {
-  t.is(sum(1, 2), 3)
+test('format with settings', (t) => {
+  const src = 'select A from B'
+  const settings = {
+    keyword_case: 'upper',
+    identifier_case: 'lower',
+    complement_alias: false,
+  }
+  const dst = runfmtWithSettings(src, JSON.stringify(settings), null)
+  t.is(dst, 'SELECT\n\ta\nFROM\n\tb\n')
 })

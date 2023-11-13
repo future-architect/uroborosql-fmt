@@ -21,7 +21,7 @@ fn main() {
         }
     };
 
-    let result = match format_sql(src.as_ref(), config_path) {
+    let result = match format_sql(src.as_ref(), None, config_path) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("{e}");

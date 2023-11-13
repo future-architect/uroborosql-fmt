@@ -8,7 +8,7 @@ use std::sync::RwLock;
 use crate::error::UroboroSQLFmtError;
 
 /// 設定を保持するグローバル変数
-pub(crate) static CONFIG: Lazy<RwLock<Config>> = Lazy::new(|| RwLock::new(Config::new()));
+pub(crate) static CONFIG: Lazy<RwLock<Config>> = Lazy::new(|| RwLock::new(Config::default()));
 
 /// debugのデフォルト値(false)
 fn default_debug() -> bool {
@@ -149,10 +149,51 @@ pub struct Config {
 }
 
 impl Config {
-    // デフォルト値で新規作成
-    pub(crate) fn new() -> Config {
-        // デフォルト値
-        Config {
+    /// 設定ファイルより優先度の高い設定を記述した JSON 文字列と、設定ファイルのパスから Config 構造体を生成する。
+    ///
+    /// Returns `Config` that is created from the json string which describes higher priority options
+    /// than the configuration file and the configuration file path.
+    pub fn new(
+        settings_json: Option<&str>,
+        config_path: Option<&str>,
+    ) -> Result<Config, UroboroSQLFmtError> {
+        let mut config = serde_json::Map::new();
+
+        // 設定ファイルから読み込む
+        if let Some(path) = config_path {
+            let file = File::open(path).map_err(|_| {
+                UroboroSQLFmtError::FileNotFound("Setting file not found".to_string())
+            })?;
+
+            let reader = BufReader::new(file);
+
+            let file_config: serde_json::Map<_, _> = serde_json::from_reader(reader)
+                .map_err(|e| UroboroSQLFmtError::IllegalSettingFile(e.to_string()))?;
+
+            config.extend(file_config);
+        };
+
+        // json文字列から読み込み、設定を上書きする
+        if let Some(settings_json) = settings_json {
+            let settings: serde_json::Map<_, _> =
+                serde_json::from_str(settings_json).map_err(|e| {
+                    UroboroSQLFmtError::Runtime(format!(
+                        "Setting json is invalid. {}",
+                        &e.to_string()
+                    ))
+                })?;
+
+            config.extend(settings);
+        }
+
+        serde_json::from_value(serde_json::Value::Object(config))
+            .map_err(|e| UroboroSQLFmtError::Runtime(e.to_string()))
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
             debug: default_debug(),
             tab_size: default_tab_size(),
             complement_alias: default_complement_alias(),
@@ -168,24 +209,6 @@ impl Config {
             convert_double_colon_cast: default_convert_double_colon_cast(),
             unify_not_equal: default_unify_not_equal(),
         }
-    }
-
-    /// Json 文字列から Config 構造体を生成する
-    pub fn from_json_str(json_str: &str) -> Result<Config, UroboroSQLFmtError> {
-        serde_json::from_str(json_str).map_err(|e| {
-            UroboroSQLFmtError::Runtime(format!("Setting json is invalid.{}", &e.to_string()))
-        })
-    }
-
-    /// 設定ファイルのパスから Config 構造体を生成する
-    pub(crate) fn from_path(path: &str) -> Result<Config, UroboroSQLFmtError> {
-        let file = File::open(path)
-            .map_err(|_| UroboroSQLFmtError::FileNotFound("Setting file not found".to_string()))?;
-
-        let reader = BufReader::new(file);
-
-        serde_json::from_reader(reader)
-            .map_err(|e| UroboroSQLFmtError::IllegalSettingFile(e.to_string()))
     }
 }
 

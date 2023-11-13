@@ -31,7 +31,7 @@ fn run_with_config(
 
     let config_path = config.and_then(|c| c.to_str());
 
-    let result = match uroborosql_fmt::format_sql(&content, config_path) {
+    let result = match uroborosql_fmt::format_sql(&content, None, config_path) {
         Ok(format_result) => format_result,
         Err(UroboroSQLFmtError::Validation {
             format_result,
