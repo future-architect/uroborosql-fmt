@@ -11,7 +11,7 @@ SELECT
 FROM
 	student	std
 WHERE
-	grade	BETWEEN			/*start1*/60	AND	/*end1*/100
+		grade	BETWEEN			/*start1*/60	AND	/*end1*/100
 AND	grade	NOT BETWEEN	/*start2*/70	AND	/*end2*/80
 ;
 UPDATE

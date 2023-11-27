@@ -3,8 +3,8 @@ SELECT
 FROM
 	b
 WHERE
-	(((1	=	1)))
+		(((1	=	1)))
 AND	(
-		((a	=	b))
+			((a	=	b))
 	OR	(a)				=	(((42)))
 	)

@@ -6,12 +6,12 @@ SELECT
 		THEN
 			'A'
 		WHEN
-			grade_point	<		80
+				grade_point	<		80
 		AND	grade_point	>=	70
 		THEN
 			'B'
 		WHEN
-			grade_point	<		70
+				grade_point	<		70
 		AND	grade_point	>=	60
 		THEN
 			'C'
