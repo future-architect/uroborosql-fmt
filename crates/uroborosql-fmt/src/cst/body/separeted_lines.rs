@@ -3,7 +3,7 @@ use itertools::{repeat_n, Itertools};
 use crate::{
     cst::{AlignInfo, AlignedExpr, Comment, Location},
     error::UroboroSQLFmtError,
-    util::{tab_size, to_tab_num},
+    util::to_tab_num,
 };
 
 #[derive(Debug, Clone)]
@@ -75,6 +75,9 @@ impl SepLinesContent {
             result.push_str(sep);
         }
 
+        // sepを考慮したdepth
+        let new_depth_with_sep = depth - 1 + to_tab_num(1.max(max_sep_len));
+
         // AND/OR と式の間に現れるコメント
         if !self.preceding_comments.is_empty() {
             result.push('\t');
@@ -85,26 +88,26 @@ impl SepLinesContent {
                     is_first = false;
                     result.push_str(&comment.render(0)?);
                 } else {
-                    result.push_str(&comment.render(depth)?);
+                    result.push_str(&comment.render(new_depth_with_sep)?);
                 }
                 result.push('\n');
             }
 
             if !self.expr.is_lhs_cond() {
                 // コメントの挿入後に改行をしたので、タブを挿入
-                let tab_num = to_tab_num((depth - 1) * tab_size() + max_sep_len);
-                result.extend(repeat_n('\t', tab_num));
+                result.extend(repeat_n('\t', new_depth_with_sep));
             } else {
                 // 左辺がCASE文の場合は挿入した改行を削除
                 result.pop();
             }
         } else {
             // コメントが存在しない場合はseparatorの直後にタブを挿入
-            let tab_num = to_tab_num(1.max(max_sep_len - self.sep_len()));
+            let tab_num =
+                new_depth_with_sep - (depth - 1) - (to_tab_num(1.max(self.sep_len())) - 1);
             result.extend(repeat_n('\t', tab_num));
         }
 
-        let formatted = self.expr.render_align(depth, align_info)?;
+        let formatted = self.expr.render_align(new_depth_with_sep, align_info)?;
         result.push_str(&formatted);
         result.push('\n');
 
