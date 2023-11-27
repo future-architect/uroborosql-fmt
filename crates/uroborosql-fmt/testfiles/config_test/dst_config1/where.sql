@@ -1,0 +1,16 @@
+SELECT /* _SQL_ID_ */
+	*
+FROM
+	TBL	T
+WHERE
+	T.ID	=	1
+AND	T.AGE	<	100
+;
+SELECT
+	*
+FROM
+	TBL	T
+WHERE
+	T.ID	=	1
+OR	T.ID	=	2
+;

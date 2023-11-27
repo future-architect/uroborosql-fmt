@@ -3,6 +3,7 @@ use itertools::{repeat_n, Itertools};
 use crate::{
     cst::{AlignInfo, AlignedExpr, Comment, Location},
     error::UroboroSQLFmtError,
+    util::{tab_size, to_tab_num},
 };
 
 #[derive(Debug, Clone)]
@@ -49,7 +50,16 @@ impl SepLinesContent {
         self.expr.set_head_comment(comment)
     }
 
-    fn render(&self, align_info: &AlignInfo, depth: usize) -> Result<String, UroboroSQLFmtError> {
+    fn sep_len(&self) -> usize {
+        self.sep.as_ref().map_or(0, |sep| sep.len())
+    }
+
+    fn render(
+        &self,
+        align_info: &AlignInfo,
+        max_sep_len: usize,
+        depth: usize,
+    ) -> Result<String, UroboroSQLFmtError> {
         if depth < 1 {
             // 'AND'\'OR'の後にタブ文字を挿入するので、インデントの深さ(depth)は1以上でなければならない。
             return Err(UroboroSQLFmtError::Rendering(
@@ -82,14 +92,16 @@ impl SepLinesContent {
 
             if !self.expr.is_lhs_cond() {
                 // コメントの挿入後に改行をしたので、タブを挿入
-                result.extend(repeat_n('\t', depth));
+                let tab_num = to_tab_num((depth - 1) * tab_size() + max_sep_len);
+                result.extend(repeat_n('\t', tab_num));
             } else {
                 // 左辺がCASE文の場合は挿入した改行を削除
                 result.pop();
             }
         } else {
-            // コメントが存在しない場合はseparatorの直後にタブを1つ挿入
-            result.push('\t');
+            // コメントが存在しない場合はseparatorの直後にタブを挿入
+            let tab_num = to_tab_num(1.max(max_sep_len - self.sep_len()));
+            result.extend(repeat_n('\t', tab_num));
         }
 
         let formatted = self.expr.render_align(depth, align_info)?;
@@ -282,9 +294,17 @@ impl SeparatedLines {
             .collect_vec()
             .into();
 
+        // sepの最大長を取得
+        let max_sep_len = self
+            .contents
+            .iter()
+            .map(|c| c.sep_len())
+            .max()
+            .unwrap_or_default();
+
         // 各コンテンツをAlignInfoを用いて描画
         for content in &self.contents {
-            result.push_str(&content.render(&align_info, depth)?);
+            result.push_str(&content.render(&align_info, max_sep_len, depth)?);
         }
 
         Ok(result)

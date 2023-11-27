@@ -33,9 +33,9 @@ pub(crate) fn is_quoted(elem: &str) -> bool {
 ///
 /// 例えばtabsize = 4の場合
 ///
-/// to_tab_num(4) => 8
+/// to_tab_num(3) => 1
 ///
-/// to_tab_num(4) => 4
+/// to_tab_num(4) => 2
 pub(crate) fn to_tab_num(len: usize) -> usize {
     if len == 0 {
         0
