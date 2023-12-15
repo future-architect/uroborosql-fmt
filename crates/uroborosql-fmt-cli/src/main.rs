@@ -13,10 +13,10 @@ fn main() {
 
     let src = read_to_string(input_file).unwrap();
 
-    let config_path = match Path::is_file(Path::new("./uroborosqlfmt-config.json")) {
-        true => Some("./uroborosqlfmt-config.json"),
+    let config_path = match Path::is_file(Path::new("./.uroborosqlfmtrc.json")) {
+        true => Some("./.uroborosqlfmtrc.json"),
         false => {
-            eprintln!("hint: Create the file 'uroborosqlfmt-config.json' if you want to customize the configuration");
+            eprintln!("hint: Create the file '.uroborosqlfmtrc.json' if you want to customize the configuration");
             None
         }
     };

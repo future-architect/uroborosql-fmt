@@ -64,7 +64,7 @@ The formatting result of `input.sql` will output to `result.sql`.
 
 ### Configuration options
 
-Create `uroborosqlfmt-config.json` in the directory where you run the command and write the configuration there.
+Create `.uroborosqlfmtrc.json` in the directory where you run the command and write the configuration there.
 
 If there is no configuration file, the default values are used.
 
