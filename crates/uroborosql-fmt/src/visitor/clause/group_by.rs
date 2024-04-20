@@ -9,7 +9,7 @@ use crate::{
 };
 
 impl Visitor {
-    /// GROPU BY句に対応するClauseを持つVecを返す。
+    /// GROUP BY句に対応するClauseを持つVecを返す。
     /// HAVING句がある場合は、HAVING句に対応するClauseも含む。
     pub(crate) fn visit_group_by_clause(
         &mut self,
