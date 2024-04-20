@@ -2,6 +2,7 @@ mod for_update;
 mod frame;
 mod from;
 mod group_by;
+mod having;
 mod join;
 mod limit;
 mod offset;

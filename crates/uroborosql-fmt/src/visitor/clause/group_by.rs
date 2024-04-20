@@ -58,7 +58,7 @@ impl Visitor {
         clauses.push(clause);
 
         if cursor.node().kind() == "having_clause" {
-            clauses.push(self.visit_simple_clause(cursor, src, "having_clause", "HAVING")?);
+            clauses.push(self.visit_having_clause(cursor, src)?);
         }
 
         cursor.goto_parent();
