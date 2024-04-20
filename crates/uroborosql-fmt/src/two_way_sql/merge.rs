@@ -5,7 +5,7 @@ use crate::error::UroboroSQLFmtError;
 use super::{dag::Kind, tree::TreeNode};
 
 /// 現在のネストのENDまで読む
-fn read_before_end(src_lines: &Vec<&str>, cursor: &mut usize) -> Vec<String> {
+fn read_before_end(src_lines: &[&str], cursor: &mut usize) -> Vec<String> {
     let mut res_lines = vec![];
     let mut nest_count = 0;
 

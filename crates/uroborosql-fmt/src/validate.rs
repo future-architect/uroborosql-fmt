@@ -206,7 +206,7 @@ fn compare_token_text(
 }
 
 /// トークン列に [カンマ, 行末コメント] の並びがあれば、それを入れ替える関数。
-fn swap_comma_and_trailing_comment(tokens: &mut Vec<Token>) {
+fn swap_comma_and_trailing_comment(tokens: &mut [Token]) {
     for idx in 0..(tokens.len() - 1) {
         let fst_tok = tokens.get(idx).unwrap();
 

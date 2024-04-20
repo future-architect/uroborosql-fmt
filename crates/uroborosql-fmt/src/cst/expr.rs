@@ -25,6 +25,7 @@ use super::{ColumnList, Comment, ExistsSubquery, ExprSeq, Location, SeparatedLin
 ///
 /// renderの際に改行とインデントをせずに描画する（※ ただし、例外的にExpr::Booleanは先頭での改行とインデントを行う）
 #[derive(Debug, Clone)]
+#[allow(clippy::enum_variant_names)] // TODO: この警告を解消する (https://rust-lang.github.io/rust-clippy/master/index.html#/enum_variant_names)
 pub(crate) enum Expr {
     /// AS句、二項比較演算、BETWEEN述語など、縦ぞろえを行う式
     Aligned(Box<AlignedExpr>),
