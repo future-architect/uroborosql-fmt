@@ -9,7 +9,7 @@ use crate::{
 };
 
 impl Visitor {
-    /// GROPU BY句に対応するClauseを持つVecを返す。
+    /// GROUP BY句に対応するClauseを持つVecを返す。
     /// HAVING句がある場合は、HAVING句に対応するClauseも含む。
     pub(crate) fn visit_group_by_clause(
         &mut self,
@@ -58,7 +58,7 @@ impl Visitor {
         clauses.push(clause);
 
         if cursor.node().kind() == "having_clause" {
-            clauses.push(self.visit_simple_clause(cursor, src, "having_clause", "HAVING")?);
+            clauses.push(self.visit_having_clause(cursor, src)?);
         }
 
         cursor.goto_parent();
