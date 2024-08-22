@@ -51,7 +51,10 @@ impl UnaryExpr {
         let mut result = String::new();
 
         result.push_str(&self.operator);
-        result.push('\t');
+        // `NOT` のときは空白が必要
+        if self.operator.to_uppercase().as_str() == "NOT" {
+            result.push('\t');
+        }
         result.push_str(&self.operand.render(depth)?);
 
         Ok(result)
