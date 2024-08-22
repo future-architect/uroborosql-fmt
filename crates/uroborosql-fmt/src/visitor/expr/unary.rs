@@ -17,7 +17,7 @@ impl Visitor {
         let mut loc = Location::new(cursor.node().range());
 
         cursor.goto_first_child();
-        // cursor -> op ("+", "-", "!!", "~", "@", "|/", "||/", "NOT")
+        // cursor -> op ("+", "-", "!!", "~", "@", "|/", "||/")
         let operator = cursor.node().utf8_text(src.as_bytes()).unwrap();
 
         cursor.goto_next_sibling();

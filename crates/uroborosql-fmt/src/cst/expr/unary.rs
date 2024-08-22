@@ -52,7 +52,7 @@ impl UnaryExpr {
 
         result.push_str(&self.operator);
         // `NOT` のときは空白が必要
-        if self.operator.to_uppercase().as_str() == "NOT" {
+        if self.operator.to_uppercase() == "NOT" {
             result.push('\t');
         }
         result.push_str(&self.operand.render(depth)?);
