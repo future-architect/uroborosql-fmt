@@ -11,6 +11,7 @@ mod is;
 mod paren;
 mod subquery;
 mod type_cast;
+mod unary;
 
 use tree_sitter::TreeCursor;
 
@@ -136,6 +137,10 @@ impl Visitor {
             }
             "all_some_any_subquery_expression" => {
                 Expr::Aligned(Box::new(self.visit_all_some_any_subquery(cursor, src)?))
+            }
+            "unary_expression" => {
+                let unary = self.visit_unary_expr(cursor, src)?;
+                Expr::Unary(Box::new(unary))
             }
             _ => {
                 // todo
