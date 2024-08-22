@@ -9,10 +9,10 @@ select not true as not_true
 select ~5 as bitwise_not
 select ~ 5 as bitwise_not
 
-select @-5 as absolute_value
-select @ -5 as absolute_value
-
 select |/25 as square_root
+select @-5 as absolute_value
+
+select @ -5 as absolute_value
 select |/ 25 as square_root
 
 select ||/8 as cube_root
