@@ -43,3 +43,12 @@ order by
 limit	1	+	2
 offset	5
 ;
+select
+	tbl1.column1	as	column1
+from
+	table1	tbl1
+order by
+	tbl1.column2	desc
+limit	/*$hoge*/100	+	1
+offset	5
+;
