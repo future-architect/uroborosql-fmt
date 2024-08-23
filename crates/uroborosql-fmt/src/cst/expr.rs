@@ -188,7 +188,6 @@ impl Expr {
             Expr::ColumnList(col_list) => col_list.set_head_comment(comment),
             // primary, aligned, boolean以外の式は現状、バインドパラメータがつくことはない
 
-            // ExprSeq の前に出てくるバインドパラメータは、ExprSeq が持つ最初の式に対してセットする
             Expr::ExprSeq(expr_seq) => expr_seq.set_head_comment_to_first_child(comment),
             _ => unimplemented!(),
         }

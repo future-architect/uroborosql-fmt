@@ -34,12 +34,12 @@ impl ExprSeq {
         self.loc.clone()
     }
 
-    /// 先頭の Expr にバインドバラメータをセットする
+    /// 先頭の Expr にバインドパラメータをセットする
     pub(crate) fn set_head_comment_to_first_child(&mut self, comment: Comment) {
         if let Some(first_expr) = self.exprs.first_mut() {
             first_expr.set_head_comment(comment);
         } else {
-            unimplemented!()
+            unreachable!()
         }
     }
 
