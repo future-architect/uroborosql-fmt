@@ -5,7 +5,7 @@ with /* _SQL_ID_ */
 		select
 			*
 		from
-			foo
+			foo	-- foo
 		-- end
 	)	-- test
 ,	t2	as	(
