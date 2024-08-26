@@ -6,6 +6,7 @@ with /* _SQL_ID_ */
 			*
 		from
 			foo
+		-- end
 	)	-- test
 ,	t2	as	(
 		--internal_comment
