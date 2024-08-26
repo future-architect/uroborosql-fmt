@@ -1,6 +1,7 @@
 WITH/* _SQL_ID_ */ t -- with句
 AS not materialized( --internal_comment
-    SELECT * FROM foo
+    SELECT * FROM foo -- foo
+	-- end
 ), --test
 
 t2 AS ( --internal_comment
