@@ -25,18 +25,29 @@ impl Visitor {
         let first = self.visit_order_expression(cursor, src)?;
         sep_lines.add_expr(first, None, vec![]);
 
+        let mut is_preceding_comment_area = false;
+        let mut preceding_comments = vec![];
         // commaSep(order_expression)
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
-                "order_expression" => sep_lines.add_expr(
-                    self.visit_order_expression(cursor, src)?,
-                    Some(COMMA.to_string()),
-                    vec![],
-                ),
-                COMMA => continue,
+                "order_expression" => {
+                    sep_lines.add_expr(
+                        self.visit_order_expression(cursor, src)?,
+                        Some(COMMA.to_string()),
+                        preceding_comments.clone(),
+                    );
+                    preceding_comments.clear();
+                    is_preceding_comment_area = false;
+                }
+
+                COMMA => is_preceding_comment_area = true,
                 COMMENT => {
                     let comment = Comment::new(cursor.node(), src);
-                    sep_lines.add_comment_to_child(comment)?;
+                    if is_preceding_comment_area {
+                        preceding_comments.push(comment);
+                    } else {
+                        sep_lines.add_comment_to_child(comment)?;
+                    }
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
