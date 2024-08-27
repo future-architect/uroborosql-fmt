@@ -5,7 +5,7 @@ from
 order by
 /*IF true*/
 	f.bar1
-,	
+,
 /*END*/
 	f.bar2
 ,	f.bar3
@@ -16,7 +16,7 @@ from
 order by
 /*IF true*/
 	f.bar1
-,	
+,
 /*END*/
 	f.bar2
 ,	f.bar3
@@ -27,7 +27,7 @@ from
 order by
 /*IF true*/
 	f.bar1
-,	
+,
 /*END*/
 	-- comment
 	f.bar2
@@ -45,3 +45,20 @@ order by
 	-- some
 	f.bar2
 ,	f.bar3
+select
+	*
+from
+	(
+		select
+			*
+		from
+			foo	f
+		order by
+		/*IF true*/
+			f.bar1
+		,
+		/*END*/
+			-- comment
+			f.bar2
+		,	f.bar3
+	)

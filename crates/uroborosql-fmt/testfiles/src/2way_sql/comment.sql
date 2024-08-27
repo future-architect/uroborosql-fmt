@@ -35,3 +35,17 @@ order by
 ,/*prev*//*END*//*next*/ -- some
     f.bar2
 ,   f.bar3
+
+select *
+from (
+    select 
+        *
+    from
+        foo f
+    order by
+    /*IF true*/
+        f.bar1
+    ,/*END*/ -- comment
+        f.bar2
+    ,   f.bar3
+)
