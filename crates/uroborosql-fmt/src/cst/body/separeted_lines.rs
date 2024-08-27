@@ -89,14 +89,12 @@ impl SepLinesContent {
                         result.push('\n');
                     }
                     result.push_str(&comment.render(depth - 1)?);
+                } else if is_first {
+                    is_first = false;
+                    result.push('\t');
+                    result.push_str(&comment.render(0)?);
                 } else {
-                    if is_first {
-                        is_first = false;
-                        result.push('\t');
-                        result.push_str(&comment.render(0)?);
-                    } else {
-                        result.push_str(&comment.render(new_depth_with_sep)?);
-                    }
+                    result.push_str(&comment.render(new_depth_with_sep)?);
                 }
 
                 result.push('\n');
