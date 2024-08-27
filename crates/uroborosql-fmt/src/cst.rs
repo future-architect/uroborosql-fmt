@@ -29,7 +29,7 @@ pub(crate) use with::*;
 use itertools::{repeat_n, Itertools};
 use tree_sitter::{Node, Point, Range};
 
-use crate::{config::CONFIG, error::UroboroSQLFmtError};
+use crate::{config::CONFIG, error::UroboroSQLFmtError, re::RE};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Position {
@@ -109,6 +109,10 @@ impl Comment {
     /// コメントがブロックコメントであればtrueを返す
     pub(crate) fn is_block_comment(&self) -> bool {
         self.text.starts_with("/*")
+    }
+
+    pub(crate) fn is_two_way_sql_comment(&self) -> bool {
+        RE.branching_keyword_re.find(self.text.as_str()).is_some()
     }
 
     fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
