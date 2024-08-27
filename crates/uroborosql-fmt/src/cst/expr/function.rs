@@ -188,6 +188,10 @@ impl FunctionCallArgs {
 pub(crate) struct FunctionCall {
     name: String,
     args: FunctionCallArgs,
+    /// FILTER句
+    /// None ならば FILTER句自体がない
+    filter_clause: Option<Clause>,
+    filter_keyword: String,
     /// OVER句が持つ句 (PARTITION BY、ORDER BY)
     /// None であるならば OVER句自体がない
     over_window_definition: Option<Vec<Clause>>,
@@ -223,11 +227,22 @@ impl FunctionCall {
         FunctionCall {
             name,
             args,
+            filter_clause: None,
+            filter_keyword: convert_keyword_case("FILTER"),
             over_window_definition: None,
             over_keyword: convert_keyword_case("OVER"),
             _kind: kind,
             loc,
         }
+    }
+
+    pub(crate) fn set_filter_clause(&mut self, clause: Clause) {
+        self.loc.append(clause.loc());
+        self.filter_clause = Some(clause)
+    }
+
+    pub(crate) fn set_filter_keyword(&mut self, filter_keyword: &str) {
+        self.filter_keyword = filter_keyword.to_string();
     }
 
     /// window_definition の句をセットする。
@@ -294,6 +309,19 @@ impl FunctionCall {
         let args = self.args.render(depth)?;
 
         result.push_str(&args);
+
+        // FILTER句
+        if let Some(filter_clause) = &self.filter_clause {
+            result.push(' ');
+            result.push_str(&self.filter_keyword);
+            result.push('(');
+
+            result.push('\n');
+            result.push_str(&filter_clause.render(depth + 1)?);
+
+            result.extend(repeat_n('\t', depth));
+            result.push(')');
+        }
 
         // OVER句
         if let Some(clauses) = &self.over_window_definition {
