@@ -78,7 +78,7 @@ impl SepLinesContent {
         // sepを考慮したdepth
         let new_depth_with_sep = depth - 1 + to_tab_num(1.max(max_sep_len));
 
-        // AND/OR と式の間に現れるコメント
+        // セパレータ (カンマ, AND, OR) と式の間に現れるコメント
         if !self.preceding_comments.is_empty() {
             result.push('\t');
 
@@ -86,10 +86,19 @@ impl SepLinesContent {
             for comment in &self.preceding_comments {
                 if is_first {
                     is_first = false;
+
+                    // 最初の要素かつ2WaySQLコメントならば改行を追加
+                    if comment.is_two_way_sql_comment() {
+                        result.push('\n');
+                    }
+                    result.push_str(&comment.render(0)?);
+                } else if comment.is_two_way_sql_comment() {
+                    // 2WaySQLコメントならば行頭に出力
                     result.push_str(&comment.render(0)?);
                 } else {
                     result.push_str(&comment.render(new_depth_with_sep)?);
                 }
+
                 result.push('\n');
             }
 
