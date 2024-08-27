@@ -188,9 +188,9 @@ impl FunctionCallArgs {
 pub(crate) struct FunctionCall {
     name: String,
     args: FunctionCallArgs,
-    /// FILTER句
+    /// FILTER句が持つ where 句
     /// None ならば FILTER句自体がない
-    filter_clause: Option<Clause>,
+    filter_where_clause: Option<Clause>,
     filter_keyword: String,
     /// OVER句が持つ句 (PARTITION BY、ORDER BY)
     /// None であるならば OVER句自体がない
@@ -227,7 +227,7 @@ impl FunctionCall {
         FunctionCall {
             name,
             args,
-            filter_clause: None,
+            filter_where_clause: None,
             filter_keyword: convert_keyword_case("FILTER"),
             over_window_definition: None,
             over_keyword: convert_keyword_case("OVER"),
@@ -238,7 +238,7 @@ impl FunctionCall {
 
     pub(crate) fn set_filter_clause(&mut self, clause: Clause) {
         self.loc.append(clause.loc());
-        self.filter_clause = Some(clause)
+        self.filter_where_clause = Some(clause)
     }
 
     pub(crate) fn set_filter_keyword(&mut self, filter_keyword: &str) {
@@ -311,7 +311,7 @@ impl FunctionCall {
         result.push_str(&args);
 
         // FILTER句
-        if let Some(filter_clause) = &self.filter_clause {
+        if let Some(filter_clause) = &self.filter_where_clause {
             result.push(' ');
             result.push_str(&self.filter_keyword);
             result.push('(');

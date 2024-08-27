@@ -36,7 +36,6 @@ impl Visitor {
             function_call_loc,
         );
 
-        // TODO: filter
         if cursor.node().kind() == "filter_clause" {
             let filter_keyword = convert_keyword_case(
                 cursor
@@ -83,34 +82,38 @@ impl Visitor {
     ) -> Result<Clause, UroboroSQLFmtError> {
         cursor.goto_first_child();
         // filter
+        // "(" where_clause ")" という構造
         ensure_kind(cursor, "FILTER", src)?;
-        cursor.goto_next_sibling();
 
-        // () or where?
+        cursor.goto_next_sibling();
         ensure_kind(cursor, "(", src)?;
 
         cursor.goto_next_sibling();
 
-        match cursor.node().kind() {
-            "where_clause" => {
-                let where_clause = self.visit_where_clause(cursor, src)?;
-
-                cursor.goto_next_sibling();
-                ensure_kind(cursor, ")", src)?;
-
-                cursor.goto_parent();
-                // cursor -> filter_clause
-
-                ensure_kind(cursor, "filter_clause", src)?;
-
-                Ok(where_clause)
-            }
-            _ => Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                r#"visit_filter_clause(): expected node is where_clause, but actual {}\n{}"#,
-                cursor.node().kind(),
-                error_annotation_from_cursor(cursor, src)
-            ))),
+        // consume comments before where_clause
+        let mut comment_buf = vec![];
+        while cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            comment_buf.push(comment);
+            cursor.goto_next_sibling();
         }
+
+        // cursor -> where_clause
+        ensure_kind(cursor, "where_clause", src)?;
+        let mut where_clause = self.visit_where_clause(cursor, src)?;
+
+        cursor.goto_next_sibling();
+        self.consume_comment_in_clause(cursor, src, &mut where_clause)?;
+
+        cursor.goto_next_sibling();
+        ensure_kind(cursor, ")", src)?;
+
+        cursor.goto_parent();
+        // cursor -> filter_clause
+
+        ensure_kind(cursor, "filter_clause", src)?;
+
+        Ok(where_clause)
     }
 
     fn visit_over_clause(
