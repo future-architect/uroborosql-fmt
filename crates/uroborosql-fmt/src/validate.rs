@@ -4,7 +4,7 @@ use tree_sitter::{Language, Node, Tree};
 use crate::{
     config::{load_never_complement_settings, CONFIG},
     cst::Location,
-    format, print_cst,
+    format_tree, has_syntax_error, print_cst,
     two_way_sql::format_two_way_sql,
     util::create_error_annotation,
     visitor::COMMENT,
@@ -27,10 +27,13 @@ pub(crate) fn validate_format_result(
     // 補完を行わない設定に切り替える
     load_never_complement_settings();
 
-    let format_result = if is_two_way_sql {
+    let tree = parser.parse(src, None).unwrap();
+    let has_syntax_error = has_syntax_error(&tree);
+
+    let format_result = if is_two_way_sql && has_syntax_error {
         format_two_way_sql(src, language)?
     } else {
-        format(src, language)?
+        format_tree(tree, src)?
     };
 
     let dst_ts_tree = parser.parse(&format_result, None).unwrap();
