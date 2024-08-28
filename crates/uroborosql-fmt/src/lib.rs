@@ -11,7 +11,7 @@ use config::*;
 use error::UroboroSQLFmtError;
 use visitor::Visitor;
 
-use tree_sitter::{Language, Node};
+use tree_sitter::{Language, Node, Tree};
 use two_way_sql::{format_two_way_sql, is_two_way_sql};
 use validate::validate_format_result;
 
@@ -42,8 +42,16 @@ pub(crate) fn format_sql_with_config(
 
     load_settings(config);
 
-    if is_two_way_sql {
-        // 2way-sqlモード
+    // パーサオブジェクトを生成
+    let mut parser = tree_sitter::Parser::new();
+    // tree-sitter-sqlの言語をパーサにセットする
+    parser.set_language(language).unwrap();
+    // srcをパースし、結果のTreeを取得
+    let tree = parser.parse(src, None).unwrap();
+    let has_syntax_error = has_syntax_error(&tree);
+
+    if is_two_way_sql && has_syntax_error {
+        // 2way-sqlモードでフォーマットする
         if CONFIG.read().unwrap().debug {
             eprintln!("\n{} 2way-sql mode {}\n", "=".repeat(20), "=".repeat(20));
         }
@@ -55,7 +63,7 @@ pub(crate) fn format_sql_with_config(
             eprintln!("\n{} normal mode {}\n", "=".repeat(20), "=".repeat(20));
         }
 
-        format(src, language)
+        format_tree(tree, src)
     }
 }
 
@@ -66,6 +74,11 @@ pub(crate) fn format(src: &str, language: Language) -> Result<String, UroboroSQL
     parser.set_language(language).unwrap();
     // srcをパースし、結果のTreeを取得
     let tree = parser.parse(src, None).unwrap();
+    format_tree(tree, src)
+}
+
+/// 渡されたTreeをもとにフォーマットする
+pub(crate) fn format_tree(tree: Tree, src: &str) -> Result<String, UroboroSQLFmtError> {
     // Treeのルートノードを取得
     let root_node = tree.root_node();
 
@@ -90,6 +103,10 @@ pub(crate) fn format(src: &str, language: Language) -> Result<String, UroboroSQL
         .collect();
 
     Ok(result)
+}
+
+fn has_syntax_error(tree: &Tree) -> bool {
+    tree.root_node().has_error()
 }
 
 /// CSTを出力 (デバッグ用)
