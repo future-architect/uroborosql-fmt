@@ -3,6 +3,6 @@ select
 /*IF true*/
 ,'b' as b
 /*ELSE*/
-,'ccccccccccccccc' as b
+,'ccccccccccccccc' as c
 /*END*/
 ;
