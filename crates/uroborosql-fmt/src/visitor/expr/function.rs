@@ -36,7 +36,21 @@ impl Visitor {
             function_call_loc,
         );
 
-        // TODO: filter
+        if cursor.node().kind() == "filter_clause" {
+            let filter_keyword = convert_keyword_case(
+                cursor
+                    .node()
+                    .child(0)
+                    .unwrap()
+                    .utf8_text(src.as_bytes())
+                    .unwrap(),
+            );
+            func_call.set_filter_keyword(&filter_keyword);
+
+            func_call.set_filter_clause(self.visit_filter_clause(cursor, src)?);
+
+            cursor.goto_next_sibling();
+        }
 
         if cursor.node().kind() == "over_clause" {
             // 大文字小文字情報を保持するために、出現した"OVER"文字列を保持
@@ -59,6 +73,39 @@ impl Visitor {
         ensure_kind(cursor, "function_call", src)?;
 
         Ok(func_call)
+    }
+
+    fn visit_filter_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        cursor.goto_first_child();
+        // filter
+        // "(" where_clause ")" という構造
+        ensure_kind(cursor, "FILTER", src)?;
+
+        cursor.goto_next_sibling();
+        ensure_kind(cursor, "(", src)?;
+
+        cursor.goto_next_sibling();
+
+        // cursor -> where_clause
+        ensure_kind(cursor, "where_clause", src)?;
+        let mut where_clause = self.visit_where_clause(cursor, src)?;
+
+        cursor.goto_next_sibling();
+        self.consume_comment_in_clause(cursor, src, &mut where_clause)?;
+
+        cursor.goto_next_sibling();
+        ensure_kind(cursor, ")", src)?;
+
+        cursor.goto_parent();
+        // cursor -> filter_clause
+
+        ensure_kind(cursor, "filter_clause", src)?;
+
+        Ok(where_clause)
     }
 
     fn visit_over_clause(
