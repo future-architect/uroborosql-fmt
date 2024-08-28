@@ -90,14 +90,6 @@ impl Visitor {
 
         cursor.goto_next_sibling();
 
-        // consume comments before where_clause
-        let mut comment_buf = vec![];
-        while cursor.node().kind() == COMMENT {
-            let comment = Comment::new(cursor.node(), src);
-            comment_buf.push(comment);
-            cursor.goto_next_sibling();
-        }
-
         // cursor -> where_clause
         ensure_kind(cursor, "where_clause", src)?;
         let mut where_clause = self.visit_where_clause(cursor, src)?;
