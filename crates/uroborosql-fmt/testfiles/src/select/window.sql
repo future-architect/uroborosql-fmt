@@ -21,3 +21,14 @@ SELECT *,
         /* over clause */
 	)
 	FROM t;
+-- filter clause
+SELECT city, count(*) FILTER (WHERE temp_lo < 45), max(temp_lo)
+FROM weather GROUP BY city;
+
+-- filter clause with comments
+SELECT city, count(*) FILTER (
+    WHERE temp_lo < 45 -- comment
+    /* filter where */
+    )
+FROM weather
+GROUP BY city;
