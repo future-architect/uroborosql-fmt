@@ -30,8 +30,8 @@ select 1
 select 1
 
 /*
-    * a
-* b
+    *a
+*b
 */
 select 1
 
@@ -75,9 +75,9 @@ from (
 select *
 from (
                 /*
-        * コメント
-            * コメント
-        * コメント
+        * a
+            * b
+        * c
     */
     select 
         *
