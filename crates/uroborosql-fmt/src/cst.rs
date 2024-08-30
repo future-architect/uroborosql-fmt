@@ -180,6 +180,10 @@ impl Comment {
                 .min()
                 .unwrap_or(0);
 
+            // すべての行の先頭に`*`がある
+            let requires_asterisk_alignment =
+                lines.iter().all(|line| line.trim_start().starts_with("*"));
+
             // 開始キーワードを描画して改行
             result.push_str(&format!("{start_keyword}\n"));
 
@@ -194,13 +198,23 @@ impl Comment {
                 if line.is_empty() {
                     // 空白行の場合そのまま描画
                     result.push_str(line);
+                } else if requires_asterisk_alignment {
+                    // アスタリスクで揃える場合
+                    result.extend(repeat_n('\t', depth));
+                    // ```
+                    // /*
+                    //  * test
+                    // ^スペースが必要   
+                    // ```
+                    result.push(' ');
+                    result.push_str(line.trim_start());
                 } else if need_depth * tab_size >= min_start_space {
                     // タブが少なく、補完が必要な場合
 
                     // 必要なスペースの数
                     let need_space = need_depth * tab_size - min_start_space;
 
-                    // 補完するスペースの数
+                    // 補完するタブの数
                     let complement_tab = need_space / tab_size;
 
                     // 補完するスペースの数
@@ -256,6 +270,10 @@ impl Comment {
             }
 
             result.extend(repeat_n('\t', depth));
+
+            if requires_asterisk_alignment {
+                result.push(' ');
+            }
             result.push_str(end_keyword);
         } else {
             // 1行コメント
