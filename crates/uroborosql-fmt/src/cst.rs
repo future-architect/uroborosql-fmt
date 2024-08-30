@@ -200,16 +200,19 @@ impl Comment {
                     result.push_str(line);
                 } else if requires_asterisk_alignment {
                     // アスタリスクで揃える場合
+
+                    // 先頭の空白文字とアスタリスクをトリミング
+                    let trimmed_line = line.trim_start().trim_start_matches('*');
+
                     result.extend(repeat_n('\t', depth));
+
                     // ```
                     // /*
                     //  * test
                     // ^スペースが必要
                     // ```
-
-                    let trimmed_line = line.trim_start().trim_start_matches('*');
-
                     result.push(' ');
+
                     result.push('*');
                     // アスタリスクとコメントの間にスペースがなければ挿入
                     if !trimmed_line.starts_with(' ') {
