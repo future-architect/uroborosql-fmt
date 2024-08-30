@@ -48,7 +48,6 @@ select
  */
 select
 	1
-;
 -- nested
 select
 	*
@@ -83,7 +82,7 @@ from
 		/*
 		 * a
 		 * b
-		 * c
+		 *  c
 		 */
 		select
 			*

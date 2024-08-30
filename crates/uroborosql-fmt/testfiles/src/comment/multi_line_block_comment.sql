@@ -45,7 +45,7 @@ select 1
 *a
 * b
    *  c */
-select 1;
+select 1
 
 -- nested
 select *
@@ -76,8 +76,8 @@ select *
 from (
                 /*
         * a
-            * b
-        * c
+            *b
+        *  c
     */
     select 
         *
