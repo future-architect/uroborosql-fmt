@@ -204,7 +204,7 @@ impl Comment {
                     // ```
                     // /*
                     //  * test
-                    // ^スペースが必要   
+                    // ^スペースが必要
                     // ```
                     result.push(' ');
                     result.push_str(line.trim_start());
