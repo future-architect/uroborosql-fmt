@@ -1,51 +1,51 @@
 /*
 comment
 */
-select 1
+select 1;
 
 /*
         comment
             comment with space
 */
-select 1
+select 1;
 
 /*
     *    will 
     not 
     *   aligned 
 */
-select 1
+select 1;
 
 -- aligned with asterisk
 /*
  * a
  * b
  */
-select 1
+select 1;
 
 /*
 * a
 * b
 */
-select 1
+select 1;
 
 /*
     *a
 *b
 */
-select 1
+select 1;
 
     /*
     *        a
     *        b
     */
-select 1 
+select 1; 
 
 /*
 *a
 * b
    *  c */
-select 1
+select 1;
 
 -- nested
 select *
@@ -58,7 +58,7 @@ from (
         *
     from
         foo f
-)
+);
 
 select *
 from (
@@ -70,7 +70,7 @@ from (
         *
     from
         foo f
-)
+);
 
 select *
 from (
@@ -83,4 +83,4 @@ from (
         *
     from
         foo f
-)
+);

@@ -3,12 +3,14 @@
 */
 select
 	1
+;
 /*
     comment
         comment with space
 */
 select
 	1
+;
 /*
     *    will
     not
@@ -16,6 +18,7 @@ select
 */
 select
 	1
+;
 -- aligned with asterisk
 /*
  * a
@@ -23,24 +26,28 @@ select
  */
 select
 	1
+;
 /*
  * a
  * b
  */
 select
 	1
+;
 /*
  * a
  * b
  */
 select
 	1
+;
 /*
  *        a
  *        b
  */
 select
 	1
+;
 /*
  * a
  * b
@@ -48,6 +55,7 @@ select
  */
 select
 	1
+;
 -- nested
 select
 	*
@@ -62,6 +70,7 @@ from
 		from
 			foo	f
 	)
+;
 select
 	*
 from
@@ -75,6 +84,7 @@ from
 		from
 			foo	f
 	)
+;
 select
 	*
 from
@@ -89,3 +99,4 @@ from
 		from
 			foo	f
 	)
+;
