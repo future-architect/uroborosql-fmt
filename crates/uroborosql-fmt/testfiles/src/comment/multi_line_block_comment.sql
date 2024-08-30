@@ -1,53 +1,58 @@
 /*
-通常のコメント
+comment
 */
-select something from somewhere
+select 1
 
 /*
-        行頭に
-            空白を持つコメント
+        comment
+            comment with space
 */
-select something from somewhere
+select 1
 
 /*
-    *    コメント
-    コメント
-    *    コメント
+    *    will 
+    not 
+    *   aligned 
 */
-select something from somewhere
+select 1
 
 -- aligned with asterisk
 /*
-* コメント
-* コメント
-*/
-select something from somewhere
-
-/*
-    * そろっていない
-* コメント
-*/
-select something from somewhere
-
-/*
- * コメント
- * コメント
+ * a
+ * b
  */
-select something from somewhere
+select 1
 
-select something 
+/*
+* a
+* b
+*/
+select 1
+
+/*
+    * a
+* b
+*/
+select 1
+
     /*
-    *        コメント
-    *        コメント
+    *        a
+    *        b
     */
-from somewhere
+select 1 
+
+/*
+*a
+* b
+   *  c */
+select 1;
 
 -- nested
 select *
 from (
     /*
-     * コメント
-     * コメント
+     * a
+     * b
      */
     select 
         *
@@ -58,8 +63,8 @@ from (
 select *
 from (
 /*
-    * コメント
-* コメント
+    * a
+* b
     */
     select 
         *

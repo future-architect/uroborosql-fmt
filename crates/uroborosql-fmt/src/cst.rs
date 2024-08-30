@@ -206,8 +206,16 @@ impl Comment {
                     //  * test
                     // ^スペースが必要
                     // ```
+
+                    let trimmed_line = line.trim_start().trim_start_matches('*');
+
                     result.push(' ');
-                    result.push_str(line.trim_start());
+                    result.push('*');
+                    // アスタリスクとコメントの間にスペースがなければ挿入
+                    if !trimmed_line.starts_with(' ') {
+                        result.push(' ');
+                    }
+                    result.push_str(trimmed_line);
                 } else if need_depth * tab_size >= min_start_space {
                     // タブが少なく、補完が必要な場合
 
