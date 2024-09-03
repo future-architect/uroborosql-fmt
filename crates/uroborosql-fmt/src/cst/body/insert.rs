@@ -375,14 +375,59 @@ impl InsertBody {
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
         // 下から順番に見ていく
+        // 1. on_conflict
+        // 2. values_or_query
+        // 3. columns
+        // else: table_name
 
-        // table_nameの直後に現れる
-        if comment.is_block_comment() || !self.table_name.loc().is_same_line(&comment.loc()) {
-            // 行末コメントではない場合は未対応
-            unimplemented!()
+        if self.on_conflict.is_some() {
+            // on_conflict 句の後にコメントが来る場合
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "add_comment_to_child(): Comments after on_conflict clause is not implemented: {comment:?}"
+            )));
+        } else if let Some(values_or_query) = self.values_or_query.as_mut() {
+            // values 句 か query の後にコメントが来る場合
+            match values_or_query {
+                ValuesOrQuery::Values(_) => {
+                    // values 句の場合
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                        "add_comment_to_child(): Comments after values_clause are not implemented: {comment:?}"
+                    )));
+                }
+                ValuesOrQuery::Query(query) => match query {
+                    Query::Normal(statement) => {
+                        // select 文のあとにコメントが来る場合
+                        statement.add_comment_to_child(comment)?;
+                    }
+                    Query::Paren(_) => {
+                        // 括弧付き select で、閉じ括弧の後にコメントが来る場合
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "add_comment_to_child(): Comments after select queries enclosed in parentheses are not implemented: {comment:?}"
+                        )));
+                    }
+                },
+            }
+        } else if self.columns.is_some() {
+            // カラム名の後 または columns の後にコメントが来る場合
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "add_comment_to_child(): Comments after column name is not implemented: {comment:?}"
+            )));
         } else {
-            // 行末コメントである場合、table_nameに追加する
-            self.table_name.set_trailing_comment(comment)?;
+            // table_name 直後のコメント
+            if comment.is_block_comment() {
+                // ブロックコメントの場合
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "add_comment_to_child(): Block comment after table_name is not implemented: {comment:?}"
+                )));
+            } else if self.table_name.loc().is_same_line(&comment.loc()) {
+                // 行末コメントである場合、table_nameに追加する
+                self.table_name.set_trailing_comment(comment)?;
+            } else {
+                // それ以外は未対応
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "add_comment_to_child(): Comments for this location is not implemented: {comment:?}"
+                )));
+            }
         }
 
         Ok(())
