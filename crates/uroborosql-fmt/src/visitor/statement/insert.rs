@@ -165,6 +165,13 @@ impl Visitor {
             _ => {}
         }
 
+        // values か query の後のコメント
+        while cursor.node().kind() == COMMENT {
+            let comment = Comment::new(cursor.node(), src);
+            insert_body.add_comment_to_child(comment)?;
+            cursor.goto_next_sibling();
+        }
+
         // on_conflict句
         if cursor.node().kind() == "on_conflict_clause" {
             let on_conflict = self.visit_on_conflict(cursor, src)?;
