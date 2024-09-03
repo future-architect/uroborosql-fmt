@@ -33,3 +33,16 @@ into
 	where
 		flag	=	'TRUE'
 );
+insert
+into
+	tbl
+(
+	id
+)
+select
+	id	as	id
+from
+	tbl2
+where
+	id	=	1	-- trailing comment
+;
