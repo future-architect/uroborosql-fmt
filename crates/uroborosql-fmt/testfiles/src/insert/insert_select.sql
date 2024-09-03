@@ -8,3 +8,7 @@ insert into tbl (id)
   select id from tbl2 where id = 1 -- trailing comment
   ;
 
+insert into tbl (id) 
+  select id from tbl2 where id = 1 -- trailing comment
+  on conflict do nothing
+  ;
