@@ -168,7 +168,7 @@ impl Visitor {
         // values か query の後のコメント
         while cursor.node().kind() == COMMENT {
             let comment = Comment::new(cursor.node(), src);
-            statement.add_comment_to_child(comment)?;
+            insert_body.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
 
