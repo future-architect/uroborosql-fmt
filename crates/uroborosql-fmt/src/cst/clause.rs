@@ -123,7 +123,6 @@ impl Clause {
                     self.comments.push(comment);
                 } else {
                     self.set_keyword_trailing_comment(comment)?;
-
                 }
             }
         }
@@ -170,7 +169,7 @@ impl Clause {
 
         if let Some(trailing_comment) = &self.keyword_trailing_comment {
             result.push(' ');
-            result.push_str(&trailing_comment);
+            result.push_str(trailing_comment);
         }
 
         // comments
