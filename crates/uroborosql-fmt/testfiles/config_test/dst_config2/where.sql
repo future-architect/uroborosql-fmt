@@ -28,8 +28,7 @@ SELECT
 	*
 FROM
 	tbl	t
-WHERE
--- comment
+WHERE -- comment
 	t.id	=	(
 		SELECT
 			MAX(t2.id)
@@ -44,8 +43,7 @@ SELECT
 	*
 FROM
 	tbl	t
-WHERE
--- comment
+WHERE -- comment
 	t.id	=	(
 		SELECT
 			MAX(t2.id)

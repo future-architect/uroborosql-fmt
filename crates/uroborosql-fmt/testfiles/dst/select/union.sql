@@ -3,8 +3,7 @@ select
 from
 	b
 /* select - union */
-union
--- union
+union -- union
 /* union - subselect */
 select
 	c	as	c

@@ -28,8 +28,7 @@ select
 	*
 from
 	TBL	T
-where
--- comment
+where -- comment
 	T.ID	=	(
 		SELECT
 			MAX(T2.ID)
@@ -44,8 +43,7 @@ select
 	*
 from
 	TBL	T
-where
--- comment
+where -- comment
 	T.ID	=	(
 		SELECT
 			MAX(T2.ID)
