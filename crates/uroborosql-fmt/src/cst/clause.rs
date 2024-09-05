@@ -9,6 +9,7 @@ use super::{Body, Comment, Location, SqlID};
 #[derive(Debug, Clone)]
 pub(crate) struct Clause {
     keyword: String, // e.g., SELECT, FROM
+    keyword_trailing_comment: Option<String>,
     body: Option<Body>,
     loc: Location,
     /// DML(, DDL)に付与できるsql_id
@@ -25,6 +26,7 @@ impl Clause {
         let loc = Location::new(kw_node.range());
         Clause {
             keyword,
+            keyword_trailing_comment: None,
             body: None,
             loc,
             sql_id: None,
@@ -81,6 +83,27 @@ impl Clause {
         self.fix_head_comment();
     }
 
+    /// keywordの後の行末コメントを追加する
+    pub(crate) fn set_keyword_trailing_comment(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
+        if comment.is_block_comment() {
+            // 複数行コメント
+            Err(UroboroSQLFmtError::IllegalOperation(format!(
+                "set_keyword_trailing_comment:{comment:?} is not trailing comment."
+            )))
+        } else {
+            // 行コメント
+            let Comment { text, loc } = comment;
+            let trailing_comment = format!("-- {}", text.trim_start_matches('-').trim_start());
+
+            self.keyword_trailing_comment = Some(trailing_comment);
+            self.loc.append(loc);
+            Ok(())
+        }
+    }
+
     /// Clauseにコメントを追加する
     /// Bodyがあればその下にコメントを追加し、ない場合はキーワードの下にコメントを追加する
     pub(crate) fn add_comment_to_child(
@@ -93,8 +116,15 @@ impl Clause {
                 body.add_comment_to_child(comment)?;
             }
             _ => {
-                // そうでない場合、自分のキーワードの下につく
-                self.comments.push(comment);
+                // bodyに式が無い場合
+
+                if comment.is_block_comment() || !self.loc().is_same_line(&comment.loc()) {
+                    // キーワード行の行末コメントでなければ自分のキーワードの下につく
+                    self.comments.push(comment);
+                } else {
+                    self.set_keyword_trailing_comment(comment)?;
+
+                }
             }
         }
 
@@ -136,6 +166,11 @@ impl Clause {
         if let Some(sql_id) = &self.sql_id {
             result.push(' ');
             result.push_str(&sql_id.sql_id);
+        }
+
+        if let Some(trailing_comment) = &self.keyword_trailing_comment {
+            result.push(' ');
+            result.push_str(&trailing_comment);
         }
 
         // comments

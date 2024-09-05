@@ -103,3 +103,13 @@ inner join
 	t2	-- tbl
 on
 	t1.num	=	t2.num	-- cond
+;
+select
+	*
+from
+	t1	-- after table
+inner join -- after keyword
+	t2	-- after table
+on -- after keyword
+	t1.num	=	t2.num	-- after condition
+;
