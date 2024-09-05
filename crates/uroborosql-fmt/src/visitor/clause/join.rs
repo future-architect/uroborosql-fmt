@@ -32,6 +32,9 @@ impl Visitor {
         };
         cursor.goto_next_sibling();
 
+        // キーワード直後のコメントを処理
+        self.consume_comment_in_clause(cursor, src, &mut join_clause)?;
+
         // テーブル名だが補完は行わない
         let table = self.visit_aliasable_expr(cursor, src, None)?;
         let body = Body::from(Expr::Aligned(Box::new(table)));
