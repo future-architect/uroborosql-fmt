@@ -4,7 +4,7 @@ use crate::{
     config::CONFIG,
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
 impl Visitor {
@@ -32,9 +32,8 @@ impl Visitor {
         };
         cursor.goto_next_sibling();
 
-        if cursor.node().kind() == COMMENT {
-            self.consume_comment_in_clause(cursor, src, &mut join_clause)?;
-        }
+        // キーワード直後のコメントを処理
+        self.consume_comment_in_clause(cursor, src, &mut join_clause)?;
 
         // テーブル名だが補完は行わない
         let table = self.visit_aliasable_expr(cursor, src, None)?;
