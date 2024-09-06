@@ -21,13 +21,17 @@ pub(crate) struct ColumnList {
 }
 
 impl ColumnList {
-    pub(crate) fn new(cols: Vec<AlignedExpr>, loc: Location) -> ColumnList {
+    pub(crate) fn new(
+        cols: Vec<AlignedExpr>,
+        loc: Location,
+        start_comments: Vec<Comment>,
+    ) -> ColumnList {
         ColumnList {
             cols,
             loc,
             force_multi_line: false,
             head_comment: None,
-            start_comments: vec![],
+            start_comments,
         }
     }
 
@@ -67,11 +71,6 @@ impl ColumnList {
         self.head_comment = Some(text);
         loc.append(self.loc());
         self.loc = loc;
-    }
-
-    /// 開きかっこから最初の式の間に現れるコメントを追加する
-    pub(crate) fn add_start_comment(&mut self, comment: Comment) {
-        self.start_comments.push(comment);
     }
 
     /// 列リストを複数行で描画するかを指定する。
