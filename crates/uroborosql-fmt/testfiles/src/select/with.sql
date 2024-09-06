@@ -65,3 +65,11 @@ RETURNING
 	DID 	-- test
 ) --comment
 SELECT * FROM t1;
+
+with recursive /* _SQL_ID_ */ /* block */ -- line
+	t	as	(
+		select
+			1
+	)
+select
+	1;
