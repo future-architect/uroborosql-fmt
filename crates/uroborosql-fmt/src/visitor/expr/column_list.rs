@@ -26,7 +26,33 @@ impl Visitor {
             return Ok(ColumnList::new(vec![], loc));
         }
 
-        let mut exprs = vec![self.visit_expr(cursor, src)?.to_aligned()];
+        // 開きかっこと式の間にあるコメントを保持
+        // 最後の要素はバインドパラメータの可能性があるので、最初の式を処理した後で付け替える
+        let mut comment_buf = vec![];
+        while cursor.node().kind() == COMMENT {
+            comment_buf.push(Comment::new(cursor.node(), src));
+            cursor.goto_next_sibling();
+        }
+
+        let mut fist_expr = self.visit_expr(cursor, src)?;
+
+        // ```
+        // (
+        // -- comment
+        //     /* bind */expr ...
+        //     ^^^^^^^^^^ comment_buf.last()
+        //```
+        // 開き括弧の後のコメントのうち最後のもの（最初の式の直前にあるもの）を取得
+        if let Some(comment) = comment_buf.last() {
+            if comment.is_block_comment() && comment.loc().is_next_to(&fist_expr.loc()) {
+                // ブロックコメントかつ式に隣接していればバインドパラメータなので、式に付与する
+                fist_expr.set_head_comment(comment.clone());
+                // comment_buf からも削除
+                comment_buf.pop().unwrap();
+            }
+        }
+
+        let mut exprs = vec![fist_expr.to_aligned()];
 
         // カンマ区切りの式
         while cursor.goto_next_sibling() {
@@ -65,6 +91,13 @@ impl Visitor {
             }
         }
 
-        Ok(ColumnList::new(exprs, loc))
+        let mut column_list = ColumnList::new(exprs, loc);
+
+        // 開き括弧の後のコメントを追加
+        for comment in comment_buf {
+            column_list.add_start_comment(comment)
+        }
+
+        Ok(column_list)
     }
 }

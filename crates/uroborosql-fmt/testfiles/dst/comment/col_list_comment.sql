@@ -35,3 +35,15 @@ and	tbl.st	in	(
 	,	'T'	-- t
 	)											-- st
 ;
+select
+	*
+from
+	tbl	t
+where
+	t.id	in	(
+		-- after opening paren
+		-- another comment
+		/*firstId*/0
+	,	/*secondId*/1
+	)
+;
