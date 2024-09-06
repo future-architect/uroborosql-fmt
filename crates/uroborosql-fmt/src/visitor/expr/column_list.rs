@@ -23,10 +23,36 @@ impl Visitor {
 
         // カラムリストが空の場合
         if cursor.node().kind() == ")" {
-            return Ok(ColumnList::new(vec![], loc));
+            return Ok(ColumnList::new(vec![], loc, vec![]));
         }
 
-        let mut exprs = vec![self.visit_expr(cursor, src)?.to_aligned()];
+        // 開き括弧と式との間にあるコメントを保持
+        // 最後の要素はバインドパラメータの可能性があるので、最初の式を処理した後で付け替える
+        let mut start_comments = vec![];
+        while cursor.node().kind() == COMMENT {
+            start_comments.push(Comment::new(cursor.node(), src));
+            cursor.goto_next_sibling();
+        }
+
+        let mut first_expr = self.visit_expr(cursor, src)?;
+
+        // ```
+        // (
+        // -- comment
+        //     /* bind */expr ...
+        //     ^^^^^^^^^^ start_comments.last()
+        //```
+        // 開き括弧の後のコメントのうち最後のもの（最初の式の直前にあるもの）を取得
+        if let Some(comment) = start_comments.last() {
+            if comment.is_block_comment() && comment.loc().is_next_to(&first_expr.loc()) {
+                // ブロックコメントかつ式に隣接していればバインドパラメータなので、式に付与する
+                first_expr.set_head_comment(comment.clone());
+                // start_comments からも削除
+                start_comments.pop().unwrap();
+            }
+        }
+
+        let mut exprs = vec![first_expr.to_aligned()];
 
         // カンマ区切りの式
         while cursor.goto_next_sibling() {
@@ -65,6 +91,6 @@ impl Visitor {
             }
         }
 
-        Ok(ColumnList::new(exprs, loc))
+        Ok(ColumnList::new(exprs, loc, start_comments))
     }
 }

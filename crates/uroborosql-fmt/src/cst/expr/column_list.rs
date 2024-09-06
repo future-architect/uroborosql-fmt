@@ -16,15 +16,22 @@ pub(crate) struct ColumnList {
     force_multi_line: bool,
     /// バインドパラメータ
     head_comment: Option<String>,
+    /// 開き括弧と最初の式との間のコメント
+    start_comments: Vec<Comment>,
 }
 
 impl ColumnList {
-    pub(crate) fn new(cols: Vec<AlignedExpr>, loc: Location) -> ColumnList {
+    pub(crate) fn new(
+        cols: Vec<AlignedExpr>,
+        loc: Location,
+        start_comments: Vec<Comment>,
+    ) -> ColumnList {
         ColumnList {
             cols,
             loc,
             force_multi_line: false,
             head_comment: None,
+            start_comments,
         }
     }
 
@@ -74,9 +81,10 @@ impl ColumnList {
 
     /// 複数行で描画するかどうかを bool 型の値で取得する。
     /// 複数行で描画する場合は true を返す。
-    /// 自身の is_multi_line のオプションの値だけでなく、各列が単一行かどうか、末尾コメントを持つかどうかも考慮する。
+    /// 自身の is_multi_line のオプションの値だけでなく、開き括弧と最初の式との間にコメントを持つどうか、各列が単一行かどうか、各行が末尾コメントを持つかどうかも考慮する。
     pub(crate) fn is_multi_line(&self) -> bool {
         self.force_multi_line
+            || !self.start_comments.is_empty()
             || self
                 .cols
                 .iter()
@@ -98,6 +106,12 @@ impl ColumnList {
             // 各列を複数行に出力する
 
             result.push_str("(\n");
+
+            // 開き括弧の後のコメント
+            for comment in &self.start_comments {
+                result.push_str(&comment.render(depth + 1)?);
+                result.push('\n');
+            }
 
             // 最初の行のインデント
             result.extend(repeat_n('\t', depth + 1));
