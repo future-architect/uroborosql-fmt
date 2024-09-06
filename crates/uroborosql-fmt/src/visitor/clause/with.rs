@@ -20,6 +20,12 @@ impl Visitor {
 
         cursor.goto_next_sibling();
 
+        if cursor.node().kind() == "RECURSIVE" {
+            // WITH句のキーワードにRECURSIVEを付与する
+            with_clause.extend_kw(cursor.node(), src);
+            cursor.goto_next_sibling();
+        }
+
         // SQL_IDとコメントを消費
         self.consume_or_complement_sql_id(cursor, src, &mut with_clause);
         self.consume_comment_in_clause(cursor, src, &mut with_clause)?;
@@ -27,10 +33,6 @@ impl Visitor {
         let mut with_body = WithBody::new();
         loop {
             match cursor.node().kind() {
-                "RECURSIVE" => {
-                    // WITH句のキーワードにRECURSIVEを付与する
-                    with_clause.extend_kw(cursor.node(), src);
-                }
                 COMMA => {}
                 "cte" => {
                     let cte = self.visit_cte(cursor, src)?;
