@@ -20,6 +20,9 @@ impl Visitor {
         let mut set_clause = Clause::from_node(cursor.node(), src);
         cursor.goto_next_sibling();
 
+        // キーワード直後のコメントを処理
+        self.consume_comment_in_clause(cursor, src, &mut set_clause)?;
+
         ensure_kind(cursor, "set_clause_body", src)?;
         cursor.goto_first_child();
 
