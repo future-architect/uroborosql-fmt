@@ -63,3 +63,18 @@ on
 do
 	nothing
 ;
+insert
+into
+	tbl
+(
+	id
+)
+-- comments
+-- before select
+select
+	id	as	id
+from
+	tbl2
+where
+	id	=	1
+;
