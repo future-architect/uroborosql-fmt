@@ -12,3 +12,8 @@ insert into tbl (id)
   select id from tbl2 where id = 1 -- trailing comment
   on conflict do nothing
   ;
+
+insert into tbl (id) 
+-- comments
+-- before select
+select id from tbl2 where id = 1;

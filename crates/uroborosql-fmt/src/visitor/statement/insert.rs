@@ -109,9 +109,24 @@ impl Visitor {
 
         cursor.goto_next_sibling();
 
+        // values か query の前のコメント
+        // selectの場合のみ対応している（括弧付きselectとvalues句の場合は未対応）
+        let mut comments_before_values_or_query = vec![];
+        while cursor.node().kind() == COMMENT {
+            comments_before_values_or_query.push(Comment::new(cursor.node(), src));
+            cursor.goto_next_sibling();
+        }
+
         // {VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
         match cursor.node().kind() {
             "values_clause" => {
+                if !comments_before_values_or_query.is_empty() {
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                        "visit_insert_stmt(): Comments before values clause are not implemented. \nComment: {:?}",
+                        comments_before_values_or_query.first().unwrap()
+                    )));
+                }
+
                 cursor.goto_first_child();
                 ensure_kind(cursor, "VALUES", src)?;
 
@@ -148,13 +163,24 @@ impl Visitor {
             }
             "select_statement" => {
                 // select文
-                let stmt = self.visit_select_stmt(cursor, src)?;
+                let mut stmt = self.visit_select_stmt(cursor, src)?;
+
+                // select 文の前にあったコメントを付与
+                for comment in comments_before_values_or_query {
+                    stmt.add_comment(comment);
+                }
 
                 insert_body.set_query(stmt);
 
                 cursor.goto_next_sibling();
             }
             "select_subexpression" => {
+                if !comments_before_values_or_query.is_empty() {
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                        "visit_insert_stmt(): Comments before parenthesized subquery are not implemented. \nComment: {:?}",
+                        comments_before_values_or_query.first().unwrap()
+                    )));
+                }
                 // 括弧付きSELECT
                 let selct_sub = self.visit_select_subexpr(cursor, src)?;
 
