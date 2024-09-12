@@ -182,9 +182,9 @@ impl Visitor {
                     )));
                 }
                 // 括弧付きSELECT
-                let selct_sub = self.visit_select_subexpr(cursor, src)?;
+                let select_sub = self.visit_select_subexpr(cursor, src)?;
 
-                insert_body.set_paren_query(Expr::Sub(Box::new(selct_sub)));
+                insert_body.set_paren_query(Expr::Sub(Box::new(select_sub)));
 
                 cursor.goto_next_sibling();
             }
