@@ -6,6 +6,7 @@ order by
 	col			asc					-- 昇順
 ,	long_col	desc nulls first	-- 降順
 ,	null_col	nulls first			-- NULL先
+;
 select
 	*
 from
@@ -15,6 +16,7 @@ order by
 ,	/* after comma */
 	t.bar2
 ,	t.bar3
+;
 select
 	*
 from
@@ -24,3 +26,4 @@ order by
 /* before comma */
 ,	t.bar2
 ,	t.bar3
+;
