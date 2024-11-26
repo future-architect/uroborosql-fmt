@@ -35,9 +35,12 @@ impl UnaryExpr {
     pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
         if self.operand.is_multi_line() {
             self.operand.last_line_len()
-        } else {
-            // ( 演算子 '\t' 式 ) の長さ
+        } else if self.operator.to_uppercase() == "NOT" {
+            // 演算子が `NOT` の場合、operandの前にタブ文字を挿入する
             to_tab_num(self.operator.len() + acc) * tab_size() + self.operand.last_line_len()
+        } else {
+            // (演算子 式) の長さ
+            to_tab_num(acc) * tab_size() + self.operator.len() + self.operand.last_line_len()
         }
     }
 
