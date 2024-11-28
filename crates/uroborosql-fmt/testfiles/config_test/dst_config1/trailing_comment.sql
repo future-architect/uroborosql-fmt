@@ -1,0 +1,14 @@
+SELECT /* _SQL_ID_ */
+	123456789	-- hoge
+AS	COL
+FROM
+	TBL	T
+;
+SELECT
+	1	-- hoge
+AS	COL1
+,	123456789	-- fuga 
+AS	COL2
+FROM
+	TBL	T
+;
