@@ -29,7 +29,7 @@ pub(crate) use with::*;
 use itertools::{repeat_n, Itertools};
 use tree_sitter::{Node, Point, Range};
 
-use crate::{config::CONFIG, error::UroboroSQLFmtError, re::RE};
+use crate::{config::CONFIG, error::UroboroSQLFmtError, re::RE, util::add_indent};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Position {
@@ -119,7 +119,7 @@ impl Comment {
         let mut result = String::new();
 
         // インデントの挿入
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
 
         if self.is_block_comment() && !self.loc.is_single_line() {
             // ブロックコメント かつ 単一行ではない (= 複数行ブロックコメント)
@@ -204,7 +204,7 @@ impl Comment {
                     // 先頭の空白文字とアスタリスクをトリミング
                     let trimmed_line = line.trim_start().trim_start_matches('*');
 
-                    result.extend(repeat_n('\t', depth));
+                    add_indent(&mut result, depth);
 
                     // ```
                     // /*
@@ -229,15 +229,9 @@ impl Comment {
                     let complement_tab = need_space / tab_size;
 
                     // 補完するスペースの数
-                    let complement_space = if need_space % tab_size == 0 {
-                        // 割り切れる場合はタブのみで補完
-                        0
-                    } else {
-                        // 割り切れない場合はタブで補完した後にスペースで補完
-                        need_space % tab_size
-                    };
+                    let complement_space = need_space % tab_size;
 
-                    result.extend(repeat_n('\t', complement_tab));
+                    add_indent(&mut result, complement_tab);
                     result.extend(repeat_n(' ', complement_space));
                     result.push_str(line);
                 } else {
@@ -280,7 +274,7 @@ impl Comment {
                 result.push('\n');
             }
 
-            result.extend(repeat_n('\t', depth));
+            add_indent(&mut result, depth);
 
             if requires_asterisk_alignment {
                 result.push(' ');

@@ -1,8 +1,8 @@
 SELECT
-	col
+  col
 FROM
-	tab
+  tab
 ORDER BY
-	col				ASC								-- 昇順
-,	long_col	DESC NULLS FIRST	-- 降順
-,	null_col	NULLS FIRST				-- NULL先
+  col       ASC               -- 昇順
+, long_col  DESC NULLS FIRST  -- 降順
+, null_col  NULLS FIRST       -- NULL先

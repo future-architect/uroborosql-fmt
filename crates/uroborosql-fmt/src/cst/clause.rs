@@ -1,9 +1,11 @@
-use itertools::repeat_n;
 use tree_sitter::Node;
 
-use crate::{error::UroboroSQLFmtError, util::convert_keyword_case};
+use crate::{
+    error::UroboroSQLFmtError,
+    util::{add_single_space, convert_keyword_case},
+};
 
-use super::{Body, Comment, Location, SqlID};
+use super::{add_indent, Body, Comment, Location, SqlID};
 
 // 句に対応した構造体
 #[derive(Debug, Clone)]
@@ -65,7 +67,7 @@ impl Clause {
     pub(crate) fn extend_kw_with_tab(&mut self, node: Node, src: &str) {
         let loc = Location::new(node.range());
         self.loc.append(loc);
-        self.keyword.push('\t');
+        add_single_space(&mut self.keyword);
         self.keyword.push_str(&convert_keyword_case(
             node.utf8_text(src.as_bytes()).unwrap(),
         ));
@@ -130,7 +132,7 @@ impl Clause {
         // body...
         let mut result = String::new();
 
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
         result.push_str(&self.keyword);
 
         if let Some(sql_id) = &self.sql_id {
@@ -147,7 +149,7 @@ impl Clause {
         match &self.body {
             // 句と本体を同じ行に render する
             Some(Body::SingleLine(single_line)) => {
-                result.push('\t');
+                add_single_space(&mut result);
                 result.push_str(&single_line.render(depth)?);
             }
             Some(body) => {

@@ -1,7 +1,5 @@
-use itertools::repeat_n;
-
 use crate::{
-    cst::{AlignedExpr, Clause, Comment, Location},
+    cst::{add_indent, AlignedExpr, Clause, Comment, Location},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
 };
@@ -96,7 +94,7 @@ impl CondExpr {
         result.push('\n');
 
         if let Some(expr) = &self.expr {
-            result.extend(repeat_n('\t', depth + 1));
+            add_indent(&mut result, depth + 1);
             result.push_str(&expr.render(depth + 1)?);
             result.push('\n');
         }
@@ -121,7 +119,7 @@ impl CondExpr {
             result.push_str(&formatted);
         }
 
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
         result.push_str(&self.end_keyword);
 
         Ok(result)

@@ -1,11 +1,10 @@
-use itertools::repeat_n;
-
 use crate::{
     cst::{
-        AlignedExpr, Clause, ColumnList, Comment, ConflictTargetColumnList, Expr, Location,
-        Statement,
+        add_indent, AlignedExpr, Clause, ColumnList, Comment, ConflictTargetColumnList, Expr,
+        Location, Statement,
     },
     error::UroboroSQLFmtError,
+    util::{add_single_space, add_space_by_range, tab_size},
 };
 
 use super::separeted_lines::SeparatedLines;
@@ -65,10 +64,10 @@ impl OnConstraint {
         // ON
         result.push_str(&self.keyword.0);
         result.push('\n');
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
         // CONSTRAINT
         result.push_str(&self.keyword.1);
-        result.push('\t');
+        add_single_space(&mut result);
         result.push_str(&self.constraint_name);
         result.push('\n');
 
@@ -98,11 +97,11 @@ impl DoNothing {
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
-        result.extend(repeat_n('\t', depth - 1));
+        add_indent(&mut result, depth - 1);
         // DO
         result.push_str(&self.keyword.0);
         result.push('\n');
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
         // NOTHING
         result.push_str(&self.keyword.1);
         result.push('\n');
@@ -135,11 +134,11 @@ impl DoUpdate {
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
-        result.extend(repeat_n('\t', depth - 1));
+        add_indent(&mut result, depth - 1);
         // DO
         result.push_str(&self.keyword.0);
         result.push('\n');
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
         // UPDATE
         result.push_str(&self.keyword.1);
         result.push('\n');
@@ -186,11 +185,11 @@ impl OnConflict {
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
 
-        result.extend(repeat_n('\t', depth - 1));
+        add_indent(&mut result, depth - 1);
         // ON
         result.push_str(&self.keyword.0);
         result.push('\n');
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
         // CONFLICT
         result.push_str(&self.keyword.1);
 
@@ -203,7 +202,7 @@ impl OnConflict {
                 }
                 ConflictTarget::SpecifyIndexColumn(specify_index_column) => {
                     // INDEXカラム指定の場合は改行せずに描画
-                    result.push('\t');
+                    add_single_space(&mut result);
                     result.push_str(&specify_index_column.render(depth)?);
                 }
             }
@@ -248,15 +247,16 @@ impl Values {
 
         if !is_one_row {
             result.push('\n');
-            result.extend(repeat_n('\t', depth));
+            add_indent(&mut result, depth);
         } else {
             // "VALUES" と "(" の間の空白
             result.push(' ');
         }
 
         let mut separator = String::from('\n');
-        separator.extend(repeat_n('\t', depth - 1));
-        separator.push_str(",\t");
+        add_indent(&mut separator, depth - 1);
+        separator.push(',');
+        add_space_by_range(&mut separator, 1, tab_size());
 
         result.push_str(
             &self
@@ -445,16 +445,16 @@ impl InsertBody {
         let mut result = String::new();
 
         // テーブル名
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
         result.push_str(&self.table_name.render(depth)?);
         result.push('\n');
 
         // カラム名
         if let Some(sep_lines) = &self.columns {
-            result.extend(repeat_n('\t', depth - 1));
+            add_indent(&mut result, depth - 1);
             result.push_str("(\n");
             result.push_str(&sep_lines.render(depth)?);
-            result.extend(repeat_n('\t', depth - 1));
+            add_indent(&mut result, depth - 1);
             result.push(')');
         }
 

@@ -1,8 +1,7 @@
-use itertools::repeat_n;
-
 use crate::{
-    cst::{ColumnList, Comment, Location, SubExpr},
+    cst::{add_indent, ColumnList, Comment, Location, SubExpr},
     error::UroboroSQLFmtError,
+    util::add_single_space,
 };
 
 /// WITH句における名前付きサブクエリ}
@@ -95,34 +94,34 @@ impl Cte {
         let mut result = String::new();
 
         result.push_str(&self.name);
-        result.push('\t');
+        add_single_space(&mut result);
 
         // カラム名の指定がある場合
         if let Some(column_list) = &self.column_name {
             result.push_str(&column_list.render(depth)?);
-            result.push('\t');
+            add_single_space(&mut result);
         }
 
         // テーブル名の直後のコメントがある場合
         if let Some(comment) = &self.name_trailing_comment {
             result.push_str(comment);
             result.push('\n');
-            result.extend(repeat_n('\t', depth));
+            add_indent(&mut result, depth);
         }
 
         result.push_str(&self.as_keyword);
-        result.push('\t');
+        add_single_space(&mut result);
 
         // MATERIALIZEDの指定がある場合
         if let Some(materialized) = &self.materialized_keyword {
             result.push_str(materialized);
-            result.push('\t');
+            add_single_space(&mut result);
         }
 
         result.push_str(&self.sub_expr.render(depth)?);
 
         if let Some(comment) = &self.trailing_comment {
-            result.push('\t');
+            add_single_space(&mut result);
             result.push_str(comment);
         }
 
@@ -197,14 +196,14 @@ impl WithBody {
         let mut is_first_line = true;
 
         for (cte, comments) in &self.contents {
-            result.extend(repeat_n('\t', depth - 1));
+            add_indent(&mut result, depth - 1);
 
             if is_first_line {
                 is_first_line = false;
             } else {
                 result.push(',')
             }
-            result.push('\t');
+            add_single_space(&mut result);
 
             let formatted = cte.render(depth)?;
             result.push_str(&formatted);

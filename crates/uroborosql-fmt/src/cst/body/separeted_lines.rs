@@ -1,9 +1,9 @@
-use itertools::{repeat_n, Itertools};
+use itertools::Itertools;
 
 use crate::{
-    cst::{AlignInfo, AlignedExpr, Comment, Location},
+    cst::{add_indent, AlignInfo, AlignedExpr, Comment, Location},
     error::UroboroSQLFmtError,
-    util::to_tab_num,
+    util::{add_single_space, add_space_by_range, tab_size, to_tab_num},
 };
 
 #[derive(Debug, Clone)]
@@ -68,7 +68,7 @@ impl SepLinesContent {
         }
 
         let mut result = String::new();
-        result.extend(repeat_n('\t', depth - 1));
+        add_indent(&mut result, depth - 1);
 
         // separatorがある(=最初の行でない)場合はseparatorを描画
         if let Some(sep) = &self.sep {
@@ -91,7 +91,7 @@ impl SepLinesContent {
                     result.push_str(&comment.render(depth - 1)?);
                 } else if is_first {
                     is_first = false;
-                    result.push('\t');
+                    add_single_space(&mut result);
                     result.push_str(&comment.render(0)?);
                 } else {
                     result.push_str(&comment.render(new_depth_with_sep)?);
@@ -102,16 +102,16 @@ impl SepLinesContent {
 
             if !self.expr.is_lhs_cond() {
                 // コメントの挿入後に改行をしたので、タブを挿入
-                result.extend(repeat_n('\t', new_depth_with_sep));
+                add_indent(&mut result, new_depth_with_sep);
             } else {
                 // 左辺がCASE文の場合は挿入した改行を削除
                 result.pop();
             }
         } else {
             // コメントが存在しない場合はseparatorの直後にタブを挿入
-            let tab_num =
-                new_depth_with_sep - (depth - 1) - (to_tab_num(1.max(self.sep_len())) - 1);
-            result.extend(repeat_n('\t', tab_num));
+            let start_col = (depth - 1) * tab_size() + self.sep_len();
+            let end_col = new_depth_with_sep * tab_size();
+            add_space_by_range(&mut result, start_col, end_col);
         }
 
         let formatted = self.expr.render_align(new_depth_with_sep, align_info)?;

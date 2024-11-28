@@ -1,14 +1,14 @@
 SELECT
-	*
+  *
 FROM
-	students
+  students
 WHERE
-	student_id	<>	2
+  student_id  <>  2
 ;
 SELECT
-	*
+  *
 FROM
-	students
+  students
 WHERE
-	student_id	!=	2
+  student_id  !=  2
 ;

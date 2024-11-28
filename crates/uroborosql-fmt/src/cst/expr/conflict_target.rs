@@ -1,6 +1,8 @@
-use itertools::repeat_n;
-
-use crate::{cst::Location, error::UroboroSQLFmtError};
+use crate::{
+    cst::{add_indent, Location},
+    error::UroboroSQLFmtError,
+    util::{add_single_space, add_space_by_range, tab_size},
+};
 
 /// COLLATE
 #[derive(Debug, Clone)]
@@ -17,7 +19,7 @@ impl Collate {
     pub(crate) fn render(&self) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
         result.push_str(&self.keyword);
-        result.push('\t');
+        add_single_space(&mut result);
         result.push_str(&self.collation);
         Ok(result)
     }
@@ -52,18 +54,18 @@ impl ConflictTargetElement {
 
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
         result.push_str(&self.column);
 
         // collationがある場合
         if let Some(collate) = &self.collate {
-            result.push('\t');
+            add_single_space(&mut result);
             result.push_str(&collate.render()?);
         };
 
         // op_classがある場合
         if let Some(op_class) = &self.op_class {
-            result.push('\t');
+            add_single_space(&mut result);
             // 演算子クラスはキーワードルールを適用
             result.push_str(op_class);
         };
@@ -93,12 +95,13 @@ impl ConflictTargetColumnList {
         result.push_str("(\n");
 
         // 最初の行のインデント
-        result.extend(repeat_n('\t', depth + 1));
+        add_indent(&mut result, depth + 1);
 
         // 各要素間の改行、カンマ、インデント
         let mut separator = "\n".to_string();
-        separator.extend(repeat_n('\t', depth));
-        separator.push_str(",\t");
+        add_indent(&mut separator, depth);
+        separator.push(',');
+        add_space_by_range(&mut separator, 1, tab_size());
 
         result.push_str(
             &self
@@ -110,7 +113,7 @@ impl ConflictTargetColumnList {
         );
 
         result.push('\n');
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
         result.push(')');
 
         Ok(result)

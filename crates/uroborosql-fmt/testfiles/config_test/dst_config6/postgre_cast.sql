@@ -1,5 +1,5 @@
 SELECT
-	''::JSONB
+  ''::JSONB
 FROM
-	tbl
+  tbl
 ;

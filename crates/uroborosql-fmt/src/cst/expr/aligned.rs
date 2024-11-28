@@ -1,9 +1,7 @@
-use itertools::repeat_n;
-
 use crate::{
-    cst::{Comment, Location},
+    cst::{add_indent, Comment, Location},
     error::UroboroSQLFmtError,
-    util::{tab_size, to_tab_num},
+    util::{add_single_space, add_space_by_range, tab_size, to_tab_num},
 };
 
 use super::Expr;
@@ -209,7 +207,7 @@ impl AlignedExpr {
         self.lhs.is_multi_line() || self.rhs.as_ref().map(Expr::is_multi_line).unwrap_or(false)
     }
 
-    // 演算子までの長さを返す
+    // 演算子までの長さをタブ単位で返す
     // 左辺の長さを返せばよい
     pub(crate) fn lhs_tab_num(&self) -> usize {
         if self.lhs_trailing_comment.is_some() {
@@ -217,6 +215,17 @@ impl AlignedExpr {
             0
         } else {
             self.lhs.last_line_tab_num()
+        }
+    }
+
+    // 演算子までの長さを返す
+    // 左辺の長さを返せばよい
+    pub(crate) fn lhs_last_line_len(&self) -> usize {
+        if self.lhs_trailing_comment.is_some() {
+            // trailing commentが左辺にある場合、改行するため0
+            0
+        } else {
+            self.lhs.last_line_len()
         }
     }
 
@@ -230,7 +239,7 @@ impl AlignedExpr {
         match (max_tab_num_to_op, &self.rhs) {
             // コメント以外にそろえる対象があり、この式が右辺を持つ場合は右辺の長さ
             (Some(_), Some(rhs)) => Some(rhs.last_line_tab_num()),
-            // コメント以外に揃える対象があり、右辺を左辺を保管しない場合、0
+            // コメント以外に揃える対象があり、右辺を補完しない場合、0
             (Some(_), None) => Some(0),
             // そろえる対象がコメントだけであるとき、左辺の長さ
             (_, _) => Some(self.lhs.last_line_tab_num()),
@@ -292,24 +301,34 @@ impl AlignedExpr {
                         ));
                     }
 
-                    result.push('\t');
+                    add_single_space(&mut result);
                     result.push_str(comment_str);
                     result.push('\n');
 
                     // インデントを挿入
-                    result.extend(repeat_n('\t', depth - 1));
+                    add_indent(&mut result, depth - 1);
                 }
 
                 // 左辺がCASE文の場合はopの前に改行してdepthだけタブを挿入
                 if matches!(self.lhs, Expr::Cond(_)) {
                     result.push('\n');
-                    result.extend(repeat_n('\t', depth));
+                    add_indent(&mut result, depth);
                 }
 
                 // 縦揃え対象opの直前までタブを挿入
-                let tab_num = max_tab_num_to_op - self.lhs_tab_num();
-                result.extend(repeat_n('\t', tab_num));
-                result.push('\t');
+                //
+                // 全ての左辺に trailing comment があり、以下の3条件を満たす場合でも、スペースによるインデント対応前と同じ挙動にするために
+                // `1.max(...)` として最低でも一つのインデントが行われるようにしている
+                //
+                // 1. self.lhs_last_line_len() == 0
+                // 2. self.lhs_tab_num() == 0
+                // 3. max_tab_num_to_op == 0
+                add_space_by_range(
+                    &mut result,
+                    self.lhs_last_line_len(),
+                    1.max(self.lhs_tab_num()) * tab_size(),
+                );
+                add_indent(&mut result, max_tab_num_to_op - self.lhs_tab_num());
 
                 // from句以外はopを挿入
                 if !op.is_empty() {
@@ -318,8 +337,7 @@ impl AlignedExpr {
                     // 右辺が存在してCASE文ではない場合はタブを挿入
                     // CASE文の場合はopの直後で改行するため、opの後にはタブを挿入しない
                     if self.rhs.is_some() && !matches!(&self.rhs, Some(Expr::Cond(_))) {
-                        let tab_num = max_op_tab_num - self.op_tab_num().unwrap(); // self.op != Noneならop_tab_num != None
-                        result.extend(repeat_n('\t', tab_num + 1));
+                        add_space_by_range(&mut result, op.len(), max_op_tab_num * tab_size());
                     }
                 }
 
@@ -328,7 +346,7 @@ impl AlignedExpr {
                     let formatted = if matches!(rhs, Expr::Cond(_)) {
                         // 右辺がCASE文の場合は改行してタブを挿入
                         result.push('\n');
-                        result.extend(repeat_n('\t', depth + 1));
+                        add_indent(&mut result, depth + 1);
                         // 1つ深いところでrender
                         rhs.render(depth + 1)?
                     } else {
@@ -348,28 +366,40 @@ impl AlignedExpr {
                         ));
                     }
 
-                    result.push('\t');
+                    add_single_space(&mut result);
                     result.push_str(comment_str);
                     result.push('\n');
 
                     // インデントを挿入
-                    result.extend(repeat_n('\t', depth - 1));
+                    add_indent(&mut result, depth - 1);
                 }
 
                 // 左辺がCASE文の場合はopの前に改行してdepthだけタブを挿入
                 if matches!(self.lhs, Expr::Cond(_)) {
                     result.push('\n');
-                    result.extend(repeat_n('\t', depth));
+                    add_indent(&mut result, depth);
                 }
 
-                let tab_num = max_tab_num_to_op - self.lhs_tab_num();
-                result.extend(repeat_n('\t', tab_num));
+                // 縦揃え対象opの直前までタブを挿入
+                //
+                // 全ての左辺に trailing comment があり、以下の3条件を満たす場合でも、スペースによるインデント対応前と同じ挙動にするために
+                // `1.max(...)` として最低でも一つのインデントが行われるようにしている
+                //
+                // 1. self.lhs_last_line_len() == 0
+                // 2. self.lhs_tab_num() == 0
+                // 3. max_tab_num_to_op == 0
+                add_space_by_range(
+                    &mut result,
+                    self.lhs_last_line_len(),
+                    1.max(self.lhs_tab_num()) * tab_size(),
+                );
+                add_indent(&mut result, max_tab_num_to_op - self.lhs_tab_num());
 
                 // 右辺が存在してCASE文ではない場合はタブを挿入
                 // CASE文の場合はopの直後で改行するため、opの後にはタブを挿入しない
                 if self.rhs.is_some() && !matches!(&self.rhs, Some(Expr::Cond(_))) {
                     let tab_num = max_op_tab_num; // self.op != Noneならop_tab_num != None
-                    result.extend(repeat_n('\t', tab_num + 1));
+                    add_indent(&mut result, tab_num);
                 }
 
                 //右辺をrender
@@ -377,7 +407,7 @@ impl AlignedExpr {
                     let formatted = if matches!(rhs, Expr::Cond(_)) {
                         // 右辺がCASE文の場合は改行してタブを挿入
                         result.push('\n');
-                        result.extend(repeat_n('\t', depth + 1));
+                        add_indent(&mut result, depth + 1);
                         // 1つ深いところでrender
                         rhs.render(depth + 1)?
                     } else {
@@ -398,35 +428,39 @@ impl AlignedExpr {
                 let max_op_tab_num = max_op_tab_num.unwrap();
                 let max_tab_num_to_op = max_tab_num_to_op.unwrap();
 
-                let tab_num_to_comment = if let Some(rhs) = &self.rhs {
+                let (start_col, end_col) = if let Some(rhs) = &self.rhs {
                     // 右辺がある場合は、コメントまでの最長の長さ - 右辺の長さ
 
                     // trailing_commentがある場合、max_tab_num_to_commentは必ずSome(_)
-                    max_tab_num_to_comment - rhs.last_line_tab_num()
+                    let start_col = rhs.last_line_len();
+                    let end_col = max_tab_num_to_comment * tab_size()
                         + if rhs.is_multi_line() {
                             // 右辺が複数行である場合、最後の行に左辺と演算子はないため、その分タブで埋める
-                            max_tab_num_to_op + max_op_tab_num
+                            (max_tab_num_to_op + max_op_tab_num) * tab_size()
                         } else {
                             0
-                        }
+                        };
+
+                    (start_col, end_col)
                 } else {
                     // 右辺がない場合は
                     // コメントまでの最長 + 演算子の長さ + 左辺の最大長からの差分
-                    max_tab_num_to_comment + max_op_tab_num + max_tab_num_to_op
-                        - self.lhs.last_line_tab_num()
+                    let start_col = self.lhs.last_line_len();
+                    let end_col =
+                        (max_tab_num_to_comment + max_op_tab_num + max_tab_num_to_op) * tab_size();
+                    (start_col, end_col)
                 };
 
-                result.extend(repeat_n('\t', tab_num_to_comment));
-                result.push('\t');
+                add_space_by_range(&mut result, start_col, end_col);
                 result.push_str(trailing_comment);
             } else {
                 // 全てのAligendExprが演算子を持たない場合
                 // 左辺だけを考慮すれば良い
-                let tab_num = max_tab_num_to_comment - self.lhs.last_line_tab_num();
-
-                result.extend(repeat_n('\t', tab_num));
-
-                result.push('\t');
+                add_space_by_range(
+                    &mut result,
+                    self.lhs.last_line_len(),
+                    max_tab_num_to_comment * tab_size(),
+                );
                 result.push_str(trailing_comment);
             }
         }

@@ -70,6 +70,11 @@ fn default_unify_not_equal() -> bool {
     true
 }
 
+/// indent_tabのデフォルト値(true)
+fn default_indent_tab() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Case {
@@ -146,6 +151,9 @@ pub struct Config {
     /// not_equalを!=に統一する
     #[serde(default = "default_unify_not_equal")]
     pub(crate) unify_not_equal: bool,
+    /// 空白文字ではなくタブ文字でインデントする
+    #[serde(default = "default_indent_tab")]
+    pub(crate) indent_tab: bool,
 }
 
 impl Config {
@@ -208,6 +216,7 @@ impl Default for Config {
             complement_sql_id: default_complement_sql_id(),
             convert_double_colon_cast: default_convert_double_colon_cast(),
             unify_not_equal: default_unify_not_equal(),
+            indent_tab: default_indent_tab(),
         }
     }
 }
@@ -234,6 +243,7 @@ pub(crate) fn load_never_complement_settings() {
         remove_redundant_nest: false,
         convert_double_colon_cast: false,
         unify_not_equal: false,
+        indent_tab: true,
     };
 
     *CONFIG.write().unwrap() = config;

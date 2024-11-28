@@ -1,9 +1,9 @@
-use itertools::{repeat_n, Itertools};
+use itertools::Itertools;
 
 use crate::{
-    cst::{AlignInfo, AlignedExpr, Comment, Location},
+    cst::{add_indent, AlignInfo, AlignedExpr, Comment, Location},
     error::UroboroSQLFmtError,
-    util::trim_bind_param,
+    util::{add_space_by_range, count_width, tab_size, trim_bind_param},
 };
 
 /// 列のリストを表す。
@@ -50,7 +50,7 @@ impl ColumnList {
         } else {
             let mut current_len = acc + "(".len();
             if let Some(param) = &self.head_comment {
-                current_len += param.len()
+                current_len += count_width(param)
             };
 
             self.cols.iter().enumerate().for_each(|(i, col)| {
@@ -114,12 +114,13 @@ impl ColumnList {
             }
 
             // 最初の行のインデント
-            result.extend(repeat_n('\t', depth + 1));
+            add_indent(&mut result, depth + 1);
 
             // 各要素間の改行、カンマ、インデント
             let mut separator = "\n".to_string();
-            separator.extend(repeat_n('\t', depth));
-            separator.push_str(",\t");
+            add_indent(&mut separator, depth);
+            separator.push(',');
+            add_space_by_range(&mut separator, 1, tab_size());
 
             // Vec<AlignedExpr> -> Vec<&AlignedExpr>
             let aligned_exprs = self.cols.iter().collect_vec();
@@ -135,7 +136,7 @@ impl ColumnList {
             );
 
             result.push('\n');
-            result.extend(repeat_n('\t', depth));
+            add_indent(&mut result, depth);
             result.push(')');
         } else {
             // ColumnListを単一行で描画する
