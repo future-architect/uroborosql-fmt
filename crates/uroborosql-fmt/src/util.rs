@@ -203,7 +203,6 @@ pub(crate) fn add_space_by_range(result: &mut String, start_col: usize, end_col:
 
 /// 文字列の幅を計算する
 pub(crate) fn count_width(s: impl AsRef<str>) -> usize {
-    // アスキーは幅1、その他は幅2でカウントして判定
     s.as_ref()
         .chars()
         .map(|c| if is_fullwidth_char(c) { 2 } else { 1 })
