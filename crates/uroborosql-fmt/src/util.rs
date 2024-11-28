@@ -206,13 +206,13 @@ pub(crate) fn count_width(s: impl AsRef<str>) -> usize {
     // アスキーは幅1、その他は幅2でカウントして判定
     s.as_ref()
         .chars()
-        .map(|c| if is_japanese_char(c) { 2 } else { 1 })
+        .map(|c| if is_fullwidth_char(c) { 2 } else { 1 })
         .sum()
 }
 
-/// （日本語の）全角文字か否か判定
+/// 全角文字か否か判定
 /// ref: https://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/e_asia.html
-fn is_japanese_char(c: char) -> bool {
+fn is_fullwidth_char(c: char) -> bool {
     matches!(c as u32,
         0x4E00..=0x9FFC |   // CJK統合漢字
         0x3400..=0x4DB5 |   // CJK統合漢字拡張A
