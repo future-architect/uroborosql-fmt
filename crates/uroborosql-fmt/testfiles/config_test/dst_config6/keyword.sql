@@ -17,7 +17,7 @@ AND grade NOT BETWEEN /*start2*/70  AND /*end2*/80
 UPDATE
   weather
 SET
-  (temp_lo, temp_hi, prcp)  = (temp_lo	+	1, temp_lo	+	15, DEFAULT)
+  (temp_lo, temp_hi, prcp)  = (temp_lo + 1, temp_lo + 15, DEFAULT)
 WHERE
   city  = 'San Francisco'
 ;

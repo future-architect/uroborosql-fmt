@@ -1,11 +1,11 @@
 SELECT
-  NORMAL_FUNC(col1	+	col2, param2)
+  NORMAL_FUNC(col1 + col2, param2)
 ;
 SELECT
   MANY_ARGS_FUNC(param1, param2, param3, param4)
 ;
 SELECT
-  LONG_ARGS_FUNC(col1	+	longlonglonglonglonglonglong, param2)
+  LONG_ARGS_FUNC(col1 + longlonglonglonglonglonglong, param2)
 ;
 SELECT
   LONGLONGLONGLONGLONGLONGLONGLONGLONGLONGLONGLONG_FUNC(

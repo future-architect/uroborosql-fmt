@@ -177,14 +177,17 @@ pub(crate) fn add_indent(result: &mut String, depth: usize) {
 }
 
 /// 要素を区切る空白を返す
-pub(crate) fn add_single_space(result: &mut String) {
-    let c = if CONFIG.read().unwrap().indent_tab {
+pub(crate) fn single_space() -> char {
+    if CONFIG.read().unwrap().indent_tab {
         '\t'
     } else {
         ' '
-    };
+    }
+}
 
-    result.push(c);
+/// 要素を区切る空白を追加
+pub(crate) fn add_single_space(result: &mut String) {
+    result.push(single_space());
 }
 
 /// start_colからend_colまでタブ/スペースを追加

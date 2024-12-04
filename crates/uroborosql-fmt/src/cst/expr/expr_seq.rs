@@ -1,7 +1,7 @@
 use crate::{
     cst::{Comment, Location, Position},
     error::UroboroSQLFmtError,
-    util::{tab_size, to_tab_num},
+    util::{single_space, tab_size, to_tab_num},
 };
 
 use super::Expr;
@@ -71,6 +71,6 @@ impl ExprSeq {
             .iter()
             .map(|e| e.render(depth))
             .collect::<Result<Vec<_>, _>>()?
-            .join("\t"))
+            .join(&single_space().to_string()))
     }
 }

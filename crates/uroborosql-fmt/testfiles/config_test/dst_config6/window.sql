@@ -26,7 +26,7 @@ SELECT
 , SUM(qty) OVER(
     ORDER BY
       order_id
-    ROWS BETWEEN	1	PRECEDING	AND	1	FOLLOWING
+    ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
   )         result
 FROM
   test_orders
@@ -40,7 +40,7 @@ SELECT
     ORDER BY
       v
     /* order by */
-    GROUPS BETWEEN	UNBOUNDED	PRECEDING	AND	CURRENT	ROW	EXCLUDE	NO	OTHERS
+    GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS
     /* frame clause with exclusion */
     /* over clause */
   )
