@@ -194,10 +194,7 @@ pub(crate) fn add_single_space(result: &mut String) {
 pub(crate) fn add_space_by_range(result: &mut String, start_col: usize, end_col: usize) {
     if CONFIG.read().unwrap().indent_tab {
         let tab_size = tab_size();
-        let tabs = repeat_n(
-            '\t',
-            (end_col + tab_size - 1) / tab_size - start_col / tab_size,
-        );
+        let tabs = repeat_n('\t', end_col.div_ceil(tab_size) - start_col / tab_size);
         result.extend(tabs);
     } else {
         result.extend(repeat_n(' ', end_col - start_col));
