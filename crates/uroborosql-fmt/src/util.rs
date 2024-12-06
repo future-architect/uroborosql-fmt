@@ -167,7 +167,7 @@ pub(crate) fn create_error_annotation(
     Ok(DisplayList::from(snippet).to_string())
 }
 
-/// 深さdepth分のインデントを返す
+/// 深さdepth分のインデントを追加
 pub(crate) fn add_indent(result: &mut String, depth: usize) {
     if CONFIG.read().unwrap().indent_tab {
         result.extend(repeat_n('\t', depth));
