@@ -2,7 +2,7 @@ use annotate_snippets::{
     display_list::{DisplayList, FormatOptions},
     snippet::{AnnotationType, Slice, Snippet, SourceAnnotation},
 };
-use itertools::Itertools;
+use itertools::{repeat_n, Itertools};
 
 use crate::{config::CONFIG, cst::Location, error::UroboroSQLFmtError};
 
@@ -165,4 +165,72 @@ pub(crate) fn create_error_annotation(
     };
 
     Ok(DisplayList::from(snippet).to_string())
+}
+
+/// 深さdepth分のインデントを追加
+pub(crate) fn add_indent(result: &mut String, depth: usize) {
+    if CONFIG.read().unwrap().indent_tab {
+        result.extend(repeat_n('\t', depth));
+    } else {
+        result.extend(repeat_n(' ', depth * tab_size()));
+    }
+}
+
+/// 要素を区切る空白を返す
+pub(crate) fn single_space() -> char {
+    if CONFIG.read().unwrap().indent_tab {
+        '\t'
+    } else {
+        ' '
+    }
+}
+
+/// 要素を区切る空白を追加
+pub(crate) fn add_single_space(result: &mut String) {
+    result.push(single_space());
+}
+
+/// start_colからend_colまでタブ/スペースを追加
+pub(crate) fn add_space_by_range(result: &mut String, start_col: usize, end_col: usize) {
+    if CONFIG.read().unwrap().indent_tab {
+        let tab_size = tab_size();
+        let tabs = repeat_n('\t', end_col.div_ceil(tab_size) - start_col / tab_size);
+        result.extend(tabs);
+    } else {
+        result.extend(repeat_n(' ', end_col - start_col));
+    }
+}
+
+/// 文字列の幅を計算する
+pub(crate) fn count_width(s: impl AsRef<str>) -> usize {
+    s.as_ref()
+        .chars()
+        .map(|c| if is_fullwidth_char(c) { 2 } else { 1 })
+        .sum()
+}
+
+/// 全角文字か否か判定
+/// ref: https://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/e_asia.html
+fn is_fullwidth_char(c: char) -> bool {
+    matches!(c as u32,
+        0x4E00..=0x9FFC |   // CJK統合漢字
+        0x3400..=0x4DB5 |   // CJK統合漢字拡張A
+        0x20000..=0x2A6DD | // CJK統合漢字拡張B
+        0x2A700..=0x2B739 | // CJK統合漢字拡張C
+        0x2B740..=0x2B81D | // CJK統合漢字拡張D
+        0x2B820..=0x2CEA1 | // CJK統合漢字拡張E
+        0x2CEB0..=0x2EBE0 | // CJK統合漢字拡張F
+        0x30000..=0x3134A | // CJK統合漢字拡張G
+        0x31350..=0x323AF | // CJK統合漢字拡張H
+        0x2EBF0..=0x2EE5D | // CJK統合漢字拡張I
+        0xF900..=0xFAFF |   // CJK互換漢字
+        0x2F800..=0x2FA1F | // CJK互換漢字補助
+        0x3040..=0x309F |   // 平仮名
+        0x30A0..=0x30FF |   // 片仮名
+        0x31F0..=0x31FF |   // 片仮名拡張
+        0x3000..=0x303F |   // CJKの記号及び句読点（https://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/punctuation.html）
+        0x25A0..=0x25FF |   // 幾何学模様（https://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/mathematical.html）
+        0xFF00..=0xFF60 |   // 全角ASCII（https://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/uff00.html）
+        0x00D7 | 0x00F7     // C1制御文字とラテン1補助（https://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/u0080.html）
+    )
 }

@@ -1,7 +1,7 @@
 use crate::{
     cst::Location,
     error::UroboroSQLFmtError,
-    util::{tab_size, to_tab_num},
+    util::{add_single_space, tab_size, to_tab_num},
 };
 
 use super::Expr;
@@ -53,7 +53,7 @@ impl UnaryExpr {
         result.push_str(&self.operator);
         // `NOT` のときは空白が必要
         if self.operator.to_uppercase() == "NOT" {
-            result.push('\t');
+            add_single_space(&mut result);
         }
         result.push_str(&self.operand.render(depth)?);
 

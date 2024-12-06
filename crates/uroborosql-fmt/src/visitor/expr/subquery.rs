@@ -5,7 +5,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    util::convert_keyword_case,
+    util::{convert_keyword_case, single_space},
     visitor::{ensure_kind, Visitor, COMMENT},
 };
 
@@ -181,8 +181,9 @@ impl Visitor {
 
         let mut all_some_any_sub = AlignedExpr::new(lhs);
 
+        let space = single_space();
         all_some_any_sub.add_rhs(
-            Some(format!("{op}\t{all_some_any_keyword}")),
+            Some(format!("{op}{space}{all_some_any_keyword}")),
             Expr::Sub(Box::new(select_subexpr)),
         );
 

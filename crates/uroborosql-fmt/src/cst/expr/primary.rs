@@ -3,7 +3,9 @@ use tree_sitter::Node;
 use crate::{
     cst::{Comment, Location},
     error::UroboroSQLFmtError,
-    util::{convert_identifier_case, convert_keyword_case, is_quoted, trim_bind_param},
+    util::{
+        convert_identifier_case, convert_keyword_case, count_width, is_quoted, trim_bind_param,
+    },
 };
 
 /// PrimaryExprがKeywordかExprか示すEnum
@@ -57,9 +59,11 @@ impl PrimaryExpr {
     /// 自身を描画した際に、最後の行のインデントからの文字列の長さを返す。
     /// 引数 acc には、自身の左側に存在する式のインデントからの長さを与える。
     pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
-        let mut len = self.element.len() + acc;
+        // 基本的には日本語の幅を意識しないといけない箇所はここだけだと思われるので
+        // ここだけ count_width で長さを計算している
+        let mut len = count_width(&self.element) + acc;
         if let Some(head_comment) = &self.head_comment {
-            len += head_comment.len()
+            len += count_width(head_comment);
         };
         len
     }

@@ -1,7 +1,5 @@
-use itertools::repeat_n;
-
 use crate::{
-    cst::{Comment, Location, Statement},
+    cst::{add_indent, Comment, Location, Statement},
     error::UroboroSQLFmtError,
 };
 
@@ -34,7 +32,7 @@ impl SubExpr {
 
         result.push_str(&formatted);
 
-        result.extend(repeat_n('\t', depth));
+        add_indent(&mut result, depth);
         result.push(')');
 
         Ok(result)

@@ -1,7 +1,5 @@
-use itertools::repeat_n;
-
 use crate::{
-    cst::{Comment, Location},
+    cst::{add_indent, Comment, Location},
     error::UroboroSQLFmtError,
 };
 
@@ -102,7 +100,7 @@ impl ParenExpr {
         // bodyでない式は、最初の行のインデントを自分で行わない。
         // そのため、かっこのインデントの深さ + 1個分インデントを挿入する。
         if self.is_multi_line() && !self.expr.is_body() {
-            result.extend(repeat_n('\t', depth + 1));
+            add_indent(&mut result, depth + 1);
         }
 
         result.push_str(&formatted);
@@ -118,7 +116,7 @@ impl ParenExpr {
         }
 
         if self.is_multi_line() {
-            result.extend(repeat_n('\t', depth));
+            add_indent(&mut result, depth);
         }
 
         result.push(')');

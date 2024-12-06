@@ -12,5 +12,6 @@
   "remove_redundant_nest": true,
   "complement_sql_id": true,
   "convert_double_colon_cast": false,
-  "unify_not_equal": true
+  "unify_not_equal": true,
+  "indent_tab": true
 }

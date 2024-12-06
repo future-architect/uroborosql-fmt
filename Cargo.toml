@@ -5,6 +5,7 @@ members = [
     "crates/uroborosql-fmt-napi",
     "crates/uroborosql-fmt-wasm"
 ]
+resolver = "2"
 
 [workspace.package]
 authors = ["Future Corporation"]

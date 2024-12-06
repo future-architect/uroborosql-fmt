@@ -1,9 +1,9 @@
-use itertools::{repeat_n, Itertools};
+use itertools::Itertools;
 
 use crate::{
-    cst::{AlignInfo, AlignedExpr, Clause, Comment, Location},
+    cst::{add_indent, AlignInfo, AlignedExpr, Clause, Comment, Location},
     error::UroboroSQLFmtError,
-    util::{convert_keyword_case, is_line_overflow, tab_size, to_tab_num},
+    util::{add_space_by_range, convert_keyword_case, is_line_overflow, tab_size, to_tab_num},
 };
 
 /// FunctionCallがユーザ定義関数か組み込み関数か示すEnum
@@ -132,12 +132,13 @@ impl FunctionCallArgs {
                 };
 
                 // 最初の行のインデント
-                result.extend(repeat_n('\t', depth + 1));
+                add_indent(&mut result, depth + 1);
 
                 // 各要素間の改行、カンマ、インデント
                 let mut separator = "\n".to_string();
-                separator.extend(repeat_n('\t', depth));
-                separator.push_str(",\t");
+                add_indent(&mut separator, depth);
+                separator.push(',');
+                add_space_by_range(&mut separator, 1, tab_size());
 
                 // Vec<AlignedExpr> -> Vec<&AlignedExpr>
                 let aligned_exprs = self.exprs.iter().collect_vec();
@@ -161,7 +162,7 @@ impl FunctionCallArgs {
                 result.push('\n');
             }
 
-            result.extend(repeat_n('\t', depth));
+            add_indent(&mut result, depth);
             result.push(')');
         } else {
             // 単一行で描画する
@@ -319,7 +320,7 @@ impl FunctionCall {
             result.push('\n');
             result.push_str(&filter_clause.render(depth + 1)?);
 
-            result.extend(repeat_n('\t', depth));
+            add_indent(&mut result, depth);
             result.push(')');
         }
 
@@ -339,7 +340,7 @@ impl FunctionCall {
 
                 clauses.iter().for_each(|c| result.push_str(c));
 
-                result.extend(repeat_n('\t', depth));
+                add_indent(&mut result, depth);
             }
 
             result.push(')');
