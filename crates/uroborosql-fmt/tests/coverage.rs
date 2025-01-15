@@ -69,12 +69,29 @@ fn try_format_with_new_parser(file_path: &str) -> Result<String, String> {
         return Err("2way-sql is intentionally skipped".to_string());
     }
 
-    let content =
-        fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let input = fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    // TODO: 新しいパーサーでの処理を実装
-    // とりあえず全てUnsupportedとして扱う
-    Err("❌ Not implemented yet".to_string())
+    // 期待される出力を取得
+    let dst_path = file_path.replace("/src/", "/dst/");
+    let expected = fs::read_to_string(&dst_path)
+        .map_err(|e| format!("Failed to read dst file: {}", e))?;
+
+    // フォーマット実行
+    match uroborosql_fmt::format_sql(&input, None, None) {
+        Ok(formatted) => {
+            if formatted.trim() == expected.trim() {
+                Ok(formatted)
+            } else {
+                Err(format!(
+                    "❌ Formatting result does not match\nExpected:\n{}\nGot:\n{}",
+                    expected.trim(),
+                    formatted.trim()
+                ))
+            }
+        }
+        Err(e) => Err(format!("❌ Formatting error: {}", e)),
+    }
 }
 
 fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {

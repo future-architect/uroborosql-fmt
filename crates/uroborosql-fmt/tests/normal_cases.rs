@@ -8,16 +8,67 @@ struct TestCase {
     expected: String,
 }
 
+#[derive(Debug)]
+struct TestResult {
+    name: String,
+    status: TestStatus,
+    input: String,
+    expected: String,
+    got: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Debug)]
+enum TestStatus {
+    Pass,
+    Fail,
+    Error,
+}
+
 impl TestCase {
     fn from_files(name: &str, src_path: &Path, dst_path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let sql = fs::read_to_string(src_path)?.to_string();
-        let expected = fs::read_to_string(dst_path)?.to_string();
+        let sql = fs::read_to_string(src_path)?.trim().to_string();
+        let expected = fs::read_to_string(dst_path)?.trim().to_string();
 
         Ok(Self {
             name: name.to_string(),
             sql,
             expected,
         })
+    }
+}
+
+fn print_test_report(results: &[TestResult]) {
+    let total = results.len();
+    let passed = results.iter().filter(|r| matches!(r.status, TestStatus::Pass)).count();
+    let failed = results.iter().filter(|r| matches!(r.status, TestStatus::Fail)).count();
+    let errors = results.iter().filter(|r| matches!(r.status, TestStatus::Error)).count();
+
+    println!("\nTest Report:");
+    println!("Total test cases: {:>4} cases", total);
+    println!("{:<14} : {:>4} cases", "✅ Passed", passed);
+    println!("{:<14} : {:>4} cases", "❌ Failed", failed);
+    println!("{:<14} : {:>4} cases", "💥 Errors", errors);
+
+    if failed > 0 || errors > 0 {
+        println!("\nFailures and Errors:");
+        for result in results {
+            match result.status {
+                TestStatus::Pass => continue,
+                TestStatus::Fail => {
+                    println!("\n❌ Failed: {}", result.name);
+                    println!("\nInput:\n{}", result.input);
+                    println!("\nExpected:\n{}", result.expected);
+                    println!("\nGot:\n{}", result.got.as_ref().unwrap());
+                }
+                TestStatus::Error => {
+                    println!("\n💥 Error: {}", result.name);
+                    println!("\nInput:\n{}", result.input);
+                    println!("\nError: {}\n", result.error.as_ref().unwrap());
+                }
+            }
+        }
+        panic!("Some tests failed");
     }
 }
 
@@ -54,26 +105,50 @@ fn collect_test_cases() -> Vec<TestCase> {
 
 #[test]
 fn test_normal_cases() {
+    let mut results = Vec::new();
+
     for case in collect_test_cases() {
         println!("\nTesting: {}", case.name);
-        println!("Input:\n{}", case.sql);
-        println!("Expected:\n{}", case.expected.escape_debug());
         
-        match uroborosql_fmt::format_sql(&case.sql, None, None) {
+        let result = match uroborosql_fmt::format_sql(&case.sql, None, None) {
             Ok(formatted) => {
                 if formatted == case.expected {
                     println!("✅ Test passed");
+                    TestResult {
+                        name: case.name,
+                        status: TestStatus::Pass,
+                        input: case.sql,
+                        expected: case.expected,
+                        got: Some(formatted),
+                        error: None,
+                    }
                 } else {
                     println!("❌ Test failed");
-                    println!("Got:\n{}", formatted.escape_debug());
-                    
-                    panic!("Test case '{}' failed", case.name);
+                    TestResult {
+                        name: case.name,
+                        status: TestStatus::Fail,
+                        input: case.sql,
+                        expected: case.expected,
+                        got: Some(formatted),
+                        error: None,
+                    }
                 }
             }
             Err(e) => {
-                println!("❌ Test failed with error: {}", e);
-                panic!("Test case '{}' failed with error: {}", case.name, e);
+                println!("💥 Test error");
+                TestResult {
+                    name: case.name,
+                    status: TestStatus::Error,
+                    input: case.sql,
+                    expected: case.expected,
+                    got: None,
+                    error: Some(e.to_string()),
+                }
             }
-        }
+        };
+        
+        results.push(result);
     }
+
+    print_test_report(&results);
 } 
