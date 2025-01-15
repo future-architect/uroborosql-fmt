@@ -73,7 +73,11 @@ fn try_format_with_new_parser(file_path: &str) -> Result<String, String> {
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
     // 期待される出力を取得
-    let dst_path = file_path.replace("/src/", "/dst/");
+    let dst_path = file_path.replace("/src", "/dst");
+
+    dbg!(&file_path);
+    dbg!(&dst_path);
+
     let expected = fs::read_to_string(&dst_path)
         .map_err(|e| format!("Failed to read dst file: {}", e))?;
 
