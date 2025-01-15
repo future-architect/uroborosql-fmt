@@ -16,6 +16,8 @@ pub enum UroboroSQLFmtError {
     Rendering(String),
     #[error("Runtime Error: {0}")]
     Runtime(String),
+    #[error("Parse Error: {0}")]
+    ParseError(String),
     #[error("Validation Error: {error_msg}")]
     Validation {
         format_result: String,

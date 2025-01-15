@@ -79,30 +79,32 @@ pub(crate) fn format(src: &str, language: Language) -> Result<String, UroboroSQL
 
 /// 渡されたTreeをもとにフォーマットする
 pub(crate) fn format_tree(tree: Tree, src: &str) -> Result<String, UroboroSQLFmtError> {
-    // Treeのルートノードを取得
-    let root_node = tree.root_node();
+    // PostgreSQL parser を使用
+    let tree = postgresql_cst_parser::ts_parse(src)
+        .map_err(|e| UroboroSQLFmtError::ParseError(e.message))?;
 
-    if CONFIG.read().unwrap().debug {
-        print_cst(root_node, 0);
-        eprintln!();
-    }
+    // if CONFIG.read().unwrap().debug {
+    //     eprintln!("CST: {:#?}", tree);
+    // }
 
     // ビジターオブジェクトを生成
     let mut visitor = Visitor::default();
 
     // SQLソースファイルをフォーマット用構造体に変換する
-    let stmts = visitor.visit_sql(root_node, src.as_ref())?;
+    // TODO: PostgreSQL ASTからの変換を実装
+    // let stmts = visitor.visit_sql(tree.root_node(), src.as_ref())?;
 
-    if CONFIG.read().unwrap().debug {
-        eprintln!("{stmts:#?}");
-    }
+    // if CONFIG.read().unwrap().debug {
+    //     eprintln!("{stmts:#?}");
+    // }
 
-    let result = stmts
-        .iter()
-        .map(|stmt| stmt.render(0).expect("render: error"))
-        .collect();
+    // let result = stmts
+    //     .iter()
+    //     .map(|stmt| stmt.render(0).expect("render: error"))
+    //     .collect();
 
-    Ok(result)
+    // FIXME: いったん入力をそのまま返す
+    Ok(src.to_string())
 }
 
 fn has_syntax_error(tree: &Tree) -> bool {
