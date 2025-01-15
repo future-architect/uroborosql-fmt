@@ -103,8 +103,8 @@ pub(crate) fn format_tree(tree: Tree, src: &str) -> Result<String, UroboroSQLFmt
     //     .map(|stmt| stmt.render(0).expect("render: error"))
     //     .collect();
 
-    // FIXME: いったん入力をそのまま返す
-    Ok(src.to_string())
+    // FIXME: パースしたツリーが保存しているテキストをそのまま返す
+    Ok(tree.root_node().text().to_string())
 }
 
 fn has_syntax_error(tree: &Tree) -> bool {
