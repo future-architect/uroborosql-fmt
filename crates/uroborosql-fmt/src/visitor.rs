@@ -38,7 +38,7 @@ impl Visitor {
     /// sqlソースファイルをフォーマット用構造体に変形する
     pub(crate) fn visit_sql(
         &mut self,
-        node: Node,
+        node: postgresql_cst_parser::tree_sitter::Node,
         src: &str,
     ) -> Result<Vec<Statement>, UroboroSQLFmtError> {
         // CSTを走査するTreeCursorを生成する
@@ -52,19 +52,23 @@ impl Visitor {
     /// 呼び出し終了後、cursorはsource_fileを指している
     fn visit_source(
         &mut self,
-        cursor: &mut TreeCursor,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
     ) -> Result<Vec<Statement>, UroboroSQLFmtError> {
+        use postgresql_cst_parser::syntax_kind::SyntaxKind::{
+            DeleteStmt, InsertStmt, SelectStmt, Semicolon, UpdateStmt,
+        };
+
         // source_file -> _statement*
         let mut source: Vec<Statement> = vec![];
 
         if !cursor.goto_first_child() {
             // source_fileに子供がない、つまり、ソースファイルが空である場合
             // todo
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_source(): source_file has no child\n{}",
-                error_annotation_from_cursor(cursor, src)
-            )));
+            return Err(UroboroSQLFmtError::Unimplemented(
+                // TODO: error_annotation_from_cursorの移植
+                "visit_source(): source_file has no child\n".to_string(),
+            ));
         }
 
         // ソースファイル先頭のコメントを保存するバッファ
@@ -77,48 +81,58 @@ impl Visitor {
         loop {
             let kind = cursor.node().kind();
 
-            if kind.ends_with("_statement") {
-                let mut stmt = match kind {
-                    "select_statement" => self.visit_select_stmt(cursor, src)?,
-                    "delete_statement" => self.visit_delete_stmt(cursor, src)?,
-                    "update_statement" => self.visit_update_stmt(cursor, src)?,
-                    "insert_statement" => self.visit_insert_stmt(cursor, src)?,
-                    // todo
-                    _ => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_source(): Unimplemented statement\n{}",
-                            error_annotation_from_cursor(cursor, src)
-                        )));
+            match kind {
+                stmt_kind @ SelectStmt
+                //  | DeleteStmt | UpdateStmt | InsertStmt 
+                => {
+                    let mut stmt = match stmt_kind {
+                        SelectStmt => self.visit_select_stmt(cursor, src)?, // とりあえず Statement を返す
+                        // DeleteStmt => self.visit_delete_stmt(cursor, src)?,
+                        // UpdateStmt => self.visit_update_stmt(cursor, src)?,
+                        // InsertStmt => self.visit_insert_stmt(cursor, src)?,
+                        _ => {
+                            return Err(UroboroSQLFmtError::Unimplemented(
+                                // TODO: error_annotation_from_cursorの移植
+                                "visit_source(): Unimplemented statement\n".to_string()
+
+                                // format!(
+                                // "visit_source(): Unimplemented statement\n",
+                                // error_annotation_from_cursor(cursor, src)
+                            )
+                        );
+                        }
+                    };
+
+                    comment_buf
+                        .iter()
+                        .cloned()
+                        .for_each(|c| stmt.add_comment(c));
+                    comment_buf.clear();
+
+                    source.push(stmt);
+                    above_semi = true;
+                }
+                // TODO: コメント移植
+                // comment @ C_COMMENT| SQL_COMMENT => {
+                //     let comment = Comment::new(cursor.node(), src);
+                //     if !source.is_empty() && above_semi {
+                //         let last_stmt = source.last_mut().unwrap();
+                //         // すでにstatementがある場合、末尾に追加
+                //         last_stmt.add_comment_to_child(comment)?;
+                //     } else {
+                //         // まだstatementがない場合、バッファに詰めておく
+                //         comment_buf.push(comment);
+                //     }
+                // }
+                Semicolon => {
+                    above_semi = false;
+                    if let Some(last) = source.last_mut() {
+                        last.set_semi(true);
                     }
-                };
-
-                // コメントが以前にあれば先頭に追加
-                comment_buf
-                    .iter()
-                    .cloned()
-                    .for_each(|c| stmt.add_comment(c));
-                comment_buf.clear();
-
-                source.push(stmt);
-                above_semi = true;
-            } else if kind == COMMENT {
-                let comment = Comment::new(cursor.node(), src);
-
-                if !source.is_empty() && above_semi {
-                    let last_stmt = source.last_mut().unwrap();
-                    // すでにstatementがある場合、末尾に追加
-                    last_stmt.add_comment_to_child(comment)?;
-                } else {
-                    // まだstatementがない場合、バッファに詰めておく
-                    comment_buf.push(comment);
+                    // TODO: ; の上に文がない場合にどうなるか (tree-sitter-sqlでは構文エラーになる)
                 }
-            } else if kind == ";" {
-                above_semi = false;
-                if let Some(last) = source.last_mut() {
-                    last.set_semi(true);
-                }
-                // tree-sitter-sqlでは、;の上に文がない場合syntax errorになる
-            }
+                _ => {}
+            };
 
             if !cursor.goto_next_sibling() {
                 // 次の子供がいない場合、終了
@@ -306,6 +320,23 @@ fn ensure_kind<'a>(
     }
 }
 
+fn pg_ensure_kind<'a>(
+    cursor: &'a postgresql_cst_parser::tree_sitter::TreeCursor<'a>,
+    kind: postgresql_cst_parser::syntax_kind::SyntaxKind,
+    src: &'a str,
+) -> Result<&'a postgresql_cst_parser::tree_sitter::TreeCursor<'a>, UroboroSQLFmtError> {
+    if cursor.node().kind() != kind {
+        Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+            "pg_ensure_kind(): excepted node is {}, but actual {}\n{}",
+            kind,
+            cursor.node().kind(),
+            "TODO: annotation".to_string() // error_annotation_from_cursor(cursor, src)
+        )))
+    } else {
+        Ok(cursor)
+    }
+}
+
 /// エイリアス補完を行う際に、エイリアス名を持つ Expr を生成する関数。
 /// 引数に元の式を与える。その式がPrimary式ではない場合は、エイリアス名を生成できないので、None を返す。
 fn create_alias(lhs: &Expr) -> Option<Expr> {
@@ -347,6 +378,21 @@ fn create_clause(
         ensure_kind(cursor, keyword, src)?;
         clause.extend_kw(cursor.node(), src);
     }
+
+    Ok(clause)
+}
+
+fn pg_create_clause(
+    cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+    src: &str,
+    _keyword: &str,
+) -> Result<Clause, UroboroSQLFmtError> {
+    // pg_ensure_kind(cursor, SyntaxKind::select_clause, src)?;
+
+    // TODO: 複数の語からなるキーワードについて検討
+    // とりあえず一つの語からなるキーワードをカバー
+    let clause = Clause::from_pg_node(cursor.node());
+    cursor.goto_next_sibling();
 
     Ok(clause)
 }

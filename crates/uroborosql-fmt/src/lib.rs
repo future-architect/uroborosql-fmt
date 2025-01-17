@@ -91,20 +91,18 @@ pub(crate) fn format_tree(tree: Tree, src: &str) -> Result<String, UroboroSQLFmt
     let mut visitor = Visitor::default();
 
     // SQLソースファイルをフォーマット用構造体に変換する
-    // TODO: PostgreSQL ASTからの変換を実装
-    // let stmts = visitor.visit_sql(tree.root_node(), src.as_ref())?;
+    let stmts = visitor.visit_sql(tree.root_node(), src.as_ref())?;
 
     // if CONFIG.read().unwrap().debug {
     //     eprintln!("{stmts:#?}");
     // }
 
-    // let result = stmts
-    //     .iter()
-    //     .map(|stmt| stmt.render(0).expect("render: error"))
-    //     .collect();
+    let result = stmts
+        .iter()
+        .map(|stmt| stmt.render(0).expect("render: error"))
+        .collect();
 
-    // FIXME: パースしたツリーが保存しているテキストをそのまま返す
-    Ok(tree.root_node().text().to_string())
+    Ok(result)
 }
 
 fn has_syntax_error(tree: &Tree) -> bool {
