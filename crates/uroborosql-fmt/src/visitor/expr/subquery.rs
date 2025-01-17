@@ -37,7 +37,9 @@ impl Visitor {
         }
 
         // cursor -> select_statement
-        let mut select_stmt = self.visit_select_stmt(cursor, src)?;
+        // TODO: パーサ置き換えのためコメントアウト
+        // let mut select_stmt = self.visit_select_stmt(cursor, src)?;
+        let mut select_stmt = Statement::new();
 
         // select_statementの前にコメントがあった場合、コメントを追加
         comment_buf

@@ -145,7 +145,8 @@ impl Visitor {
 
         // cursor -> select_statement | delete_statement | insert_statement | update_statement
         let mut statement = match cursor.node().kind() {
-            "select_statement" => self.visit_select_stmt(cursor, src)?,
+            // TODO: パーサ置き換えのためコメントアウト
+            // "select_statement" => self.visit_select_stmt(cursor, src)?,
             "delete_statement" => self.visit_delete_stmt(cursor, src)?,
             "insert_statement" => self.visit_insert_stmt(cursor, src)?,
             "update_statement" => self.visit_update_stmt(cursor, src)?,
