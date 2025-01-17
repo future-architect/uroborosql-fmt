@@ -46,10 +46,28 @@ impl Position {
     }
 }
 
+impl From<postgresql_cst_parser::tree_sitter::Point> for Position {
+    fn from(point: postgresql_cst_parser::tree_sitter::Point) -> Self {
+        Position {
+            row: point.row,
+            col: point.column,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Location {
     pub(crate) start_position: Position,
     pub(crate) end_position: Position,
+}
+
+impl From<postgresql_cst_parser::tree_sitter::Range> for Location {
+    fn from(range: postgresql_cst_parser::tree_sitter::Range) -> Self {
+        Location {
+            start_position: range.start_position.into(),
+            end_position: range.end_position.into(),
+        }
+    }
 }
 
 impl Location {
