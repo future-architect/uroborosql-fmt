@@ -26,9 +26,13 @@ enum TestStatus {
 }
 
 impl TestCase {
-    fn from_files(name: &str, src_path: &Path, dst_path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let sql = fs::read_to_string(src_path)?.trim().to_string();
-        let expected = fs::read_to_string(dst_path)?.trim().to_string();
+    fn from_files(
+        name: &str,
+        src_path: &Path,
+        dst_path: &Path,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let sql = fs::read_to_string(src_path)?.to_string();
+        let expected = fs::read_to_string(dst_path)?.to_string();
 
         Ok(Self {
             name: name.to_string(),
@@ -40,9 +44,18 @@ impl TestCase {
 
 fn print_test_report(results: &[TestResult]) {
     let total = results.len();
-    let passed = results.iter().filter(|r| matches!(r.status, TestStatus::Pass)).count();
-    let failed = results.iter().filter(|r| matches!(r.status, TestStatus::Fail)).count();
-    let errors = results.iter().filter(|r| matches!(r.status, TestStatus::Error)).count();
+    let passed = results
+        .iter()
+        .filter(|r| matches!(r.status, TestStatus::Pass))
+        .count();
+    let failed = results
+        .iter()
+        .filter(|r| matches!(r.status, TestStatus::Fail))
+        .count();
+    let errors = results
+        .iter()
+        .filter(|r| matches!(r.status, TestStatus::Error))
+        .count();
 
     println!("\nTest Report:");
     println!("Total test cases: {:>4} cases", total);
@@ -85,9 +98,9 @@ fn collect_test_cases() -> Vec<TestCase> {
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or_default();
-                
+
                 let dst_path = dst_dir.join(format!("{}.sql", file_stem));
-                
+
                 if dst_path.exists() {
                     match TestCase::from_files(file_stem, &src_path, &dst_path) {
                         Ok(test_case) => cases.push(test_case),
@@ -109,7 +122,7 @@ fn test_normal_cases() {
 
     for case in collect_test_cases() {
         println!("\nTesting: {}", case.name);
-        
+
         let result = match uroborosql_fmt::format_sql(&case.sql, None, None) {
             Ok(formatted) => {
                 if formatted == case.expected {
@@ -146,9 +159,9 @@ fn test_normal_cases() {
                 }
             }
         };
-        
+
         results.push(result);
     }
 
     print_test_report(&results);
-} 
+}
