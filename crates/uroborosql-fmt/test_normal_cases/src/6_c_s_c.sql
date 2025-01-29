@@ -1,0 +1,2 @@
+/* comment */
+select -- comment
