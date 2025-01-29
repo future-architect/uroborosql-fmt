@@ -7,6 +7,8 @@ mod util;
 mod validate;
 mod visitor;
 
+mod new_visitor;
+
 use config::*;
 use error::UroboroSQLFmtError;
 use visitor::Visitor;
