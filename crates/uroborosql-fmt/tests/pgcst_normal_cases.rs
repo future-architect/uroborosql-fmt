@@ -123,7 +123,7 @@ fn test_normal_cases() {
     for case in collect_test_cases() {
         println!("\nTesting: {}", case.name);
 
-        let result = match uroborosql_fmt::format_sql(&case.sql, None, None) {
+        let result = match uroborosql_fmt::format_sql(&case.sql, None, Some("test_normal_cases/use_new_parser.json")) {
             Ok(formatted) => {
                 if formatted == case.expected {
                     println!("✅ Test passed");
