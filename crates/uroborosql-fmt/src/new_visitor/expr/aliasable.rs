@@ -4,8 +4,8 @@ use crate::{
     config::CONFIG,
     cst::*,
     error::UroboroSQLFmtError,
-    util::convert_keyword_case,
     new_visitor::{create_alias, ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
+    util::convert_keyword_case,
 };
 
 /// 補完の種類
