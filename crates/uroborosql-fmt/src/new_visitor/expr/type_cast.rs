@@ -2,8 +2,8 @@ use crate::{
     config::CONFIG,
     cst::{type_cast::TypeCast, *},
     error::UroboroSQLFmtError,
-    util::convert_keyword_case,
     new_visitor::{ensure_kind, Visitor},
+    util::convert_keyword_case,
 };
 
 use tree_sitter::TreeCursor;
