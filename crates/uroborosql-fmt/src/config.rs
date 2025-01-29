@@ -75,6 +75,10 @@ fn default_indent_tab() -> bool {
     true
 }
 
+fn default_use_pg_parser() -> bool {
+    false
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Case {
@@ -154,6 +158,10 @@ pub struct Config {
     /// 空白文字ではなくタブ文字でインデントする
     #[serde(default = "default_indent_tab")]
     pub(crate) indent_tab: bool,
+
+    /// パーサにpostgresql-cst-parserを使用する
+    #[serde(default = "default_use_pg_parser")]
+    pub(crate) use_pg_parser: bool,
 }
 
 impl Config {
@@ -217,6 +225,7 @@ impl Default for Config {
             convert_double_colon_cast: default_convert_double_colon_cast(),
             unify_not_equal: default_unify_not_equal(),
             indent_tab: default_indent_tab(),
+            use_pg_parser: default_use_pg_parser(),
         }
     }
 }
@@ -244,6 +253,7 @@ pub(crate) fn load_never_complement_settings() {
         convert_double_colon_cast: false,
         unify_not_equal: false,
         indent_tab: true,
+        use_pg_parser: default_use_pg_parser(),
     };
 
     *CONFIG.write().unwrap() = config;
