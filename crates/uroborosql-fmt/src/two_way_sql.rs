@@ -29,48 +29,48 @@ pub(crate) fn is_two_way_sql(src: &str) -> bool {
     RE.if_re.find(src).is_some()
 }
 
-/// Treeの全ての葉をフォーマット
-fn format_tree(tree: TreeNode, language: Language) -> Result<TreeNode, UroboroSQLFmtError> {
-    match tree {
-        TreeNode::Parent(nodes) => {
-            let mut childs = vec![];
+// / Treeの全ての葉をフォーマット
+// fn format_tree(tree: TreeNode, language: Language) -> Result<TreeNode, UroboroSQLFmtError> {
+//     match tree {
+//         TreeNode::Parent(nodes) => {
+//             let mut childs = vec![];
 
-            for node in nodes {
-                childs.push(format_tree(node, language)?);
-            }
+//             for node in nodes {
+//                 childs.push(format_tree(node, language)?);
+//             }
 
-            Ok(TreeNode::Parent(childs))
-        }
-        TreeNode::Leaf(src) => {
-            let res = format(&src, language)?;
+//             Ok(TreeNode::Parent(childs))
+//         }
+//         TreeNode::Leaf(src) => {
+//             let res = format(&src, language)?;
 
-            Ok(TreeNode::Leaf(res))
-        }
-    }
-}
+//             Ok(TreeNode::Leaf(res))
+//         }
+//     }
+// }
 
-/// 2way-sqlをフォーマット
-pub(crate) fn format_two_way_sql(
-    src: &str,
-    language: Language,
-) -> Result<String, UroboroSQLFmtError> {
-    // 2way-sqlをIF分岐によって複数SQLへ分割
-    let tree = generate_tree(src)?;
+// / 2way-sqlをフォーマット
+// pub(crate) fn format_two_way_sql(
+//     src: &str,
+//     language: Language,
+// ) -> Result<String, UroboroSQLFmtError> {
+//     // 2way-sqlをIF分岐によって複数SQLへ分割
+//     let tree = generate_tree(src)?;
 
-    // treeの葉の全てのSQLをフォーマット
-    let formatted_tree = format_tree(tree, language)?;
+//     // treeの葉の全てのSQLをフォーマット
+//     let formatted_tree = format_tree(tree, language)?;
 
-    if CONFIG.read().unwrap().debug {
-        eprintln!("{}", "-".repeat(100));
+//     if CONFIG.read().unwrap().debug {
+//         eprintln!("{}", "-".repeat(100));
 
-        for source in formatted_tree.to_vec_string() {
-            eprintln!("{source}");
-            eprintln!("{}", "-".repeat(100));
-        }
-    }
+//         for source in formatted_tree.to_vec_string() {
+//             eprintln!("{source}");
+//             eprintln!("{}", "-".repeat(100));
+//         }
+//     }
 
-    // 各SQLをマージ
-    let res = merge_tree(formatted_tree)?;
+//     // 各SQLをマージ
+//     let res = merge_tree(formatted_tree)?;
 
-    Ok(res)
-}
+//     Ok(res)
+// }

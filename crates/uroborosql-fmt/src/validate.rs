@@ -1,42 +1,23 @@
 use itertools::Itertools;
-use tree_sitter::{Language, Node, Tree};
+use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::{Node, Tree}, ts_parse};
 
 use crate::{
-    config::{load_never_complement_settings, CONFIG},
-    cst::Location,
-    format_tree, has_syntax_error, print_cst,
-    two_way_sql::format_two_way_sql,
-    util::create_error_annotation,
-    visitor::COMMENT,
-    UroboroSQLFmtError,
+    config::{load_never_complement_settings, CONFIG}, cst::Location, format_sql, format_tree, print_cst, util::create_error_annotation, UroboroSQLFmtError
 };
 
 /// フォーマット前後でSQLに欠落が生じないかを検証する。
 pub(crate) fn validate_format_result(
     src: &str,
-    language: Language,
-    is_two_way_sql: bool,
 ) -> Result<(), UroboroSQLFmtError> {
-    let mut parser = tree_sitter::Parser::new();
-    parser.set_language(language).unwrap();
-
-    let src_ts_tree = parser.parse(src, None).unwrap();
+    let src_ts_tree = ts_parse(src, ).unwrap();
 
     let dbg = CONFIG.read().unwrap().debug;
 
     // 補完を行わない設定に切り替える
     load_never_complement_settings();
 
-    let tree = parser.parse(src, None).unwrap();
-    let has_syntax_error = has_syntax_error(&tree);
-
-    let format_result = if is_two_way_sql && has_syntax_error {
-        format_two_way_sql(src, language)?
-    } else {
-        format_tree(tree, src)?
-    };
-
-    let dst_ts_tree = parser.parse(&format_result, None).unwrap();
+    let format_result = format_tree(&src_ts_tree, src)?;
+    let dst_ts_tree = ts_parse(&format_result).unwrap();
 
     let validate_result = compare_tree(src, &format_result, &src_ts_tree, &dst_ts_tree, src);
 
@@ -79,17 +60,17 @@ fn compare_tree(
 
 #[derive(Debug, PartialEq)]
 struct Token {
-    kind: String,
+    kind: SyntaxKind,
     /// すべてテキストを文字列で持つのに問題がある場合、tree_sitter::Node または tree_sitter::Range に変更
     text: String,
     location: Location,
 }
 
 impl Token {
-    fn new(node: &Node, src: &str) -> Self {
-        let kind = node.kind().to_owned();
-        let text = node.utf8_text(src.as_bytes()).unwrap().to_owned();
-        let location = Location::new(node.range());
+    fn new(node: &Node) -> Self {
+        let kind = node.kind();
+        let text = node.text().into();
+        let location = Location::from(node.range());
         Token {
             kind,
             text,
@@ -126,13 +107,17 @@ impl Token {
 
 fn construct_tokens(node: &Node, src: &str, tokens: &mut Vec<Token>) {
     if node.child_count() == 0 {
-        // leaf
-        let token = Token::new(node, src);
+        let token = Token::new(node);
         tokens.push(token);
     } else {
-        let children: Vec<_> = node.children(&mut node.walk()).collect();
-        for child_node in children {
-            construct_tokens(&child_node, src, tokens);
+        let mut cursor = node.walk();
+        if cursor.goto_first_child() {
+            loop {
+                construct_tokens(&cursor.node(), src, tokens);
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
         }
     }
 }
@@ -189,8 +174,8 @@ fn compare_token_text(
 ) -> Result<(), UroboroSQLFmtError> {
     let src_tok_text = &src_tok.text;
     let dst_tok_text = &dst_tok.text;
-    match src_tok.kind.as_str() {
-        COMMENT if src_tok_text.starts_with("/*+") || src_tok_text.starts_with("--+") => {
+    match src_tok.kind {
+        SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT if src_tok_text.starts_with("/*+") || src_tok_text.starts_with("--+") => {
             // ヒント句
             if dst_tok_text.starts_with("/*+") || dst_tok_text.starts_with("--+") {
                 Ok(())
@@ -213,9 +198,9 @@ fn swap_comma_and_trailing_comment(tokens: &mut [Token]) {
     for idx in 0..(tokens.len() - 1) {
         let fst_tok = tokens.get(idx).unwrap();
 
-        if fst_tok.kind == "," && idx + 1 < tokens.len() {
+        if fst_tok.kind == SyntaxKind::Comma && idx + 1 < tokens.len() {
             let snd_tok = tokens.get(idx + 1).unwrap();
-            if snd_tok.kind == COMMENT && snd_tok.text.starts_with("--") {
+            if snd_tok.kind == SyntaxKind::SQL_COMMENT {
                 tokens.swap(idx, idx + 1);
             }
         }
@@ -224,6 +209,8 @@ fn swap_comma_and_trailing_comment(tokens: &mut [Token]) {
 
 #[cfg(test)]
 mod tests {
+    use postgresql_cst_parser::{syntax_kind::SyntaxKind, ts_parse};
+
     use crate::{
         cst::{Location, Position},
         error::UroboroSQLFmtError,
@@ -237,11 +224,8 @@ mod tests {
         let src = r"select column_name as col from table_name";
         let dst = r"select column_name from table_name";
 
-        let mut parser = tree_sitter::Parser::new();
-        parser.set_language(tree_sitter_sql::language()).unwrap();
-
-        let src_ts_tree = parser.parse(src, None).unwrap();
-        let dst_ts_tree = parser.parse(dst, None).unwrap();
+        let src_ts_tree = ts_parse(src).unwrap();
+        let dst_ts_tree = ts_parse(dst).unwrap();
 
         assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
     }
@@ -251,11 +235,8 @@ mod tests {
         let src = r"select * from tbl1,/* comment */ tbl2";
         let dst = r"select * from tbl1/* comment */, tbl2";
 
-        let mut parser = tree_sitter::Parser::new();
-        parser.set_language(tree_sitter_sql::language()).unwrap();
-
-        let src_ts_tree = parser.parse(src, None).unwrap();
-        let dst_ts_tree = parser.parse(dst, None).unwrap();
+        let src_ts_tree = ts_parse(src).unwrap();
+        let dst_ts_tree = ts_parse(dst).unwrap();
 
         assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
     }
@@ -265,11 +246,8 @@ mod tests {
         let src = r"select * from tbl1";
         let dst = r"select * from tbl1, tbl2";
 
-        let mut parser = tree_sitter::Parser::new();
-        parser.set_language(tree_sitter_sql::language()).unwrap();
-
-        let src_ts_tree = parser.parse(src, None).unwrap();
-        let dst_ts_tree = parser.parse(dst, None).unwrap();
+        let src_ts_tree = ts_parse(src).unwrap();
+        let dst_ts_tree = ts_parse(dst).unwrap();
 
         assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
     }
@@ -292,11 +270,8 @@ ORDER BY
     employee_id
 ;";
 
-        let mut parser = tree_sitter::Parser::new();
-        parser.set_language(tree_sitter_sql::language()).unwrap();
-
-        let src_ts_tree = parser.parse(src, None).unwrap();
-        let dst_ts_tree = parser.parse(dst, None).unwrap();
+        let src_ts_tree = ts_parse(src).unwrap();
+        let dst_ts_tree = ts_parse(dst).unwrap();
 
         compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src)
     }
@@ -321,16 +296,14 @@ FROM
 ORDER BY
     employee_id
 ;";
-        let mut parser = tree_sitter::Parser::new();
-        parser.set_language(tree_sitter_sql::language()).unwrap();
 
-        let src_ts_tree = parser.parse(src, None).unwrap();
-        let dst_ts_tree = parser.parse(dst, None).unwrap();
+        let src_ts_tree = ts_parse(src).unwrap();
+        let dst_ts_tree = ts_parse(dst).unwrap();
 
         assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
     }
 
-    fn new_token(kind: impl Into<String>, text: impl Into<String>, location: Location) -> Token {
+    fn new_token(kind: SyntaxKind, text: impl Into<String>, location: Location) -> Token {
         let kind = kind.into();
         let text = text.into();
         Token {
@@ -343,67 +316,69 @@ ORDER BY
     #[test]
     fn test_construct_tokens() {
         let src = r"select column_name as col from table_name";
-        let mut parser = tree_sitter::Parser::new();
-        parser.set_language(tree_sitter_sql::language()).unwrap();
 
-        let ts_tree = parser.parse(src, None).unwrap();
-
+        let ts_tree = ts_parse(src).unwrap();
         let mut tokens: Vec<Token> = vec![];
         construct_tokens(&ts_tree.root_node(), src, &mut tokens);
 
-        assert_eq!(
-            tokens,
-            vec![
-                new_token(
-                    "SELECT",
-                    "select",
-                    Location {
-                        start_position: Position { row: 0, col: 0 },
-                        end_position: Position { row: 0, col: 6 },
-                    }
-                ),
-                new_token(
-                    "identifier",
-                    "column_name",
-                    Location {
-                        start_position: Position { row: 0, col: 7 },
-                        end_position: Position { row: 0, col: 18 },
-                    }
-                ),
-                new_token(
-                    "AS",
-                    "as",
-                    Location {
-                        start_position: Position { row: 0, col: 19 },
-                        end_position: Position { row: 0, col: 21 },
-                    }
-                ),
-                new_token(
-                    "identifier",
-                    "col",
-                    Location {
-                        start_position: Position { row: 0, col: 22 },
-                        end_position: Position { row: 0, col: 25 },
-                    }
-                ),
-                new_token(
-                    "FROM",
-                    "from",
-                    Location {
-                        start_position: Position { row: 0, col: 26 },
-                        end_position: Position { row: 0, col: 30 },
-                    }
-                ),
-                new_token(
-                    "identifier",
-                    "table_name",
-                    Location {
-                        start_position: Position { row: 0, col: 31 },
-                        end_position: Position { row: 0, col: 41 },
-                    }
-                )
-            ]
-        )
+        let expected_tokens = vec![
+            new_token(
+                SyntaxKind::SELECT,
+                "select",
+                Location {
+                    start_position: Position { row: 0, col: 0 },
+                    end_position: Position { row: 0, col: 6 },
+                }
+            ),
+            new_token(
+                SyntaxKind::IDENT,
+                "column_name",
+                Location {
+                    start_position: Position { row: 0, col: 7 },
+                    end_position: Position { row: 0, col: 18 },
+                }
+            ),
+            new_token(
+                SyntaxKind::AS,
+                "as",
+                Location {
+                    start_position: Position { row: 0, col: 19 },
+                    end_position: Position { row: 0, col: 21 },
+                }
+            ),
+            new_token(
+                SyntaxKind::IDENT,
+                "col",
+                Location {
+                    start_position: Position { row: 0, col: 22 },
+                    end_position: Position { row: 0, col: 25 },
+                }
+            ),
+            new_token(
+                SyntaxKind::FROM,
+                "from",
+                Location {
+                    start_position: Position { row: 0, col: 26 },
+                    end_position: Position { row: 0, col: 30 },
+                }
+            ),
+            new_token(
+                SyntaxKind::IDENT,
+                "table_name",
+                Location {
+                    start_position: Position { row: 0, col: 31 },
+                    end_position: Position { row: 0, col: 41 },
+                }
+            )
+        ];
+
+        assert_eq!(tokens.len(), expected_tokens.len());
+
+        for (i, (actual, expected)) in tokens.iter().zip(expected_tokens.iter()).enumerate() {
+            assert_eq!(actual.kind, expected.kind, "Token {}: kind mismatch", i);
+            assert_eq!(actual.text, expected.text, "Token {}: text mismatch", i);
+            assert_eq!(actual.location, expected.location, "Token {}th: location mismatch", i);
+        }
     }
 
     #[test]
@@ -418,11 +393,8 @@ select
     col1 -- comment
 ,   col2";
 
-        let mut parser = tree_sitter::Parser::new();
-        parser.set_language(tree_sitter_sql::language()).unwrap();
-
-        let src_ts_tree = parser.parse(src, None).unwrap();
-        let dst_ts_tree = parser.parse(dst, None).unwrap();
+        let src_ts_tree = ts_parse(src).unwrap();
+        let dst_ts_tree =ts_parse(dst).unwrap();
 
         compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src)
     }
