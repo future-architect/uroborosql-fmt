@@ -1,15 +1,21 @@
 use itertools::Itertools;
-use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::{Node, Tree}, ts_parse};
+use postgresql_cst_parser::{
+    syntax_kind::SyntaxKind,
+    tree_sitter::{Node, Tree},
+    ts_parse,
+};
 
 use crate::{
-    config::{load_never_complement_settings, CONFIG}, cst::Location, pg_format_tree, pg_print_cst, util::create_error_annotation, UroboroSQLFmtError
+    config::{load_never_complement_settings, CONFIG},
+    cst::Location,
+    pg_format_tree, pg_print_cst,
+    util::create_error_annotation,
+    UroboroSQLFmtError,
 };
 
 /// フォーマット前後でSQLに欠落が生じないかを検証する。
-pub(crate) fn validate_format_result(
-    src: &str,
-) -> Result<(), UroboroSQLFmtError> {
-    let src_ts_tree = ts_parse(src, ).unwrap();
+pub(crate) fn validate_format_result(src: &str) -> Result<(), UroboroSQLFmtError> {
+    let src_ts_tree = ts_parse(src).unwrap();
 
     let dbg = CONFIG.read().unwrap().debug;
 
@@ -175,7 +181,9 @@ fn compare_token_text(
     let src_tok_text = &src_tok.text;
     let dst_tok_text = &dst_tok.text;
     match src_tok.kind {
-        SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT if src_tok_text.starts_with("/*+") || src_tok_text.starts_with("--+") => {
+        SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT
+            if src_tok_text.starts_with("/*+") || src_tok_text.starts_with("--+") =>
+        {
             // ヒント句
             if dst_tok_text.starts_with("/*+") || dst_tok_text.starts_with("--+") {
                 Ok(())
@@ -209,8 +217,8 @@ fn swap_comma_and_trailing_comment(tokens: &mut [Token]) {
 
 #[cfg(test)]
 mod tests {
-    use postgresql_cst_parser::{syntax_kind::SyntaxKind, ts_parse};
     use super::compare_tree;
+    use postgresql_cst_parser::{syntax_kind::SyntaxKind, ts_parse};
 
     use crate::{
         cst::{Location, Position},
@@ -328,7 +336,7 @@ ORDER BY
                 Location {
                     start_position: Position { row: 0, col: 0 },
                     end_position: Position { row: 0, col: 6 },
-                }
+                },
             ),
             new_token(
                 SyntaxKind::IDENT,
@@ -336,7 +344,7 @@ ORDER BY
                 Location {
                     start_position: Position { row: 0, col: 7 },
                     end_position: Position { row: 0, col: 18 },
-                }
+                },
             ),
             new_token(
                 SyntaxKind::AS,
@@ -344,7 +352,7 @@ ORDER BY
                 Location {
                     start_position: Position { row: 0, col: 19 },
                     end_position: Position { row: 0, col: 21 },
-                }
+                },
             ),
             new_token(
                 SyntaxKind::IDENT,
@@ -352,7 +360,7 @@ ORDER BY
                 Location {
                     start_position: Position { row: 0, col: 22 },
                     end_position: Position { row: 0, col: 25 },
-                }
+                },
             ),
             new_token(
                 SyntaxKind::FROM,
@@ -360,7 +368,7 @@ ORDER BY
                 Location {
                     start_position: Position { row: 0, col: 26 },
                     end_position: Position { row: 0, col: 30 },
-                }
+                },
             ),
             new_token(
                 SyntaxKind::IDENT,
@@ -368,8 +376,8 @@ ORDER BY
                 Location {
                     start_position: Position { row: 0, col: 31 },
                     end_position: Position { row: 0, col: 41 },
-                }
-            )
+                },
+            ),
         ];
 
         assert_eq!(tokens.len(), expected_tokens.len());
@@ -377,7 +385,11 @@ ORDER BY
         for (i, (actual, expected)) in tokens.iter().zip(expected_tokens.iter()).enumerate() {
             assert_eq!(actual.kind, expected.kind, "Token {}: kind mismatch", i);
             assert_eq!(actual.text, expected.text, "Token {}: text mismatch", i);
-            assert_eq!(actual.location, expected.location, "Token {}th: location mismatch", i);
+            assert_eq!(
+                actual.location, expected.location,
+                "Token {}th: location mismatch",
+                i
+            );
         }
     }
 
@@ -394,7 +406,7 @@ select
 ,   col2";
 
         let src_ts_tree = ts_parse(src).unwrap();
-        let dst_ts_tree =ts_parse(dst).unwrap();
+        let dst_ts_tree = ts_parse(dst).unwrap();
 
         compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src)
     }

@@ -3,8 +3,8 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    util::convert_keyword_case,
     new_visitor::{create_clause, ensure_kind, Visitor, COMMENT},
+    util::convert_keyword_case,
 };
 
 impl Visitor {
