@@ -34,6 +34,18 @@ impl Clause {
         }
     }
 
+    pub(crate) fn from_pg_node(kw_node: postgresql_cst_parser::tree_sitter::Node) -> Clause {
+        let keyword = convert_keyword_case(kw_node.text());
+        let loc = Location::from(kw_node.range());
+        Clause {
+            keyword,
+            body: None,
+            loc,
+            sql_id: None,
+            comments: vec![],
+        }
+    }
+
     pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }

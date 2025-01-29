@@ -4,8 +4,9 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     new_visitor::{
-        create_clause, ensure_kind, error_annotation_from_cursor, expr::{ComplementConfig, ComplementKind}, Visitor, COMMA, COMMENT
-    }, util::convert_keyword_case,
+        create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT,
+    },
+    util::convert_keyword_case,
 };
 
 impl Visitor {
@@ -162,19 +163,20 @@ impl Visitor {
 
                 cursor.goto_next_sibling();
             }
-            "select_statement" => {
-                // select文
-                let mut stmt = self.visit_select_stmt(cursor, src)?;
+            // // visit_select_stmt 書き換えのためコメントアウト
+            // "select_statement" => {
+            //     // select文
+            //     let mut stmt = self.visit_select_stmt(cursor, src)?;
 
-                // select 文の前にあったコメントを付与
-                for comment in comments_before_values_or_query {
-                    stmt.add_comment(comment);
-                }
+            //     // select 文の前にあったコメントを付与
+            //     for comment in comments_before_values_or_query {
+            //         stmt.add_comment(comment);
+            //     }
 
-                insert_body.set_query(stmt);
+            //     insert_body.set_query(stmt);
 
-                cursor.goto_next_sibling();
-            }
+            //     cursor.goto_next_sibling();
+            // }
             "select_subexpression" => {
                 if !comments_before_values_or_query.is_empty() {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(

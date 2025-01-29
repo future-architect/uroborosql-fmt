@@ -5,8 +5,8 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    util::{convert_keyword_case, single_space},
     new_visitor::{ensure_kind, Visitor, COMMENT},
+    util::{convert_keyword_case, single_space},
 };
 
 impl Visitor {
@@ -37,7 +37,9 @@ impl Visitor {
         }
 
         // cursor -> select_statement
-        let mut select_stmt = self.visit_select_stmt(cursor, src)?;
+        // TODO: パーサ置き換えのためコメントアウト
+        // let mut select_stmt = self.visit_select_stmt(cursor, src)?;
+        let mut select_stmt = Statement::new();
 
         // select_statementの前にコメントがあった場合、コメントを追加
         comment_buf
