@@ -2,6 +2,7 @@ mod clause;
 mod expr;
 mod statement;
 
+use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use tree_sitter::{Node, TreeCursor};
 
 pub(crate) const COMMENT: &str = "comment";
@@ -112,18 +113,17 @@ impl Visitor {
                     source.push(stmt);
                     above_semi = true;
                 }
-                // TODO: コメント移植
-                // comment @ C_COMMENT| SQL_COMMENT => {
-                //     let comment = Comment::new(cursor.node(), src);
-                //     if !source.is_empty() && above_semi {
-                //         let last_stmt = source.last_mut().unwrap();
-                //         // すでにstatementがある場合、末尾に追加
-                //         last_stmt.add_comment_to_child(comment)?;
-                //     } else {
-                //         // まだstatementがない場合、バッファに詰めておく
-                //         comment_buf.push(comment);
-                //     }
-                // }
+                SyntaxKind::C_COMMENT| SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+                    if !source.is_empty() && above_semi {
+                        let last_stmt = source.last_mut().unwrap();
+                        // すでにstatementがある場合、末尾に追加
+                        last_stmt.add_comment_to_child(comment)?;
+                    } else {
+                        // まだstatementがない場合、バッファに詰めておく
+                        comment_buf.push(comment);
+                    }
+                }
                 Semicolon => {
                     above_semi = false;
                     if let Some(last) = source.last_mut() {
