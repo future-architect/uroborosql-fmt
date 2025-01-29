@@ -4,7 +4,7 @@ use crate::{
     cst::{unary::UnaryExpr, *},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{ensure_kind, Visitor},
+    new_visitor::{ensure_kind, Visitor},
 };
 
 impl Visitor {

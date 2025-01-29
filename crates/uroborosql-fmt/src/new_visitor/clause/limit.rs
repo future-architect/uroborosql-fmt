@@ -3,7 +3,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{ensure_kind, Visitor, COMMENT},
+    new_visitor::{ensure_kind, Visitor, COMMENT},
 };
 
 impl Visitor {
