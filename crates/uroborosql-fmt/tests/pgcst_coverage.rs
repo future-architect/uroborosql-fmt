@@ -76,9 +76,9 @@ fn try_format_with_new_parser(file_path: &str) -> Result<String, String> {
 
     let expected =
         fs::read_to_string(&dst_path).map_err(|e| format!("Failed to read dst file: {}", e))?;
-
+    
     // フォーマット実行
-    match uroborosql_fmt::format_sql(&input, None, None) {
+    match uroborosql_fmt::format_sql(&input, None, Some("test_normal_cases/use_new_parser.json")) {
         Ok(formatted) => {
             if formatted.trim() == expected.trim() {
                 Ok(formatted)

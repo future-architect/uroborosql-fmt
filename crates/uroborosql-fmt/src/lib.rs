@@ -8,14 +8,19 @@ mod validate;
 mod visitor;
 
 mod new_visitor;
+mod pg_validate;
 
 use config::*;
 use error::UroboroSQLFmtError;
 use visitor::Visitor;
+use new_visitor::Visitor as NewVisitor;
+use postgresql_cst_parser::ts_parse as pg_parse;
 
 use tree_sitter::{Language, Node, Tree};
 use two_way_sql::{format_two_way_sql, is_two_way_sql};
 use validate::validate_format_result;
+
+use crate::pg_validate::validate_format_result as pg_validate_format_result;
 
 /// 設定ファイルより優先させるオプションを JSON 文字列で与えて、SQLのフォーマットを行う。
 ///
@@ -26,7 +31,7 @@ pub fn format_sql(
     config_path: Option<&str>,
 ) -> Result<String, UroboroSQLFmtError> {
     let config = Config::new(settings_json, config_path)?;
-
+    
     format_sql_with_config(src, config)
 }
 
@@ -35,8 +40,19 @@ pub(crate) fn format_sql_with_config(
     src: &str,
     config: Config,
 ) -> Result<String, UroboroSQLFmtError> {
-    // tree-sitter-sqlの言語を取得
-    let language = tree_sitter_sql::language();
+    
+    if config.use_pg_parser {
+        // postgresql-cst-parser を使用してパースする
+        let tree = pg_parse(src).unwrap();
+
+        pg_validate_format_result(src)?;
+
+        pg_format_tree(&tree, src)
+    } else {
+        // tree-sitter-sql を使用してパースする
+
+        // tree-sitter-sqlの言語を取得
+        let language = tree_sitter_sql::language();
 
     let is_two_way_sql = is_two_way_sql(src);
 
@@ -66,6 +82,7 @@ pub(crate) fn format_sql_with_config(
         }
 
         format_tree(tree, src)
+        }
     }
 }
 
@@ -134,4 +151,53 @@ fn print_cst(node: Node, depth: usize) {
             }
         }
     }
+}
+
+fn pg_print_cst(node: postgresql_cst_parser::tree_sitter::Node, depth: usize) {
+    for _ in 0..depth {
+        eprint!("\t");
+    }
+    eprint!(
+        "{} [{}-{}]",
+        node.kind(),
+        node.start_position(),
+        node.end_position()
+    );
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            eprintln!();
+            pg_print_cst(cursor.node(), depth + 1);
+            //次の兄弟ノードへカーソルを移動
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+}
+
+/// 渡されたTreeをもとにフォーマットする
+pub(crate) fn pg_format_tree(tree: &postgresql_cst_parser::tree_sitter::Tree, src: &str) -> Result<String, UroboroSQLFmtError> {
+
+    // if CONFIG.read().unwrap().debug {
+    //     eprintln!("CST: {:#?}", tree);
+    // }
+
+    // ビジターオブジェクトを生成
+    let mut visitor = NewVisitor::default();
+
+    // SQLソースファイルをフォーマット用構造体に変換する
+    let stmts = visitor.visit_sql(tree.root_node(), src.as_ref())?;
+
+    // if CONFIG.read().unwrap().debug {
+    //     eprintln!("{stmts:#?}");
+    // }
+
+    let result = stmts
+        .iter()
+        .map(|stmt| stmt.render(0).expect("render: error"))
+        .collect();
+
+    Ok(result)
 }
