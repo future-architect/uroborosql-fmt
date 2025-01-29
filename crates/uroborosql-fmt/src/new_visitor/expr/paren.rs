@@ -4,7 +4,7 @@ use crate::{
     config::CONFIG,
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{ensure_kind, Visitor, COMMENT},
+    new_visitor::{ensure_kind, Visitor, COMMENT},
 };
 
 impl Visitor {

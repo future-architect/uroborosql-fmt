@@ -6,7 +6,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::{convert_keyword_case, single_space},
-    visitor::{ensure_kind, Visitor, COMMENT},
+    new_visitor::{ensure_kind, Visitor, COMMENT},
 };
 
 impl Visitor {

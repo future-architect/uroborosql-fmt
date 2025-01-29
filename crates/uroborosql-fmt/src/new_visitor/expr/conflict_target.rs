@@ -4,7 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, convert_keyword_case},
-    visitor::{ensure_kind, error_annotation_from_cursor, Visitor, COMMA},
+    new_visitor::{ensure_kind, error_annotation_from_cursor, Visitor, COMMA},
 };
 
 impl Visitor {
