@@ -5,7 +5,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{create_alias, ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
+    new_visitor::{create_alias, ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
 };
 
 /// 補完の種類

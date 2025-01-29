@@ -4,7 +4,7 @@ use crate::{
     config::CONFIG,
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{ensure_kind, Visitor},
+    new_visitor::{ensure_kind, Visitor},
 };
 
 use super::is_comp_op;

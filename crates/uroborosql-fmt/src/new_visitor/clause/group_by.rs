@@ -5,7 +5,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT},
+    new_visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT},
 };
 
 impl Visitor {
