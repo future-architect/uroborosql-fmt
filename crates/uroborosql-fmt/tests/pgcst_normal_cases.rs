@@ -73,6 +73,11 @@ fn print_test_report(results: &[TestResult]) {
                     println!("\nInput:\n{}", result.input);
                     println!("\nExpected:\n{}", result.expected);
                     println!("\nGot:\n{}", result.got.as_ref().unwrap());
+
+                    println!("Escaped version:");
+                    println!("sql     : {}", result.input.escape_debug());
+                    println!("expected: {}", result.expected.escape_debug());
+                    println!("got     : {}", result.got.as_ref().unwrap().escape_debug());
                 }
                 TestStatus::Error => {
                     println!("\n💥 Error: {}", result.name);
