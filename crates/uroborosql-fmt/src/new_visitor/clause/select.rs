@@ -3,9 +3,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
-    new_visitor::{
-        pg_create_clause, pg_ensure_kind, Visitor,
-    },
+    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
 };
 
 impl Visitor {
@@ -160,7 +158,14 @@ impl Visitor {
 
                 Expr::Asterisk(Box::new(asterisk))
             }
-            _ => unreachable!("here?"),
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_target_el(): excepted node is {}, but actual {}\n{}",
+                    SyntaxKind::target_el,
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
         };
 
         cursor.goto_parent();
