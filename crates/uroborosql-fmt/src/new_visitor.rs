@@ -414,3 +414,16 @@ fn error_annotation_from_cursor(cursor: &TreeCursor, src: &str) -> String {
         Err(_) => "".to_string(),
     }
 }
+
+fn pg_error_annotation_from_cursor(
+    cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+    src: &str,
+) -> String {
+    let label = format!(r#"Appears as "{}" node on the CST"#, cursor.node().kind());
+    let location = Location::from(cursor.node().range());
+
+    match create_error_annotation(&location, &label, src) {
+        Ok(error_annotation) => error_annotation,
+        Err(_) => "".to_string(),
+    }
+}
