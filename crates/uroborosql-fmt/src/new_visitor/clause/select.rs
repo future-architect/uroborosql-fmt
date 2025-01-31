@@ -1,14 +1,9 @@
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
-use tree_sitter::TreeCursor;
 
 use crate::{
     cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
-    new_visitor::{
-        create_clause, ensure_kind,
-        expr::{ComplementConfig, ComplementKind},
-        pg_create_clause, pg_ensure_kind, Visitor,
-    },
+    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
 };
 
 impl Visitor {
@@ -35,8 +30,9 @@ impl Visitor {
         // self.consume_or_complement_sql_id(cursor, src, &mut clause);
         // self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
-        let select_body = SelectBody::new();
+        let mut select_body = SelectBody::new();
 
+        // TODO: all, distinct
         // // [ ALL | DISTINCT [ ON ( expression [, ...] ) ] ] ]
         // match cursor.node().kind() {
         //     "ALL" => {
@@ -82,11 +78,12 @@ impl Visitor {
         //     _ => {}
         // }
 
-        // // cursor -> select_caluse_body
-        // if cursor.node().kind() == "select_clause_body" {
-        //     let select_clause_body = self.visit_select_clause_body(cursor, src)?;
-        //     select_body.set_select_clause_body(select_clause_body)
-        // }
+        // cursor -> target_list
+        if cursor.node().kind() == SyntaxKind::target_list {
+            let target_list = self.visit_target_list(cursor, src)?;
+            // select_clause_body 部分に target_list から生成した Body をセット
+            select_body.set_select_clause_body(target_list);
+        }
 
         clause.set_body(Body::Select(Box::new(select_body)));
 
@@ -98,28 +95,82 @@ impl Visitor {
         Ok(clause)
     }
 
-    /// SELECT句の本体をSeparatedLinesで返す
-    /// 呼び出し後、cursorはselect_clause_bodyを指している
-    fn visit_select_clause_body(
+    /// [pg] postgresql-cst-parser の target_list を Body::SeparatedLines に変換する
+    /// tree-sitter の select_clause_body が該当
+    /// 呼び出し後、cursorは target_list を指している
+    fn visit_target_list(
         &mut self,
-        cursor: &mut TreeCursor,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
     ) -> Result<Body, UroboroSQLFmtError> {
-        // select_clause_body -> _aliasable_expression ("," _aliasable_expression)*
+        // target_list -> target_el ("," target_el)*
 
-        // select_clause_bodyは必ず_aliasable_expressionを子供に持つ
+        // target_listは必ずtarget_elを子供に持つ
         cursor.goto_first_child();
 
-        // cursor -> _aliasable_expression
-        // commaSep1(_aliasable_expression)
-        // カラム名ルール(ASがなければASを補完)でエイリアス補完、AS補完を行う
-        let complement_config = ComplementConfig::new(ComplementKind::ColumnName, true, true);
-        let body = self.visit_comma_sep_alias(cursor, src, Some(&complement_config))?;
+        // cursor -> target_el
+        let mut sep_lines = SeparatedLines::new();
 
-        // cursorをselect_clause_bodyに
+        let target_el = self.visit_target_el(cursor, src)?;
+        sep_lines.add_expr(target_el, None, vec![]);
+
+        while cursor.goto_next_sibling() {
+            // cursor -> "," または target_el
+            match cursor.node().kind() {
+                // SyntaxKind::Comma => {}
+                // SyntaxKind::target_el => {
+                //     let target_el = self.visit_target_el(cursor)?;
+                //     sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
+                // }
+                _ => unreachable!(),
+            }
+        }
+
+        // cursorをtarget_listに
         cursor.goto_parent();
-        ensure_kind(cursor, "select_clause_body", src)?;
+        pg_ensure_kind(cursor, SyntaxKind::target_list, &src)?;
 
-        Ok(body)
+        Ok(Body::SepLines(sep_lines))
+    }
+
+    fn visit_target_el(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        src: &str,
+    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
+        //
+        // target_el
+        // - a_expr AS ColLabel
+        // - a_expr BareColLabel
+        // - a_expr
+        // - Star
+        //
+
+        cursor.goto_first_child();
+
+        let expr = match cursor.node().kind() {
+            SyntaxKind::a_expr => unimplemented!(),
+            SyntaxKind::Star => {
+                // Star は postgresql-cst-parser の語彙で、uroborosql-fmt::cst では AsteriskExpr として扱う
+                // Star は postgres の文法上 Expression ではないが、 cst モジュールの Expr に変換する
+                let asterisk =
+                    AsteriskExpr::new(cursor.node().text(), cursor.node().range().into());
+
+                Expr::Asterisk(Box::new(asterisk))
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_target_el(): excepted node is {}, but actual {}\n{}",
+                    SyntaxKind::target_el,
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+        };
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::target_el, src)?;
+
+        Ok(AlignedExpr::new(expr))
     }
 }
