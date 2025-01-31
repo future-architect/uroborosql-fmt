@@ -102,6 +102,13 @@ impl Comment {
         }
     }
 
+    pub(crate) fn pg_new(node: postgresql_cst_parser::tree_sitter::Node) -> Comment {
+        Comment {
+            text: node.text().to_string(),
+            loc: node.range().into(),
+        }
+    }
+
     pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }
