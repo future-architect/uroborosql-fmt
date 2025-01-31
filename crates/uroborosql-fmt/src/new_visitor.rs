@@ -384,8 +384,7 @@ fn create_clause(
 
 fn pg_create_clause(
     cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
-    _src: &str,
-    _keyword: &str,
+    _keyword: SyntaxKind,
 ) -> Result<Clause, UroboroSQLFmtError> {
     // pg_ensure_kind(cursor, SyntaxKind::select_clause, src)?;
 

@@ -28,7 +28,7 @@ impl Visitor {
         pg_ensure_kind(cursor, SyntaxKind::SELECT, src)?;
 
         // cursor -> SELECT
-        let mut clause = pg_create_clause(cursor, src, "SELECT")?;
+        let mut clause = pg_create_clause(cursor, SyntaxKind::SELECT)?;
         cursor.goto_next_sibling();
 
         // // SQL_IDとコメントを消費
