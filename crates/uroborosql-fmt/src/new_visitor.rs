@@ -113,17 +113,17 @@ impl Visitor {
                     source.push(stmt);
                     above_semi = true;
                 }
-                // SyntaxKind::C_COMMENT| SyntaxKind::SQL_COMMENT => {
-                //     let comment = Comment::pg_new(cursor.node());
-                //     if !source.is_empty() && above_semi {
-                //         let last_stmt = source.last_mut().unwrap();
-                //         // すでにstatementがある場合、末尾に追加
-                //         last_stmt.add_comment_to_child(comment)?;
-                //     } else {
-                //         // まだstatementがない場合、バッファに詰めておく
-                //         comment_buf.push(comment);
-                //     }
-                // }
+                SyntaxKind::C_COMMENT| SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+                    if !source.is_empty() && above_semi {
+                        let last_stmt = source.last_mut().unwrap();
+                        // すでにstatementがある場合、末尾に追加
+                        last_stmt.add_comment_to_child(comment)?;
+                    } else {
+                        // まだstatementがない場合、バッファに詰めておく
+                        comment_buf.push(comment);
+                    }
+                }
                 Semicolon => {
                     above_semi = false;
                     if let Some(last) = source.last_mut() {
