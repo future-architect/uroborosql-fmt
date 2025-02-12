@@ -114,9 +114,55 @@ impl Visitor {
         // - NULL_P
 
         cursor.goto_first_child();
-        // とりあえず Iconst だけ実装する
+        // とりあえず 関数呼び出しと型キャスト以外を実装する
         let expr = match cursor.node().kind() {
             SyntaxKind::Iconst => {
+                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
+            }
+            SyntaxKind::FCONST => {
+                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
+            }
+            SyntaxKind::Sconst => {
+                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
+            }
+            SyntaxKind::BCONST => {
+                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
+            }
+            SyntaxKind::XCONST => {
+                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
+            }
+
+            SyntaxKind::func_name => {
+                // func_name Sconst
+                // func_name '(' func_arg_list opt_sort_clause ')' Sconst
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_aexpr_const(): func_name is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            SyntaxKind::ConstTypename => {
+                // ConstTypename Sconst
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_aexpr_const(): ConstTypename is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+
+            SyntaxKind::ConstInterval => {
+                // ConstInterval Sconst opt_interval
+                // ConstInterval '(' Iconst ')' Sconst
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_aexpr_const(): ConstInterval is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            SyntaxKind::TRUE_P => {
+                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
+            }
+            SyntaxKind::FALSE_P => {
+                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
+            }
+            SyntaxKind::NULL_P => {
                 Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
             }
             _ => unimplemented!("AexprConst"),
