@@ -124,6 +124,17 @@ impl Visitor {
                     let target_el = self.visit_target_el(cursor, src)?;
                     sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
                 }
+                SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+                    sep_lines.add_comment_to_child(comment)?;
+                }
+                SyntaxKind::C_COMMENT => {
+                    // TODO:バインドパラメータ判定を含む実装
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                        "visit_target_list(): C_COMMENT is not implemented\n{}",
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_target_list(): unexpected node kind\n{}",
