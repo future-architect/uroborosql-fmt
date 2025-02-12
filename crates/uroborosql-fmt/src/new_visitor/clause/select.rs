@@ -3,7 +3,9 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
+    new_visitor::{
+        pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA,
+    },
 };
 
 impl Visitor {
@@ -117,12 +119,28 @@ impl Visitor {
         while cursor.goto_next_sibling() {
             // cursor -> "," または target_el
             match cursor.node().kind() {
-                // SyntaxKind::Comma => {}
-                // SyntaxKind::target_el => {
-                //     let target_el = self.visit_target_el(cursor)?;
-                //     sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
-                // }
-                _ => unreachable!(),
+                SyntaxKind::Comma => {}
+                SyntaxKind::target_el => {
+                    let target_el = self.visit_target_el(cursor, src)?;
+                    sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
+                }
+                SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+                    sep_lines.add_comment_to_child(comment)?;
+                }
+                SyntaxKind::C_COMMENT => {
+                    // TODO:バインドパラメータ判定を含む実装
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                        "visit_target_list(): C_COMMENT is not implemented\n{}",
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_target_list(): unexpected node kind\n{}",
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                }
             }
         }
 
@@ -149,7 +167,7 @@ impl Visitor {
         cursor.goto_first_child();
 
         let expr = match cursor.node().kind() {
-            SyntaxKind::a_expr => unimplemented!(),
+            SyntaxKind::a_expr => self.visit_a_expr(cursor, src)?,
             SyntaxKind::Star => {
                 // Star は postgresql-cst-parser の語彙で、uroborosql-fmt::cst では AsteriskExpr として扱う
                 // Star は postgres の文法上 Expression ではないが、 cst モジュールの Expr に変換する

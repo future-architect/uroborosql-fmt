@@ -237,3 +237,9 @@ impl Expr {
         }
     }
 }
+
+impl From<PrimaryExpr> for Expr {
+    fn from(primary: PrimaryExpr) -> Self {
+        Expr::Primary(Box::new(primary))
+    }
+}
