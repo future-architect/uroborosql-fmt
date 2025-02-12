@@ -147,27 +147,13 @@ impl Visitor {
 
         cursor.goto_first_child();
         let expr = match cursor.node().kind() {
-            SyntaxKind::Iconst => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
-                cursor.node(),
-                PrimaryExprKind::Expr,
-            )?)),
-            SyntaxKind::FCONST => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
-                cursor.node(),
-                PrimaryExprKind::Expr,
-            )?)),
-            SyntaxKind::Sconst => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
-                cursor.node(),
-                PrimaryExprKind::Expr,
-            )?)),
-            SyntaxKind::BCONST => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
-                cursor.node(),
-                PrimaryExprKind::Expr,
-            )?)),
-            SyntaxKind::XCONST => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
-                cursor.node(),
-                PrimaryExprKind::Expr,
-            )?)),
-
+            SyntaxKind::Iconst
+            | SyntaxKind::FCONST
+            | SyntaxKind::Sconst
+            | SyntaxKind::BCONST
+            | SyntaxKind::XCONST => {
+                PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Expr)?.into()
+            }
             SyntaxKind::func_name => {
                 // func_name Sconst
                 // func_name '(' func_arg_list opt_sort_clause ')' Sconst
@@ -183,7 +169,6 @@ impl Visitor {
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
-
             SyntaxKind::ConstInterval => {
                 // ConstInterval Sconst opt_interval
                 // ConstInterval '(' Iconst ')' Sconst
@@ -192,18 +177,9 @@ impl Visitor {
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
-            SyntaxKind::TRUE_P => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
-                cursor.node(),
-                PrimaryExprKind::Keyword,
-            )?)),
-            SyntaxKind::FALSE_P => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
-                cursor.node(),
-                PrimaryExprKind::Keyword,
-            )?)),
-            SyntaxKind::NULL_P => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
-                cursor.node(),
-                PrimaryExprKind::Keyword,
-            )?)),
+            SyntaxKind::TRUE_P | SyntaxKind::FALSE_P | SyntaxKind::NULL_P => {
+                PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Keyword)?.into()
+            }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_aexpr_const(): unexpected node kind\n{}",
