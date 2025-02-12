@@ -66,7 +66,7 @@ impl Visitor {
         cursor.goto_first_child();
 
         let expr = match cursor.node().kind() {
-            SyntaxKind::columnref => unimplemented!("columnref"),
+            SyntaxKind::columnref => self.visit_columnref(cursor, src)?,
             SyntaxKind::AexprConst => self.visit_aexpr_const(cursor, src)?,
             SyntaxKind::PARAM => unimplemented!("PARAM"),
             SyntaxKind::select_with_parens => unimplemented!("select_with_parens"),
@@ -126,5 +126,34 @@ impl Visitor {
         pg_ensure_kind(cursor, SyntaxKind::AexprConst, src)?;
 
         Ok(expr)
+    }
+
+    fn visit_columnref(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // columnref
+        // - ColId
+        // - ColId indirection
+        //   - e.g.: `a.field`, `a.field[1]`
+
+        // cursor -> ColId (必ず存在する)
+        cursor.goto_first_child();
+
+        pg_ensure_kind(cursor, SyntaxKind::ColId, src)?;
+        let col_id = Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?));
+
+        if cursor.goto_next_sibling() {
+            // cursor -> indirection
+            // TODO: flatten indirection
+            pg_ensure_kind(cursor, SyntaxKind::indirection, src)?;
+            unimplemented!("columnref: indirection");
+        }
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::columnref, src)?;
+
+        Ok(col_id)
     }
 }
