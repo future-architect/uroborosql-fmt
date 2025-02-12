@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{Expr, PrimaryExpr},
+    cst::{Expr, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
 };
 
@@ -147,21 +147,26 @@ impl Visitor {
 
         cursor.goto_first_child();
         let expr = match cursor.node().kind() {
-            SyntaxKind::Iconst => {
-                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
-            }
-            SyntaxKind::FCONST => {
-                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
-            }
-            SyntaxKind::Sconst => {
-                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
-            }
-            SyntaxKind::BCONST => {
-                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
-            }
-            SyntaxKind::XCONST => {
-                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
-            }
+            SyntaxKind::Iconst => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
+                cursor.node(),
+                PrimaryExprKind::Expr,
+            )?)),
+            SyntaxKind::FCONST => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
+                cursor.node(),
+                PrimaryExprKind::Expr,
+            )?)),
+            SyntaxKind::Sconst => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
+                cursor.node(),
+                PrimaryExprKind::Expr,
+            )?)),
+            SyntaxKind::BCONST => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
+                cursor.node(),
+                PrimaryExprKind::Expr,
+            )?)),
+            SyntaxKind::XCONST => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
+                cursor.node(),
+                PrimaryExprKind::Expr,
+            )?)),
 
             SyntaxKind::func_name => {
                 // func_name Sconst
@@ -187,15 +192,18 @@ impl Visitor {
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
-            SyntaxKind::TRUE_P => {
-                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
-            }
-            SyntaxKind::FALSE_P => {
-                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
-            }
-            SyntaxKind::NULL_P => {
-                Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
-            }
+            SyntaxKind::TRUE_P => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
+                cursor.node(),
+                PrimaryExprKind::Keyword,
+            )?)),
+            SyntaxKind::FALSE_P => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
+                cursor.node(),
+                PrimaryExprKind::Keyword,
+            )?)),
+            SyntaxKind::NULL_P => Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
+                cursor.node(),
+                PrimaryExprKind::Keyword,
+            )?)),
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_aexpr_const(): unexpected node kind\n{}",
@@ -224,7 +232,10 @@ impl Visitor {
         cursor.goto_first_child();
 
         pg_ensure_kind(cursor, SyntaxKind::ColId, src)?;
-        let col_id = Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?));
+        let col_id = Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
+            cursor.node(),
+            PrimaryExprKind::Expr,
+        )?));
 
         if cursor.goto_next_sibling() {
             // cursor -> indirection

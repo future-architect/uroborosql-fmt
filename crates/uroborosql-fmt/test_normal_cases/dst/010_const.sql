@@ -12,21 +12,21 @@ select
 ;
 -- BCONST
 select
-	B'1010'
+	b'1010'
 ;
 -- XCONST
 select
-	X'DEADBEEF'
+	x'deadbeef'
 ;
 -- TRUE_P
 select
-	TRUE
+	true
 ;
 -- FALSE_P
 select
-	FALSE
+	false
 ;
 -- NULL_P
 select
-	NULL
+	null
 ;
