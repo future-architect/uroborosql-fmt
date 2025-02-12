@@ -41,7 +41,12 @@ impl Visitor {
 
         let expr = match cursor.node().kind() {
             SyntaxKind::c_expr => self.visit_c_expr(cursor, src)?,
-            _ => unimplemented!(),
+            _ => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_a_expr(): unimplemented expression\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
         };
 
         cursor.goto_parent();
@@ -68,14 +73,41 @@ impl Visitor {
         let expr = match cursor.node().kind() {
             SyntaxKind::columnref => self.visit_columnref(cursor, src)?,
             SyntaxKind::AexprConst => self.visit_aexpr_const(cursor, src)?,
-            SyntaxKind::PARAM => unimplemented!("PARAM"),
-            SyntaxKind::select_with_parens => unimplemented!("select_with_parens"),
-            SyntaxKind::EXISTS => unimplemented!("EXISTS"),
-            SyntaxKind::ARRAY => unimplemented!("ARRAY"),
-            SyntaxKind::explicit_row => unimplemented!("explicit_row"),
-            SyntaxKind::implicit_row => unimplemented!("implicit_row"),
-            SyntaxKind::GROUPING => unimplemented!("GROUPING"),
-            // return unexpected syntaxkind
+            SyntaxKind::PARAM => {
+                return Err(UroboroSQLFmtError::Unimplemented(
+                    "visit_c_expr(): PARAM is not implemented".to_string(),
+                ))
+            }
+            SyntaxKind::select_with_parens => {
+                return Err(UroboroSQLFmtError::Unimplemented(
+                    "visit_c_expr(): select_with_parens is not implemented".to_string(),
+                ))
+            }
+            SyntaxKind::EXISTS => {
+                return Err(UroboroSQLFmtError::Unimplemented(
+                    "visit_c_expr(): EXISTS is not implemented".to_string(),
+                ))
+            }
+            SyntaxKind::ARRAY => {
+                return Err(UroboroSQLFmtError::Unimplemented(
+                    "visit_c_expr(): ARRAY is not implemented".to_string(),
+                ))
+            }
+            SyntaxKind::explicit_row => {
+                return Err(UroboroSQLFmtError::Unimplemented(
+                    "visit_c_expr(): explicit_row is not implemented".to_string(),
+                ))
+            }
+            SyntaxKind::implicit_row => {
+                return Err(UroboroSQLFmtError::Unimplemented(
+                    "visit_c_expr(): implicit_row is not implemented".to_string(),
+                ))
+            }
+            SyntaxKind::GROUPING => {
+                return Err(UroboroSQLFmtError::Unimplemented(
+                    "visit_c_expr(): GROUPING is not implemented".to_string(),
+                ))
+            }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_c_expr(): unexpected syntaxkind\n{}",
@@ -114,7 +146,6 @@ impl Visitor {
         // - NULL_P
 
         cursor.goto_first_child();
-        // とりあえず 関数呼び出しと型キャスト以外を実装する
         let expr = match cursor.node().kind() {
             SyntaxKind::Iconst => {
                 Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
@@ -165,7 +196,12 @@ impl Visitor {
             SyntaxKind::NULL_P => {
                 Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
             }
-            _ => unimplemented!("AexprConst"),
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_aexpr_const(): unexpected node kind\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
         };
 
         cursor.goto_parent();
@@ -194,7 +230,10 @@ impl Visitor {
             // cursor -> indirection
             // TODO: flatten indirection
             pg_ensure_kind(cursor, SyntaxKind::indirection, src)?;
-            unimplemented!("columnref: indirection");
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_columnref(): indirection is not implemented\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            )));
         }
 
         cursor.goto_parent();
