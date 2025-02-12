@@ -125,7 +125,6 @@ impl Visitor {
                     sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
                 }
                 _ => {
-                    dbg!(&cursor.node().kind());
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_target_list(): unexpected node kind\n{}",
                         pg_error_annotation_from_cursor(cursor, src)
