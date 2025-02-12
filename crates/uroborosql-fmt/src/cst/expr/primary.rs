@@ -51,8 +51,10 @@ impl PrimaryExpr {
 
         PrimaryExpr::new(converted_element, Location::new(node.range()))
     }
-    
-    pub(crate) fn with_pg_node(node: postgresql_cst_parser::tree_sitter::Node) -> Result<PrimaryExpr, UroboroSQLFmtError> {
+
+    pub(crate) fn with_pg_node(
+        node: postgresql_cst_parser::tree_sitter::Node,
+    ) -> Result<PrimaryExpr, UroboroSQLFmtError> {
         let element = node.text();
         Ok(PrimaryExpr::new(element, Location::from(node.range())))
     }

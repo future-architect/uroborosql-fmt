@@ -1,6 +1,9 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
-use crate::{cst::{Expr, PrimaryExpr}, error::UroboroSQLFmtError};
+use crate::{
+    cst::{Expr, PrimaryExpr},
+    error::UroboroSQLFmtError,
+};
 
 use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
 
@@ -42,7 +45,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::a_expr,src)?;
+        pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
 
         Ok(expr)
     }
@@ -82,7 +85,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::c_expr,src)?;
+        pg_ensure_kind(cursor, SyntaxKind::c_expr, src)?;
 
         Ok(expr)
     }
@@ -115,12 +118,12 @@ impl Visitor {
         let expr = match cursor.node().kind() {
             SyntaxKind::Iconst => {
                 Expr::Primary(Box::new(PrimaryExpr::with_pg_node(cursor.node())?))
-            },
+            }
             _ => unimplemented!("AexprConst"),
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::AexprConst,src)?;
+        pg_ensure_kind(cursor, SyntaxKind::AexprConst, src)?;
 
         Ok(expr)
     }
