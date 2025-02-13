@@ -235,12 +235,8 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        // a_expr -> c_expr -> columnref という構造になっているかどうかを確認する
-        //
-        // この判定をここで行う理由：
-        // 1. AS句の補完対象はカラム参照の識別子（columnref）のみとしたい
-        // 2. この後 visit_a_expr で PrimaryExpr に変換されると、元の構造（カラム参照`columnref`なのか定数 `AexprConst` なのか）の情報が失われる
-        // 3. そのため、変換前のCST構造を使って columnref かどうかを判定する必要がある
+        // a_expr -> c_expr -> columnref という構造になっているかどうか
+        // 識別子の場合は columnref ノードになるため、識別子判定を columnref ノードか否かで行っている
         let is_columnref = match cursor.node().kind() {
             SyntaxKind::a_expr => {
                 cursor.goto_first_child();
