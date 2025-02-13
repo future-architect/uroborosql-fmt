@@ -46,6 +46,7 @@ pub(crate) fn format_sql_with_config(
 
         pg_validate_format_result(src)?;
 
+        load_settings(config);
         pg_format_tree(&tree, src)
     } else {
         // tree-sitter-sql を使用してパースする
