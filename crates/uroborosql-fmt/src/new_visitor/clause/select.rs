@@ -4,9 +4,78 @@ use crate::{
     cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
     new_visitor::{
-        pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA,
+        create_alias, create_alias_from_expr, pg_create_clause, pg_ensure_kind,
+        pg_error_annotation_from_cursor, Visitor, COMMA,
     },
+    util::convert_keyword_case,
+    CONFIG,
 };
+
+/// 補完の種類
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ComplementKind {
+    /// テーブル名
+    TableName,
+    /// カラム名
+    ColumnName,
+}
+
+/// AS補完/除去、エイリアス補完に関する設定
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ComplementConfig {
+    /// 補完の種類
+    kind: ComplementKind,
+    /// kindに合わせてASキーワードを補完/除去するかどうか
+    complement_or_remove_as: bool,
+    /// kindに合わせてエイリアスを補完するかどうか
+    complement_alias: bool,
+}
+
+impl Default for ComplementConfig {
+    fn default() -> Self {
+        ComplementConfig {
+            // デフォルト値としてTableNameを設定しているが、デフォルトでは補完しないのでTableNameとColumnNameのどちらを設定していても変わらない
+            kind: ComplementKind::TableName,
+            complement_or_remove_as: false,
+            complement_alias: false,
+        }
+    }
+}
+
+impl ComplementConfig {
+    pub(crate) fn new(
+        kind: ComplementKind,
+        complement_or_remove_as: bool,
+        complement_alias: bool,
+    ) -> ComplementConfig {
+        ComplementConfig {
+            kind,
+            complement_or_remove_as,
+            complement_alias,
+        }
+    }
+
+    /// 自身の設定と定義ファイルの設定を考慮してASを補完をすべきかどうか返す
+    fn complement_as_keyword(&self) -> bool {
+        self.complement_or_remove_as
+            && CONFIG.read().unwrap().complement_column_as_keyword
+            && self.kind == ComplementKind::ColumnName
+    }
+
+    /// 自身の設定と定義ファイルの設定を考慮してASを削除をすべきかどうか返す
+    fn remove_as_keyword(&self) -> bool {
+        self.complement_or_remove_as
+            && CONFIG.read().unwrap().remove_table_as_keyword
+            && self.kind == ComplementKind::TableName
+    }
+
+    /// 自身の設定と定義ファイルの設定を考慮してエイリアスを補完すべきかどうか返す
+    pub(crate) fn complement_alias(&self) -> bool {
+        self.complement_alias
+            && CONFIG.read().unwrap().complement_alias
+            && self.kind == ComplementKind::ColumnName
+    }
+}
 
 impl Visitor {
     /// SELECT句
@@ -113,7 +182,8 @@ impl Visitor {
         // cursor -> target_el
         let mut sep_lines = SeparatedLines::new();
 
-        let target_el = self.visit_target_el(cursor, src)?;
+        let complement_config = ComplementConfig::new(ComplementKind::ColumnName, true, true);
+        let target_el = self.visit_target_el(cursor, src, &complement_config)?;
         sep_lines.add_expr(target_el, None, vec![]);
 
         while cursor.goto_next_sibling() {
@@ -121,7 +191,7 @@ impl Visitor {
             match cursor.node().kind() {
                 SyntaxKind::Comma => {}
                 SyntaxKind::target_el => {
-                    let target_el = self.visit_target_el(cursor, src)?;
+                    let target_el = self.visit_target_el(cursor, src, &complement_config)?;
                     sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
                 }
                 SyntaxKind::SQL_COMMENT => {
@@ -155,18 +225,37 @@ impl Visitor {
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
+        complement_config: &ComplementConfig,
     ) -> Result<AlignedExpr, UroboroSQLFmtError> {
-        //
         // target_el
-        // - a_expr AS ColLabel
-        // - a_expr BareColLabel
         // - a_expr
         // - Star
-        //
+        // - a_expr AS ColLabel
+        // - a_expr BareColLabel
 
         cursor.goto_first_child();
 
-        let expr = match cursor.node().kind() {
+        // a_expr -> c_expr -> columnref という構造になっているかどうか
+        // 識別子の場合は columnref ノードになるため、識別子判定を columnref ノードか否かで行っている
+        let is_columnref = match cursor.node().kind() {
+            SyntaxKind::a_expr => {
+                cursor.goto_first_child();
+                let is_col = match cursor.node().kind() {
+                    SyntaxKind::c_expr => {
+                        cursor.goto_first_child();
+                        let is_col = cursor.node().kind() == SyntaxKind::columnref;
+                        cursor.goto_parent();
+                        is_col
+                    }
+                    _ => false,
+                };
+                cursor.goto_parent();
+                is_col
+            }
+            _ => false,
+        };
+
+        let lhs_expr = match cursor.node().kind() {
             SyntaxKind::a_expr => self.visit_a_expr(cursor, src)?,
             SyntaxKind::Star => {
                 // Star は postgresql-cst-parser の語彙で、uroborosql-fmt::cst では AsteriskExpr として扱う
@@ -186,9 +275,55 @@ impl Visitor {
             }
         };
 
+        // (`AS` ColLabel` | `BareColLabel`)?
+        let aligned = if cursor.goto_next_sibling() {
+            let mut aligned = AlignedExpr::new(lhs_expr);
+
+            let as_keyword = if cursor.node().kind() == SyntaxKind::AS {
+                let keyword = cursor.node().text();
+                cursor.goto_next_sibling();
+
+                // ASキーワードが存在する場合
+                if complement_config.remove_as_keyword() {
+                    None
+                } else {
+                    Some(convert_keyword_case(keyword))
+                }
+            } else {
+                // ASキーワードが存在しない場合
+                if complement_config.complement_as_keyword() {
+                    Some(convert_keyword_case("AS"))
+                } else {
+                    None
+                }
+            };
+
+            cursor.goto_next_sibling();
+            // cursor -> ColLabel | BareColLabel
+            // ColLabel は as キーワードを使ったときのラベルで、BareColLabel は as キーワードを使わないときのラベル
+            // ColLabel にはどんなラベルも利用でき、 BareColLabel の場合は限られたラベルしか利用できないという構文上の区別があるが、
+            // フォーマッタとしては関係がないので同じように扱う
+            let rhs_expr = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Expr)?;
+            aligned.add_rhs(as_keyword, rhs_expr.into());
+
+            aligned
+        } else {
+            // エイリアスがない場合
+            let mut aligned = AlignedExpr::new(lhs_expr.clone());
+
+            // エイリアス補完オプションが有効であり、カラム参照である場合にエイリアス補完を行う
+            if complement_config.complement_alias() && is_columnref {
+                if let Some(alias_name) = create_alias_from_expr(&lhs_expr) {
+                    aligned.add_rhs(Some(convert_keyword_case("AS")), alias_name);
+                }
+            }
+
+            aligned
+        };
+
         cursor.goto_parent();
         pg_ensure_kind(cursor, SyntaxKind::target_el, src)?;
 
-        Ok(AlignedExpr::new(expr))
+        Ok(aligned)
     }
 }

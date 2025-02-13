@@ -357,6 +357,21 @@ fn create_alias(lhs: &Expr) -> Option<Expr> {
     }
 }
 
+fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
+    let loc = lhs.loc();
+
+    match lhs {
+        Expr::Primary(prim) => {
+            let element = prim.element();
+            element
+                .split('.')
+                .last()
+                .map(|s| Expr::Primary(Box::new(PrimaryExpr::new(convert_identifier_case(s), loc))))
+        }
+        _ => None,
+    }
+}
+
 /// keyword の Clauseを生成する関数。
 /// 呼び出し後の cursor はキーワードの最後のノードを指す。
 /// cursor のノードがキーワードと異なっていたら UroboroSQLFmtErrorを返す。

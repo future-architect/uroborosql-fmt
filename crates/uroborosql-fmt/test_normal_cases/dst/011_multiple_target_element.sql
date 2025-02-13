@@ -1,6 +1,6 @@
 -- Multiple target elements (columnref, ICONST, Sconst)
 select
-	a
+	a		as	a
 ,	1
 ,	'hi'
 ;

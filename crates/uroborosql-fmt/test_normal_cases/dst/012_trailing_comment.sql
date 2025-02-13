@@ -1,5 +1,5 @@
 -- Trailing comments for identifier and keyword
 select
-	a		-- identifier
-,	true	-- keyword
+	a		as	a	-- identifier
+,	true			-- keyword
 ;

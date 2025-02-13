@@ -1,3 +1,3 @@
 select
-	a
+	a	as	a
 ;
