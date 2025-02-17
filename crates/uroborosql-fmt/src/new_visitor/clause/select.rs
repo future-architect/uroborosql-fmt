@@ -199,11 +199,30 @@ impl Visitor {
                     sep_lines.add_comment_to_child(comment)?;
                 }
                 SyntaxKind::C_COMMENT => {
-                    // TODO:バインドパラメータ判定を含む実装
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_target_list(): C_COMMENT is not implemented\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
+                    let comment_node = cursor.node();
+                    let comment = Comment::pg_new(comment_node);
+
+                    let Some(next_sibling) = cursor.node().next_sibling() else {
+                        // コメントは最後の子供にならない
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_target_list(): unexpected node kind\n{}",
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    };
+
+                    // コメントノードがバインドパラメータであるかを判定
+                    // バインドパラメータならば式として処理し、そうでなければコメントとして処理する
+                    if comment.loc().is_next_to(&next_sibling.range().into()) {
+                        cursor.goto_next_sibling();
+
+                        let mut target_el =
+                            self.visit_target_el(cursor, src, &complement_config)?;
+                        target_el.set_head_comment(comment);
+
+                        sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
+                    } else {
+                        sep_lines.add_comment_to_child(comment)?;
+                    }
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
