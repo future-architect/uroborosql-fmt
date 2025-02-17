@@ -124,7 +124,7 @@ fn print_test_report(results: &[TestResult]) {
                     println!("\nInput:\n{}", result.input);
                     // println!("\nExpected:\n{}", result.expected);
                     // println!("\nGot:\n{}", result.got.as_ref().unwrap());
-                    println!("\nDiff(expected v.s. got):");
+                    println!("\nDiff(expected vs. got):");
                     print_diff(
                         result.expected.clone(),
                         result.got.as_ref().unwrap().clone(),
