@@ -1,6 +1,9 @@
 use std::fs;
 use std::path::Path;
 
+use console::{style, Style};
+use similar::{ChangeTag, TextDiff};
+
 #[derive(Debug)]
 struct TestCase {
     name: String,
@@ -42,6 +45,54 @@ impl TestCase {
     }
 }
 
+struct Line(Option<usize>);
+
+impl std::fmt::Display for Line {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.0 {
+            None => write!(f, "    "),
+            Some(idx) => write!(f, "{:<4}", idx + 1),
+        }
+    }
+}
+
+fn print_diff(expected: impl Into<String>, got: impl Into<String>) {
+    let expected = expected.into();
+    let got = got.into();
+    let diff = TextDiff::from_lines(&expected, &got);
+
+    for (idx, group) in diff.grouped_ops(3).iter().enumerate() {
+        if idx > 0 {
+            println!("{:-^1$}", "-", 80);
+        }
+        for op in group {
+            for change in diff.iter_inline_changes(op) {
+                let (sign, s) = match change.tag() {
+                    ChangeTag::Delete => ("-", Style::new().red()),
+                    ChangeTag::Insert => ("+", Style::new().green()),
+                    ChangeTag::Equal => (" ", Style::new().dim()),
+                };
+                print!(
+                    "{}{} |{}",
+                    style(Line(change.old_index())).dim(),
+                    style(Line(change.new_index())).dim(),
+                    s.apply_to(sign).bold(),
+                );
+                for (emphasized, value) in change.iter_strings_lossy() {
+                    if emphasized {
+                        print!("{}", s.apply_to(value).underlined().on_black());
+                    } else {
+                        print!("{}", s.apply_to(value));
+                    }
+                }
+                if change.missing_newline() {
+                    println!();
+                }
+            }
+        }
+    }
+}
+
 fn print_test_report(results: &[TestResult]) {
     let total = results.len();
     let passed = results
@@ -71,13 +122,18 @@ fn print_test_report(results: &[TestResult]) {
                 TestStatus::Fail => {
                     println!("\n❌ Failed: {}", result.name);
                     println!("\nInput:\n{}", result.input);
-                    println!("\nExpected:\n{}", result.expected);
-                    println!("\nGot:\n{}", result.got.as_ref().unwrap());
+                    // println!("\nExpected:\n{}", result.expected);
+                    // println!("\nGot:\n{}", result.got.as_ref().unwrap());
+                    println!("\nDiff(expected v.s. got):");
+                    print_diff(
+                        result.expected.clone(),
+                        result.got.as_ref().unwrap().clone(),
+                    );
 
-                    println!("Escaped version:");
-                    println!("sql     : {}", result.input.escape_debug());
-                    println!("expected: {}", result.expected.escape_debug());
-                    println!("got     : {}", result.got.as_ref().unwrap().escape_debug());
+                    // println!("Escaped version:");
+                    // println!("sql     : {}", result.input.escape_debug());
+                    // println!("expected: {}", result.expected.escape_debug());
+                    // println!("got     : {}", result.got.as_ref().unwrap().escape_debug());
                 }
                 TestStatus::Error => {
                     println!("\n💥 Error: {}", result.name);
