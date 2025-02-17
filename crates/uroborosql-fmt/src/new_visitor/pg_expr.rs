@@ -2,7 +2,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
     cst::{AsteriskExpr, Expr, PrimaryExpr, PrimaryExprKind},
-    error::UroboroSQLFmtError, util::convert_identifier_case,
+    error::UroboroSQLFmtError,
+    util::convert_identifier_case,
 };
 
 use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
@@ -234,15 +235,26 @@ impl Visitor {
             }
 
             // indirection にあたるテキストから空白文字を除去し、そのまま追加している
-            let whitespace_removed = indirection_text.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+            let whitespace_removed = indirection_text
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect::<String>();
             columnref_text.push_str(&whitespace_removed);
         }
 
         // アスタリスクが含まれる場合はAsteriskExprに変換する
         let expr = if columnref_text.contains('*') {
-            AsteriskExpr::new(columnref_text, cursor.node().range().into()).into()
+            AsteriskExpr::new(
+                convert_identifier_case(&columnref_text),
+                cursor.node().range().into(),
+            )
+            .into()
         } else {
-            PrimaryExpr::new(convert_identifier_case(&columnref_text), cursor.node().range().into()).into()
+            PrimaryExpr::new(
+                convert_identifier_case(&columnref_text),
+                cursor.node().range().into(),
+            )
+            .into()
         };
 
         cursor.goto_parent();
