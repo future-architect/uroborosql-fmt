@@ -223,8 +223,17 @@ impl Visitor {
             //
             // indirection はフラット化されている: https://github.com/future-architect/postgresql-cst-parser/pull/7
 
-            // indirection にあたるテキストをそのまま追加している
             let indirection_text = cursor.node().text();
+
+            // 配列アクセスは unimplemented
+            if indirection_text.contains('[') {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_columnref(): array access is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+
+            // indirection にあたるテキストをそのまま追加している
             columnref_text.push_str(indirection_text);
         }
 
