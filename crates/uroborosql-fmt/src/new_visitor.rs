@@ -406,7 +406,6 @@ fn pg_create_clause(
     // TODO: 複数の語からなるキーワードについて検討
     // とりあえず一つの語からなるキーワードをカバー
     let clause = Clause::from_pg_node(cursor.node());
-    cursor.goto_next_sibling();
 
     Ok(clause)
 }
