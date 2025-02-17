@@ -4,8 +4,8 @@ use crate::{
     cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
     new_visitor::{
-        create_alias, create_alias_from_expr, pg_create_clause, pg_ensure_kind,
-        pg_error_annotation_from_cursor, Visitor, COMMA,
+        create_alias_from_expr, pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor,
+        Visitor, COMMA,
     },
     util::convert_keyword_case,
     CONFIG,
@@ -97,9 +97,9 @@ impl Visitor {
         let mut clause = pg_create_clause(cursor, SyntaxKind::SELECT)?;
         cursor.goto_next_sibling();
 
-        // // SQL_IDとコメントを消費
-        // self.consume_or_complement_sql_id(cursor, src, &mut clause);
-        // self.consume_comment_in_clause(cursor, src, &mut clause)?;
+        // SQL_IDとコメントを消費
+        self.pg_consume_or_complement_sql_id(cursor, &mut clause);
+        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
         let mut select_body = SelectBody::new();
 
