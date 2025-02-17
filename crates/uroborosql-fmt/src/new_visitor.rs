@@ -361,13 +361,18 @@ fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
     let loc = lhs.loc();
 
     match lhs {
-        Expr::Primary(prim) => {
-            let element = prim.element();
-            element
-                .split('.')
-                .last()
-                .map(|s| Expr::Primary(Box::new(PrimaryExpr::new(convert_identifier_case(s), loc))))
-        }
+        Expr::Primary(prim) => prim
+            .element()
+            .split('.')
+            .last()
+            // dotted chain における最後の要素が配列参照の場合はエイリアス名を生成しない
+            .filter(|last| !last.contains('['))
+            .map(|last| {
+                Expr::Primary(Box::new(PrimaryExpr::new(
+                    convert_identifier_case(last),
+                    loc,
+                )))
+            }),
         _ => None,
     }
 }

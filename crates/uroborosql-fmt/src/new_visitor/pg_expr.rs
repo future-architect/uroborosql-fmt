@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{Expr, PrimaryExpr, PrimaryExprKind},
+    cst::{AsteriskExpr, Expr, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
 };
 
@@ -208,24 +208,36 @@ impl Visitor {
         cursor.goto_first_child();
 
         pg_ensure_kind(cursor, SyntaxKind::ColId, src)?;
-        let col_id = Expr::Primary(Box::new(PrimaryExpr::with_pg_node(
-            cursor.node(),
-            PrimaryExprKind::Expr,
-        )?));
+        let mut columnref_text = cursor.node().text().to_string();
 
         if cursor.goto_next_sibling() {
             // cursor -> indirection
-            // TODO: flatten indirection
             pg_ensure_kind(cursor, SyntaxKind::indirection, src)?;
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_columnref(): indirection is not implemented\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
-            )));
+
+            // indirection
+            // - indirection_el
+            //    - `.` attr_name
+            //    - `.` `*`
+            //    - `[` a_expr `]`
+            //    - `[` opt_slice_bound `:` opt_slice_bound `]`
+            //
+            // indirection はフラット化されている: https://github.com/future-architect/postgresql-cst-parser/pull/7
+
+            // indirection にあたるテキストをそのまま追加している
+            let indirection_text = cursor.node().text();
+            columnref_text.push_str(indirection_text);
         }
+
+        // アスタリスクが含まれる場合はAsteriskExprに変換する
+        let expr = if columnref_text.contains('*') {
+            AsteriskExpr::new(columnref_text, cursor.node().range().into()).into()
+        } else {
+            PrimaryExpr::new(columnref_text, cursor.node().range().into()).into()
+        };
 
         cursor.goto_parent();
         pg_ensure_kind(cursor, SyntaxKind::columnref, src)?;
 
-        Ok(col_id)
+        Ok(expr)
     }
 }
