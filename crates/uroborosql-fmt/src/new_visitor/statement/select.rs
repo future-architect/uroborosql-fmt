@@ -87,10 +87,8 @@ impl Visitor {
                     )));
                 }
                 SyntaxKind::from_clause => {
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_select_stmt(): from_clause is not implemented\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
+                    let from_clause = self.pg_visit_from_clause(cursor, src)?;
+                    statement.add_clause(from_clause);
                 }
                 SyntaxKind::where_clause => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
