@@ -5,8 +5,11 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     new_visitor::{
-        create_clause, ensure_kind, expr::{ComplementConfig, ComplementKind}, pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor
+        create_clause, ensure_kind,
+        expr::{ComplementConfig, ComplementKind},
+        pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor,
     },
+    util::convert_identifier_case,
 };
 
 impl Visitor {
@@ -59,16 +62,9 @@ impl Visitor {
         // cursor -> from_list
         pg_ensure_kind(cursor, SyntaxKind::from_list, src)?;
 
-        // ASがあれば除去する
-        // エイリアス補完は現状行わない
-        // let complement_config = ComplementConfig::new(ComplementKind::TableName, true, false);
         let from_list = self.visit_from_list(cursor, src)?;
 
-        // for now, just return empty body
-        let sep = SeparatedLines::new();
-        let body = Body::SepLines(sep);
-
-        clause.set_body(body);
+        clause.set_body(from_list);
 
         // cursor -> from_clause
         cursor.goto_parent();
@@ -107,7 +103,6 @@ impl Visitor {
                 SyntaxKind::table_ref => {
                     let table_ref = self.visit_table_ref(cursor, src, &complement_config)?;
                     sep_lines.add_expr(table_ref, None, vec![]);
-
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
@@ -145,20 +140,45 @@ impl Visitor {
         // - LATERAL xmltable opt_alias_clause
         // - LATERAL select_with_parens opt_alias_clause
         // - LATERAL json_table opt_alias_clause
-        
+
         cursor.goto_first_child();
-        
-        let table_ref = match cursor.node().kind() {
+
+        match cursor.node().kind() {
             SyntaxKind::relation_expr => {
                 // テーブル参照
                 // relation_expr opt_alias_clause [tablesample_clause]
                 // - users as u
                 // - schema1.table1 t1
-                
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_table_ref(): relation_expr node appeared. Table references are not implemented yet.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
+
+                // AlignedExpr での左辺にあたる式
+                let lhs_expr = self.visit_relation_expr(cursor, src)?;
+
+                let aligned = AlignedExpr::new(lhs_expr);
+
+                cursor.goto_next_sibling();
+
+                if cursor.node().kind() == SyntaxKind::opt_alias_clause {
+                    // TODO: エイリアスの追加
+                    // TODO: 補完設定を参照
+                    // let alias_clause = todo!();
+                    // aligned.add_rhs(None, alias_clause);
+
+                    cursor.goto_next_sibling();
+                }
+
+                if cursor.node().kind() == SyntaxKind::tablesample_clause {
+                    // TABLESAMPLE
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                        "visit_table_ref(): tablesample_clause node appeared. Tablesample is not implemented yet.\n{}",
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                }
+
+                cursor.goto_parent();
+                // cursor -> table_ref
+                pg_ensure_kind(cursor, SyntaxKind::table_ref, src)?;
+
+                Ok(aligned)
             }
             SyntaxKind::select_with_parens => {
                 // サブクエリ
@@ -224,11 +244,75 @@ impl Visitor {
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
-        };
-        
-        
-        let aligned = AlignedExpr::new(table_ref);
+        }
+    }
 
-        Ok(aligned)
+    fn visit_relation_expr(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // relation_expr
+        // - qualified_name
+        // - extended_relation_expr
+
+        cursor.goto_first_child();
+
+        let expr = match cursor.node().kind() {
+            SyntaxKind::qualified_name => self.visit_qualified_name(cursor, src)?,
+            SyntaxKind::extended_relation_expr => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_relation_expr(): extended_relation_expr node appeared. Extended relation expressions are not implemented yet.\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_relation_expr(): unexpected node kind\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::relation_expr, src)?;
+
+        Ok(expr)
+    }
+
+    fn visit_qualified_name(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // qualified_name
+        // - ColId
+        // - ColId indirection
+
+        cursor.goto_first_child();
+        pg_ensure_kind(cursor, SyntaxKind::ColId, src)?;
+
+        let mut qualified_name_text = cursor.node().text().to_string();
+
+        if cursor.goto_next_sibling() {
+            pg_ensure_kind(cursor, SyntaxKind::indirection, src)?;
+            // TODO: indirection 対応
+            // この場所でのsubscriptは構文定義上可能だが、PostgreSQL側でrejectされる
+
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_qualified_name(): indirection node appeared. Indirection is not implemented yet.\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            )));
+        }
+
+        let primary = PrimaryExpr::new(
+            convert_identifier_case(&qualified_name_text),
+            cursor.node().range().into(),
+        );
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::qualified_name, src)?;
+
+        Ok(primary.into())
     }
 }
