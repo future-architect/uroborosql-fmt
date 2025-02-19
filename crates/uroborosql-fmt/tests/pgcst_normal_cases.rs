@@ -45,7 +45,7 @@ impl TestCase {
     }
 }
 
-struct Line(Option<usize>);
+pub struct Line(Option<usize>);
 
 impl std::fmt::Display for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -56,7 +56,7 @@ impl std::fmt::Display for Line {
     }
 }
 
-fn print_diff(expected: impl Into<String>, got: impl Into<String>) {
+pub fn print_diff(expected: impl Into<String>, got: impl Into<String>) {
     let expected = expected.into();
     let got = got.into();
     let diff = TextDiff::from_lines(&expected, &got);
