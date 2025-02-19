@@ -101,9 +101,36 @@ impl Visitor {
                     let table_ref = self.visit_table_ref(cursor, src)?;
                     sep_lines.add_expr(table_ref, Some(COMMA.to_string()), vec![]);
                 }
+                SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+                    sep_lines.add_comment_to_child(comment)?;
+                }
+                SyntaxKind::C_COMMENT => {
+                    let comment_node = cursor.node();
+                    let comment = Comment::pg_new(comment_node);
+
+                    let Some(next_sibling) = cursor.node().next_sibling() else {
+                        // コメントは最後の子供にならない
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_target_list(): unexpected node kind\n{}",
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    };
+
+                    if comment.loc().is_next_to(&next_sibling.range().into()) {
+                        // テーブル参照におけるバインドパラメータ
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_from_list(): table_ref node with bind parameters appeared. Table references with bind parameters are not implemented yet.\n{}",
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    } else {
+                        sep_lines.add_comment_to_child(comment)?;
+                    }
+                }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_from_list(): unexpected node kind\n{}",
+                        "visit_from_list(): unexpected node kind: {}\n{}",
+                        cursor.node().kind(),
                         pg_error_annotation_from_cursor(cursor, src)
                     )));
                 }
