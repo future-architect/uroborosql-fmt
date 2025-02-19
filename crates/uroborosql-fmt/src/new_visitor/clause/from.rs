@@ -296,13 +296,25 @@ impl Visitor {
 
         if cursor.goto_next_sibling() {
             pg_ensure_kind(cursor, SyntaxKind::indirection, src)?;
-            // TODO: indirection 対応
-            // この場所でのsubscriptは構文定義上可能だが、PostgreSQL側でrejectされる
 
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_qualified_name(): indirection node appeared. Indirection is not implemented yet.\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
-            )));
+            let indirection_text = cursor.node().text().to_string();
+
+            if indirection_text.contains('[') {
+                // この場所での subscript （[1] など）は構文定義上可能だが、PostgreSQL側でrejectされる不正な記述
+                // - https://github.com/postgres/postgres/blob/master/src/backend/parser/gram.y#L17303-L17304
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_qualified_name(): invalid subscript notation appeared.\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+
+            // 空白を除去してqualified_name_textに追加
+            qualified_name_text.push_str(
+                &indirection_text
+                    .chars()
+                    .filter(|c| !c.is_whitespace())
+                    .collect::<String>(),
+            );
         }
 
         let primary = PrimaryExpr::new(
