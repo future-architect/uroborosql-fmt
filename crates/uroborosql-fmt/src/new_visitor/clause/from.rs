@@ -7,9 +7,10 @@ use crate::{
     new_visitor::{
         create_clause, ensure_kind,
         expr::{ComplementConfig, ComplementKind},
-        pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor,
+        pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA,
     },
-    util::convert_identifier_case,
+    util::{convert_identifier_case, convert_keyword_case},
+    CONFIG,
 };
 
 impl Visitor {
@@ -89,11 +90,7 @@ impl Visitor {
 
         let mut sep_lines = SeparatedLines::new();
 
-        // ASがあれば除去する
-        // エイリアス補完は現状行わない
-        let complement_config = ComplementConfig::new(ComplementKind::TableName, true, false);
-
-        let table_ref = self.visit_table_ref(cursor, src, &complement_config)?;
+        let table_ref = self.visit_table_ref(cursor, src)?;
         sep_lines.add_expr(table_ref, None, vec![]);
 
         while cursor.goto_next_sibling() {
@@ -101,8 +98,8 @@ impl Visitor {
             match cursor.node().kind() {
                 SyntaxKind::Comma => {}
                 SyntaxKind::table_ref => {
-                    let table_ref = self.visit_table_ref(cursor, src, &complement_config)?;
-                    sep_lines.add_expr(table_ref, None, vec![]);
+                    let table_ref = self.visit_table_ref(cursor, src)?;
+                    sep_lines.add_expr(table_ref, Some(COMMA.to_string()), vec![]);
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
@@ -126,7 +123,6 @@ impl Visitor {
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
-        complement_config: &ComplementConfig,
     ) -> Result<AlignedExpr, UroboroSQLFmtError> {
         // table_ref
         // - relation_expr opt_alias_clause [tablesample_clause]
@@ -146,26 +142,41 @@ impl Visitor {
         match cursor.node().kind() {
             SyntaxKind::relation_expr => {
                 // テーブル参照
-                // relation_expr opt_alias_clause [tablesample_clause]
-                // - users as u
-                // - schema1.table1 t1
+                // relation_expr [opt_alias_clause] [tablesample_clause]
 
                 // AlignedExpr での左辺にあたる式
                 let lhs_expr = self.visit_relation_expr(cursor, src)?;
 
-                let aligned = AlignedExpr::new(lhs_expr);
+                let mut aligned = AlignedExpr::new(lhs_expr);
 
                 cursor.goto_next_sibling();
 
+                // cursor -> opt_alias_clause?
                 if cursor.node().kind() == SyntaxKind::opt_alias_clause {
-                    // TODO: エイリアスの追加
-                    // TODO: 補完設定を参照
-                    // let alias_clause = todo!();
-                    // aligned.add_rhs(None, alias_clause);
+                    // opt_alias_clause
+                    // - alias_clause
+                    cursor.goto_first_child();
+                    let (as_keyword, col_id) = self.visit_alias_clause(cursor, src)?;
 
+                    // AS補完
+                    if let Some(as_keyword) = as_keyword {
+                        // AS があり、かつ AS を除去する設定が有効ならば AS を除去する
+                        if CONFIG.read().unwrap().remove_table_as_keyword {
+                            aligned.add_rhs(None, col_id);
+                        } else {
+                            aligned.add_rhs(Some(convert_keyword_case(&as_keyword)), col_id);
+                        }
+                    } else {
+                        // ASが無い場合は補完しない
+                        aligned.add_rhs(None, col_id);
+                    }
+
+                    cursor.goto_parent();
+                    pg_ensure_kind(cursor, SyntaxKind::opt_alias_clause, src)?;
                     cursor.goto_next_sibling();
                 }
 
+                // cursor -> tablesample_clause?
                 if cursor.node().kind() == SyntaxKind::tablesample_clause {
                     // TABLESAMPLE
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
@@ -326,5 +337,48 @@ impl Visitor {
         pg_ensure_kind(cursor, SyntaxKind::qualified_name, src)?;
 
         Ok(primary.into())
+    }
+
+    /// alias_clause を visit し、 as キーワード (Option) と Expr を返す
+    /// 呼出し後、cursor は alias_clause を指している
+    fn visit_alias_clause(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        src: &str,
+    ) -> Result<(Option<String>, Expr), UroboroSQLFmtError> {
+        // alias_clause
+        // - [AS] ColId ['(' name_list ')']
+
+        // cursor -> alias_clause
+        pg_ensure_kind(cursor, SyntaxKind::alias_clause, src)?;
+
+        cursor.goto_first_child();
+        // cursor -> AS?
+        let as_keyword = if cursor.node().kind() == SyntaxKind::AS {
+            let as_keyword = cursor.node().text().to_string();
+            cursor.goto_next_sibling();
+
+            Some(as_keyword)
+        } else {
+            None
+        };
+
+        // cursor -> ColId
+        let col_id = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Expr)?;
+        cursor.goto_next_sibling();
+
+        // cursor -> '('?
+        if cursor.node().kind() == SyntaxKind::LParen {
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_alias_clause(): {} node appeared. Name lists are not implemented yet.\n{}",
+                cursor.node().kind(),
+                pg_error_annotation_from_cursor(cursor, src)
+            )));
+        }
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::alias_clause, src)?;
+
+        Ok((as_keyword, col_id.into()))
     }
 }
