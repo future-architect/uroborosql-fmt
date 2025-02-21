@@ -215,7 +215,9 @@ impl Visitor {
 
                     // コメントノードがバインドパラメータであるかを判定
                     // バインドパラメータならば式として処理し、そうでなければコメントとして処理する
-                    if comment.loc().is_next_to(&next_sibling.range().into()) {
+                    if comment.loc().is_next_to(&next_sibling.range().into())
+                        && next_sibling.kind() == SyntaxKind::target_el
+                    {
                         cursor.goto_next_sibling();
 
                         let mut target_el =
