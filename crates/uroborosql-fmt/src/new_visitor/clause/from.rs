@@ -110,7 +110,8 @@ impl Visitor {
                     let comment = Comment::pg_new(comment_node);
 
                     let Some(next_sibling) = cursor.node().next_sibling() else {
-                        // コメントは最後の子供にならない
+                        // 最後の要素の行末にあるコメントは、 from_list の直下に現れず from_list と同階層の要素になる
+                        // そのためコメントが最後の子供になることはなく、次のノードを必ず取得できる
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "visit_target_list(): unexpected node kind\n{}",
                             pg_error_annotation_from_cursor(cursor, src)
@@ -118,7 +119,7 @@ impl Visitor {
                     };
 
                     if comment.loc().is_next_to(&next_sibling.range().into()) {
-                        // テーブル参照におけるバインドパラメータ
+                        // テーブル参照における置換文字列
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "visit_from_list(): table_ref node with bind parameters appeared. Table references with bind parameters are not implemented yet.\n{}",
                             pg_error_annotation_from_cursor(cursor, src)
