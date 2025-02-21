@@ -202,8 +202,11 @@ impl Visitor {
                     let comment_node = cursor.node();
                     let comment = Comment::pg_new(comment_node);
 
+                    // バインドパラメータ判定のためにコメントの次のノードを取得する
                     let Some(next_sibling) = cursor.node().next_sibling() else {
-                        // コメントは最後の子供にならない
+                        // 最後の要素の行末にあるコメントは、 target_list の直下に現れず target_list と同階層の要素になる
+                        // そのためコメントが最後の子供になることはなく、次のノードを必ず取得できる
+
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "visit_target_list(): unexpected node kind\n{}",
                             pg_error_annotation_from_cursor(cursor, src)
