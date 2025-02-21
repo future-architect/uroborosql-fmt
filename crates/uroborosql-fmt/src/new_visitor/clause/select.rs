@@ -4,8 +4,8 @@ use crate::{
     cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
     new_visitor::{
-        create_alias, create_alias_from_expr, pg_create_clause, pg_ensure_kind,
-        pg_error_annotation_from_cursor, Visitor, COMMA,
+        create_alias_from_expr, pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor,
+        Visitor, COMMA,
     },
     util::convert_keyword_case,
     CONFIG,
@@ -97,9 +97,9 @@ impl Visitor {
         let mut clause = pg_create_clause(cursor, SyntaxKind::SELECT)?;
         cursor.goto_next_sibling();
 
-        // // SQL_IDとコメントを消費
-        // self.consume_or_complement_sql_id(cursor, src, &mut clause);
-        // self.consume_comment_in_clause(cursor, src, &mut clause)?;
+        // SQL_IDとコメントを消費
+        self.pg_consume_or_complement_sql_id(cursor, &mut clause);
+        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
         let mut select_body = SelectBody::new();
 
@@ -199,11 +199,35 @@ impl Visitor {
                     sep_lines.add_comment_to_child(comment)?;
                 }
                 SyntaxKind::C_COMMENT => {
-                    // TODO:バインドパラメータ判定を含む実装
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_target_list(): C_COMMENT is not implemented\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
+                    let comment_node = cursor.node();
+                    let comment = Comment::pg_new(comment_node);
+
+                    // バインドパラメータ判定のためにコメントの次のノードを取得する
+                    let Some(next_sibling) = cursor.node().next_sibling() else {
+                        // 最後の要素の行末にあるコメントは、 target_list の直下に現れず target_list と同階層の要素になる
+                        // そのためコメントが最後の子供になることはなく、次のノードを必ず取得できる
+
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_target_list(): unexpected node kind\n{}",
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    };
+
+                    // コメントノードがバインドパラメータであるかを判定
+                    // バインドパラメータならば式として処理し、そうでなければコメントとして処理する
+                    if comment.loc().is_next_to(&next_sibling.range().into())
+                        && next_sibling.kind() == SyntaxKind::target_el
+                    {
+                        cursor.goto_next_sibling();
+
+                        let mut target_el =
+                            self.visit_target_el(cursor, src, &complement_config)?;
+                        target_el.set_head_comment(comment);
+
+                        sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
+                    } else {
+                        sep_lines.add_comment_to_child(comment)?;
+                    }
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
