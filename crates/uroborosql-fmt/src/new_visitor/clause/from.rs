@@ -58,7 +58,8 @@ impl Visitor {
 
         let mut clause = pg_create_clause(cursor, SyntaxKind::FROM)?;
         cursor.goto_next_sibling();
-        self.pg_consume_or_complement_sql_id(cursor, &mut clause);
+
+        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> from_list
         pg_ensure_kind(cursor, SyntaxKind::from_list, src)?;

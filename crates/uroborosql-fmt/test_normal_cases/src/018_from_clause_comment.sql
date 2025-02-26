@@ -15,3 +15,6 @@ from longlongtable as l -- so long
 , table1 as t1 -- normal
 , sososolonglonglong -- so long and no alias
 ;
+
+select * from -- comment
+t;

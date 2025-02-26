@@ -21,3 +21,9 @@ from
 ,	table1				t1	-- normal
 ,	sososolonglonglong		-- so long and no alias
 ;
+select
+	*
+from
+-- comment
+	t
+;
