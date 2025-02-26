@@ -113,7 +113,7 @@ impl Visitor {
                         // 最後の要素の行末にあるコメントは、 from_list の直下に現れず from_list と同階層の要素になる
                         // そのためコメントが最後の子供になることはなく、次のノードを必ず取得できる
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                            "visit_target_list(): unexpected node kind\n{}",
+                            "visit_from_list(): unexpected node kind\n{}",
                             pg_error_annotation_from_cursor(cursor, src)
                         )));
                     };
@@ -257,7 +257,7 @@ impl Visitor {
                 )));
             }
             SyntaxKind::LATERAL_P => {
-                // LITERAL系
+                // LATERAL系
                 // LATERAL func_table func_alias_clause
                 // LATERAL xmltable opt_alias_clause
                 // LATERAL select_with_parens opt_alias_clause
