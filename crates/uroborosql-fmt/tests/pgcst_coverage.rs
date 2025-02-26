@@ -4,7 +4,7 @@ use pgcst_normal_cases::print_diff;
 #[derive(Debug)]
 enum TestStatus {
     Supported,           // 新パーサーで対応済み
-    Unsupported(String), // まだ未対応（エラーの種類を保持）
+    Unsupported(String), // 未対応（理由を保持）
     Skipped,             // 意図的にスキップ
 }
 
@@ -21,7 +21,7 @@ struct TestReportConfig {
     show_supported_cases: bool,
     show_skipped_cases: bool,
     show_failed_cases: bool,
-    show_error_annotations: bool, // エラーのアノテーション（位置情報）を表示するかどうか
+    show_error_annotations: bool,
 }
 
 impl Default for TestReportConfig {
@@ -32,7 +32,7 @@ impl Default for TestReportConfig {
             show_supported_cases: true,
             show_skipped_cases: false,
             show_failed_cases: false,
-            show_error_annotations: false, // デフォルトではアノテーションを表示しない
+            show_error_annotations: false,
         }
     }
 }
@@ -239,74 +239,47 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
         }
 
         // エラータイプごとに出力
-        if !syntax_errors.is_empty() {
-            println!("\nSyntax Errors:");
-            for (file, message, annotation) in syntax_errors {
-                println!("  {} - {}", file, message);
-                if config.show_error_annotations {
-                    if let Some(ann) = annotation {
-                        println!("{}", ann);
-                    }
-                }
-            }
-        }
+        print_error_group(
+            "Syntax Errors",
+            &syntax_errors,
+            config.show_error_annotations,
+        );
+        print_error_group(
+            "Validation Errors",
+            &validation_errors,
+            config.show_error_annotations,
+        );
+        print_error_group(
+            "Unimplemented Features",
+            &unimplemented_errors,
+            config.show_error_annotations,
+        );
+        print_error_group(
+            "Configuration Errors",
+            &config_errors,
+            config.show_error_annotations,
+        );
+        print_error_group(
+            "Runtime Errors",
+            &runtime_errors,
+            config.show_error_annotations,
+        );
+        print_error_group("Other Errors", &other_errors, config.show_error_annotations);
+    }
+}
 
-        if !validation_errors.is_empty() {
-            println!("\nValidation Errors:");
-            for (file, message, annotation) in validation_errors {
-                println!("  {} - {}", file, message);
-                if config.show_error_annotations {
-                    if let Some(ann) = annotation {
-                        println!("{}", ann);
-                    }
-                }
-            }
-        }
-
-        if !unimplemented_errors.is_empty() {
-            println!("\nUnimplemented Features:");
-            for (file, message, annotation) in unimplemented_errors {
-                println!("  {} - {}", file, message);
-                if config.show_error_annotations {
-                    if let Some(ann) = annotation {
-                        println!("{}", ann);
-                    }
-                }
-            }
-        }
-
-        if !config_errors.is_empty() {
-            println!("\nConfiguration Errors:");
-            for (file, message, annotation) in config_errors {
-                println!("  {} - {}", file, message);
-                if config.show_error_annotations {
-                    if let Some(ann) = annotation {
-                        println!("{}", ann);
-                    }
-                }
-            }
-        }
-
-        if !runtime_errors.is_empty() {
-            println!("\nRuntime Errors:");
-            for (file, message, annotation) in runtime_errors {
-                println!("  {} - {}", file, message);
-                if config.show_error_annotations {
-                    if let Some(ann) = annotation {
-                        println!("{}", ann);
-                    }
-                }
-            }
-        }
-
-        if !other_errors.is_empty() {
-            println!("\nOther Errors:");
-            for (file, message, annotation) in other_errors {
-                println!("  {} - {}", file, message);
-                if config.show_error_annotations {
-                    if let Some(ann) = annotation {
-                        println!("{}", ann);
-                    }
+fn print_error_group(
+    group_name: &str,
+    errors: &[(String, String, Option<&str>)],
+    show_annotations: bool,
+) {
+    if !errors.is_empty() {
+        println!("\n{}:", group_name);
+        for (file, message, annotation) in errors {
+            println!("  {} - {}", file, message);
+            if show_annotations {
+                if let Some(ann) = annotation {
+                    println!("{}", ann);
                 }
             }
         }
@@ -339,11 +312,12 @@ fn run_test_suite() -> Vec<TestResult> {
 #[test]
 fn test_with_coverage() {
     let results = run_test_suite();
+
     let config = TestReportConfig::default();
 
     // let mut config = TestReportConfig::default();
     // config.show_failed_cases = true; // 失敗したケースを表示
-    // config.show_error_annotations = true;  // アノテーションを表示
+    // config.show_error_annotations = true; // アノテーションを表示
 
     print_coverage_report(&results, &config);
 }
