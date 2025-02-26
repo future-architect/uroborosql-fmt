@@ -335,6 +335,7 @@ impl Visitor {
         let mut qualified_name_text = cursor.node().text().to_string();
 
         if cursor.goto_next_sibling() {
+            // indirection が存在する場合
             pg_ensure_kind(cursor, SyntaxKind::indirection, src)?;
 
             let indirection_text = cursor.node().text().to_string();
@@ -357,13 +358,14 @@ impl Visitor {
             );
         }
 
+        cursor.goto_parent();
+        // cursor -> qualified_name
+        pg_ensure_kind(cursor, SyntaxKind::qualified_name, src)?;
+
         let primary = PrimaryExpr::new(
             convert_identifier_case(&qualified_name_text),
             cursor.node().range().into(),
         );
-
-        cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::qualified_name, src)?;
 
         Ok(primary.into())
     }
