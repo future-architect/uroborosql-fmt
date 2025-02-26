@@ -373,7 +373,7 @@ fn pg_ensure_kind<'a>(
             "pg_ensure_kind(): excepted node is {}, but actual {}\n{}",
             kind,
             cursor.node().kind(),
-            "TODO: annotation".to_string() // error_annotation_from_cursor(cursor, src)
+            pg_error_annotation_from_cursor(cursor, src)
         )))
     } else {
         Ok(cursor)
@@ -472,7 +472,7 @@ fn error_annotation_from_cursor(cursor: &TreeCursor, src: &str) -> String {
 }
 
 fn pg_error_annotation_from_cursor(
-    cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+    cursor: &postgresql_cst_parser::tree_sitter::TreeCursor,
     src: &str,
 ) -> String {
     let label = format!(r#"Appears as "{}" node on the CST"#, cursor.node().kind());

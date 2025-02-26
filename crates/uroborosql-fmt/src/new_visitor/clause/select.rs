@@ -79,18 +79,14 @@ impl ComplementConfig {
 
 impl Visitor {
     /// SELECT句
-    /// 呼び出し後、cursorはselect_clauseを指している
+    /// 呼び出し後、cursor は target_list があれば target_list を、無ければ SELECT キーワードを指している
     pub(crate) fn visit_select_clause(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
-        // SELECT句の定義
-        //      select_clause =
-        //          SELECT
-        //          [ ALL | DISTINCT [ ON ( expression [, ...] ) ] ] ]
-        //          [ select_clause_body ]
-
+        // select_clause が無く、すでに select キーワード を指しているため goto_first_child しない
+        // context: https://github.com/future-architect/postgresql-cst-parser/pull/2#discussion_r1897026688
         pg_ensure_kind(cursor, SyntaxKind::SELECT, src)?;
 
         // cursor -> SELECT
@@ -154,15 +150,14 @@ impl Visitor {
             let target_list = self.visit_target_list(cursor, src)?;
             // select_clause_body 部分に target_list から生成した Body をセット
             select_body.set_select_clause_body(target_list);
+
+            pg_ensure_kind(cursor, SyntaxKind::target_list, src)?;
         }
 
         clause.set_body(Body::Select(Box::new(select_body)));
 
-        // cursor.goto_parent(); // SelectStmt goto parent しちゃだめ
-        // pg_ensure_kind(cursor, SyntaxKind::SelectStmt, src)?;
-
-        cursor.goto_next_sibling(); // select の次
-
+        // フラットに並んでいるため goto_parent しない
+        // cursor -> SELECT or target_list
         Ok(clause)
     }
 
