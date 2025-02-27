@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{unary::UnaryExpr, Expr, Location},
+    cst::{unary::UnaryExpr, Expr, ExprSeq, Location, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
 };
 
@@ -155,11 +155,21 @@ impl Visitor {
                     | SyntaxKind::Slash
                     | SyntaxKind::Percent
                     | SyntaxKind::Caret => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): Operator {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )))
+                        let lhs = expr;
+
+                        // cursor -> op
+                        let op_node = cursor.node();
+
+                        // cursor -> a_expr
+                        cursor.goto_next_sibling();
+                        let rhs = self.visit_a_expr(cursor, src)?;
+
+                        // 演算子を PrimaryExpr として扱う
+                        let op = PrimaryExpr::with_pg_node(op_node, PrimaryExprKind::Expr)?;
+
+                        // ExprSeq として返す
+                        let seq = ExprSeq::new(&[lhs, op.into(), rhs]);
+                        Expr::ExprSeq(Box::new(seq))
                     }
                     // 論理
                     SyntaxKind::AND | SyntaxKind::OR => {
