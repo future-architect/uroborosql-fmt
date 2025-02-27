@@ -1,8 +1,9 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{unary::UnaryExpr, Expr, ExprSeq, Location, PrimaryExpr, PrimaryExprKind},
+    cst::{unary::UnaryExpr, AlignedExpr, Expr, ExprSeq, Location, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
+    CONFIG,
 };
 
 use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
@@ -155,6 +156,15 @@ impl Visitor {
                     | SyntaxKind::Slash
                     | SyntaxKind::Percent
                     | SyntaxKind::Caret => {
+                        // 二項算術演算子
+                        // - a_expr '+' a_expr
+                        // - a_expr '-' a_expr
+                        // - a_expr '*' a_expr
+                        // - a_expr '/' a_expr
+                        // - a_expr '%' a_expr
+                        // - a_expr '^' a_expr
+                        //   [lhs]  [op]  [rhs]
+                        //          ^^^^ current node
                         let lhs = expr;
 
                         // cursor -> op
@@ -171,29 +181,38 @@ impl Visitor {
                         let seq = ExprSeq::new(&[lhs, op.into(), rhs]);
                         Expr::ExprSeq(Box::new(seq))
                     }
-                    // 論理
-                    SyntaxKind::AND | SyntaxKind::OR => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): Operator {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )))
-                    }
                     // 比較
                     SyntaxKind::Less
                     | SyntaxKind::Greater
                     | SyntaxKind::Equals
                     | SyntaxKind::LESS_EQUALS
                     | SyntaxKind::GREATER_EQUALS
-                    | SyntaxKind::NOT_EQUALS => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): Operator {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )))
+                    | SyntaxKind::NOT_EQUALS
+                    | SyntaxKind::qual_Op => {
+                        let lhs = expr;
+
+                        // cursor -> op
+                        let op_node = cursor.node();
+
+                        // unify_not_equalがtrueの場合は <> を != に統一する
+                        let op_str =
+                            if CONFIG.read().unwrap().unify_not_equal && op_node.text() == "<>" {
+                                "!=".to_string()
+                            } else {
+                                op_node.text().to_string()
+                            };
+
+                        // cursor -> a_expr
+                        cursor.goto_next_sibling();
+                        let rhs = self.visit_a_expr(cursor, src)?;
+
+                        let mut aligned = AlignedExpr::new(lhs);
+                        aligned.add_rhs(Some(op_str), rhs);
+
+                        Expr::Aligned(Box::new(aligned))
                     }
-                    // その他の演算子
-                    SyntaxKind::qual_Op => {
+                    // 論理
+                    SyntaxKind::AND | SyntaxKind::OR => {
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "visit_a_expr(): Operator {} is not implemented.\n{}",
                             cursor.node().kind(),
