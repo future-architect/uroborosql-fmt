@@ -143,14 +143,123 @@ impl Visitor {
                 ));
             }
             SyntaxKind::a_expr => {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "visit_a_expr(): a_expr is not implemented".to_string(),
-                ))
+                // cursor -> a_expr
+                let expr = self.visit_a_expr(cursor, src)?;
+
+                cursor.goto_next_sibling();
+                match cursor.node().kind() {
+                    // 算術
+                    SyntaxKind::Plus
+                    | SyntaxKind::Minus
+                    | SyntaxKind::Star
+                    | SyntaxKind::Slash
+                    | SyntaxKind::Percent
+                    | SyntaxKind::Caret => {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): Operator {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )))
+                    }
+                    // 論理
+                    SyntaxKind::AND | SyntaxKind::OR => {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): Operator {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )))
+                    }
+                    // 比較
+                    SyntaxKind::Less
+                    | SyntaxKind::Greater
+                    | SyntaxKind::Equals
+                    | SyntaxKind::LESS_EQUALS
+                    | SyntaxKind::GREATER_EQUALS
+                    | SyntaxKind::NOT_EQUALS => {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): Operator {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )))
+                    }
+                    // その他の演算子
+                    SyntaxKind::qual_Op => {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): Operator {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )))
+                    }
+                    // 型変換
+                    SyntaxKind::TYPECAST => {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )))
+                    }
+                    // 属性関連
+                    SyntaxKind::COLLATE | SyntaxKind::AT => {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )))
+                    }
+                    // パターンマッチング
+                    SyntaxKind::LIKE | SyntaxKind::ILIKE | SyntaxKind::SIMILAR => {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )))
+                    }
+                    // NULL
+                    SyntaxKind::IS | SyntaxKind::ISNULL | SyntaxKind::NOTNULL => {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )))
+                    }
+                    // 範囲・集合
+                    SyntaxKind::BETWEEN | SyntaxKind::IN_P => {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )))
+                    }
+                    // サブクエリ
+                    SyntaxKind::subquery_Op => {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )))
+                    }
+                    _ => {
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_a_expr(): Unexpected syntax. node: {}\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                }
+            }
+            SyntaxKind::row => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_a_expr(): {} is not implemented.\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
             }
             SyntaxKind::UNIQUE => {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "visit_a_expr(): UNIQUE is not implemented".to_string(),
-                ))
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_a_expr(): {} is not implemented.\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
