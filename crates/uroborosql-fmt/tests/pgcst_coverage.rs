@@ -1,5 +1,5 @@
-mod pgcst_normal_cases;
-use pgcst_normal_cases::print_diff;
+mod pgcst_util;
+use pgcst_util::print_diff;
 
 #[derive(Debug)]
 enum TestStatus {
