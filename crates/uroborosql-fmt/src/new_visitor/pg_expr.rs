@@ -1,13 +1,9 @@
 mod a_expr;
 mod c_expr;
 
-use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
+use postgresql_cst_parser::tree_sitter::TreeCursor;
 
-use crate::{
-    cst::{AsteriskExpr, Expr, PrimaryExpr, PrimaryExprKind},
-    error::UroboroSQLFmtError,
-    util::convert_identifier_case,
-};
+use crate::{cst::Expr, error::UroboroSQLFmtError};
 
 use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
 

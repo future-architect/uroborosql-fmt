@@ -105,7 +105,7 @@ use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
  */
 
 impl Visitor {
-    // 呼び出した後、cursorは a_expr を指している
+    /// 呼び出した後、cursorは a_expr を指している
     pub(crate) fn visit_a_expr(
         &mut self,
         cursor: &mut TreeCursor,
@@ -147,7 +147,12 @@ impl Visitor {
                 // cursor -> a_expr
                 let expr = self.visit_a_expr(cursor, src)?;
 
-                cursor.goto_next_sibling();
+                // a_expr の 子供が a_expr のケース
+                if !cursor.goto_next_sibling() {
+                    cursor.goto_parent();
+                    return Ok(expr);
+                }
+
                 match cursor.node().kind() {
                     // 算術
                     SyntaxKind::Plus

@@ -1,12 +1,31 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{AsteriskExpr, Expr, PrimaryExpr, PrimaryExprKind},
+    cst::{AsteriskExpr, Comment, Expr, Location, ParenExpr, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
     util::convert_identifier_case,
 };
 
 use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
+
+/*
+ * c_expr の構造
+ *
+ * - columnref
+ * - AexprConst
+ * - PARAM opt_indirection
+ * - '(' a_expr ')' opt_indirection
+ * - case_expr
+ * - func_expr
+ * - select_with_parens
+ * - select_with_parens indirection
+ * - EXISTS select_with_parens
+ * - ARRAY select_with_parens
+ * - ARRAY array_expr
+ * - explicit_row
+ * - implicit_row
+ * - GROUPING '(' expr_list ')'
+ */
 
 impl Visitor {
     pub fn visit_c_expr(
@@ -20,39 +39,64 @@ impl Visitor {
             SyntaxKind::columnref => self.visit_columnref(cursor, src)?,
             SyntaxKind::AexprConst => self.visit_aexpr_const(cursor, src)?,
             SyntaxKind::PARAM => {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "visit_c_expr(): PARAM is not implemented".to_string(),
-                ))
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_c_expr(): PARAM is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            SyntaxKind::LParen => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_c_expr(): LParen is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            SyntaxKind::case_expr => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_c_expr(): case_expr is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            SyntaxKind::func_expr => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_c_expr(): func_expr is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
             }
             SyntaxKind::select_with_parens => {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "visit_c_expr(): select_with_parens is not implemented".to_string(),
-                ))
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_c_expr(): select_with_parens is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
             }
             SyntaxKind::EXISTS => {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "visit_c_expr(): EXISTS is not implemented".to_string(),
-                ))
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_c_expr(): EXISTS is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
             }
             SyntaxKind::ARRAY => {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "visit_c_expr(): ARRAY is not implemented".to_string(),
-                ))
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_c_expr(): ARRAY is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
             }
             SyntaxKind::explicit_row => {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "visit_c_expr(): explicit_row is not implemented".to_string(),
-                ))
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_c_expr(): explicit_row is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
             }
             SyntaxKind::implicit_row => {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "visit_c_expr(): implicit_row is not implemented".to_string(),
-                ))
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_c_expr(): implicit_row is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
             }
             SyntaxKind::GROUPING => {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "visit_c_expr(): GROUPING is not implemented".to_string(),
-                ))
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_c_expr(): GROUPING is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
