@@ -53,7 +53,7 @@ impl UnaryExpr {
         result.push_str(&self.operator);
         // `NOT` のときは空白が必要
         // `@`（絶対値）のときも空白が必要（PostgreSQLでは、`@-` とすると一つのトークンとして扱われてしまうため）
-        if self.operator.to_uppercase() == "NOT" || self.operator.to_uppercase() == "@" {
+        if self.operator.to_uppercase() == "NOT" || self.operator == "@" {
             add_single_space(&mut result);
         }
         result.push_str(&self.operand.render(depth)?);
