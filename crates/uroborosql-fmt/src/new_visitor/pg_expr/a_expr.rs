@@ -3,6 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{unary::UnaryExpr, AlignedExpr, Expr, ExprSeq, Location, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
+    util::convert_keyword_case,
     CONFIG,
 };
 
@@ -249,7 +250,91 @@ impl Visitor {
                         )))
                     }
                     // NULL
-                    SyntaxKind::IS | SyntaxKind::ISNULL | SyntaxKind::NOTNULL => {
+                    SyntaxKind::IS => {
+                        let lhs = expr;
+                        // cursor -> IS
+                        let op = convert_keyword_case(cursor.node().text());
+
+                        cursor.goto_next_sibling();
+                        // cursor -> NOT?
+                        let not_node = if cursor.node().kind() == SyntaxKind::NOT {
+                            let not_node = cursor.node();
+                            cursor.goto_next_sibling();
+
+                            Some(not_node)
+                        } else {
+                            None
+                        };
+
+                        // cursor -> NULL_P | TRUE_P | FALSE_P | DISTINCT | UNKNOWN | DOCUMENT_P | NORMALIZED | unicode_normal_form | json_predicate_type_constraint
+                        let last_expr = match cursor.node().kind() {
+                            SyntaxKind::NULL_P | SyntaxKind::TRUE_P | SyntaxKind::FALSE_P => {
+                                // IS NOT? NULL_P
+                                // IS NOT? TRUE_P
+                                // IS NOT? FALSE_P
+                                let primary = PrimaryExpr::with_pg_node(
+                                    cursor.node(),
+                                    PrimaryExprKind::Keyword,
+                                )?;
+                                Expr::Primary(Box::new(primary))
+                            }
+                            SyntaxKind::DISTINCT => {
+                                // IS NOT? DISTINCT FROM
+                                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                    "visit_a_expr(): {} is not implemented.\n{}",
+                                    cursor.node().kind(),
+                                    pg_error_annotation_from_cursor(cursor, src)
+                                )));
+                            }
+                            SyntaxKind::UNKNOWN => {
+                                // IS NOT? UNKNOWN
+                                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                    "visit_a_expr(): {} is not implemented.\n{}",
+                                    cursor.node().kind(),
+                                    pg_error_annotation_from_cursor(cursor, src)
+                                )));
+                            }
+                            SyntaxKind::DOCUMENT_P
+                            | SyntaxKind::NORMALIZED
+                            | SyntaxKind::unicode_normal_form
+                            | SyntaxKind::json_predicate_type_constraint => {
+                                // - IS NOT? DOCUMENT_P
+                                // - IS NOT? unicode_normal_form? NORMALIZED
+                                // - IS NOT? json_predicate_type_constraint json_key_uniqueness_constraint_opt
+                                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                    "visit_a_expr(): {} is not implemented.\n{}",
+                                    cursor.node().kind(),
+                                    pg_error_annotation_from_cursor(cursor, src)
+                                )));
+                            }
+                            _ => {
+                                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                                    "visit_a_expr(): Unexpected syntax. node: {}\n{}",
+                                    cursor.node().kind(),
+                                    pg_error_annotation_from_cursor(cursor, src)
+                                )));
+                            }
+                        };
+
+                        // AlignedExpr の右辺
+                        // NOT がある場合は NOT を演算子とした UnaryExpr にする
+                        let rhs = if let Some(not_node) = not_node {
+                            let mut loc = Location::from(not_node.range());
+                            loc.append(last_expr.loc());
+
+                            let unary = UnaryExpr::new(not_node.text(), last_expr, loc);
+                            Expr::Unary(Box::new(unary))
+                        } else {
+                            last_expr
+                        };
+
+                        // IS を演算子とした AlignedExpr
+                        let mut aligned = AlignedExpr::new(lhs);
+                        aligned.add_rhs(Some(op), rhs);
+
+                        Expr::Aligned(Box::new(aligned))
+                    }
+                    SyntaxKind::ISNULL | SyntaxKind::NOTNULL => {
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "visit_a_expr(): {} is not implemented.\n{}",
                             cursor.node().kind(),
