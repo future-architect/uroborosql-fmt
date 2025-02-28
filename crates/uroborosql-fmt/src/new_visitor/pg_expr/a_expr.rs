@@ -1,7 +1,10 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{unary::UnaryExpr, AlignedExpr, Expr, ExprSeq, Location, PrimaryExpr, PrimaryExprKind},
+    cst::{
+        unary::UnaryExpr, AlignedExpr, ColumnList, Expr, ExprSeq, Location, PrimaryExpr,
+        PrimaryExprKind,
+    },
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
     CONFIG,
@@ -20,7 +23,6 @@ use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
  * - '+' a_expr
  * - '-' a_expr
  * - NOT a_expr
- * - NOT_LA a_expr
  * - qual_Op a_expr
  *
  * 3. 二項算術演算子
@@ -138,12 +140,7 @@ impl Visitor {
 
                 Expr::Unary(Box::new(UnaryExpr::new(operator, operand, loc)))
             }
-            SyntaxKind::NOT_LA => {
-                // NOT キーワードのうち、 NOT LIKE, NOT ILIKE, NOT SIMILAR TO 等のケース
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "visit_a_expr(): Not_LA is not implemented".to_string(),
-                ));
-            }
+
             SyntaxKind::a_expr => {
                 // cursor -> a_expr
                 let expr = self.visit_a_expr(cursor, src)?;
@@ -345,8 +342,16 @@ impl Visitor {
                             pg_error_annotation_from_cursor(cursor, src)
                         )))
                     }
-                    // 範囲・集合
-                    SyntaxKind::BETWEEN | SyntaxKind::IN_P => {
+                    // IN: AlignedExpr
+                    SyntaxKind::IN_P => {
+                        // IN_P in_expr
+
+                        let aligned =
+                            self.visit_flat_in_keyword_and_in_expr(cursor, src, expr, None)?;
+                        Expr::Aligned(Box::new(aligned))
+                    }
+                    // BETWEEN
+                    SyntaxKind::BETWEEN => {
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "visit_a_expr(): {} is not implemented.\n{}",
                             cursor.node().kind(),
@@ -360,6 +365,50 @@ impl Visitor {
                             cursor.node().kind(),
                             pg_error_annotation_from_cursor(cursor, src)
                         )))
+                    }
+                    SyntaxKind::NOT_LA => {
+                        // NOT キーワードのうち、 後に BETWEEN, IN, LIKE, ILIKE, SIMILAR のいずれかが続くケース
+                        // cursor -> NOT_LA
+                        let not_text = cursor.node().text();
+
+                        cursor.goto_next_sibling();
+                        // cursor -> BETWEEN | IN | LIKE | ILIKE | SIMILAR
+
+                        match cursor.node().kind() {
+                            SyntaxKind::BETWEEN => {
+                                // NOT_LA BETWEEN
+                                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                    "visit_a_expr(): {} is not implemented.\n{}",
+                                    cursor.node().kind(),
+                                    pg_error_annotation_from_cursor(cursor, src)
+                                )));
+                            }
+                            SyntaxKind::IN_P => {
+                                // NOT_LA IN
+                                let aligned = self.visit_flat_in_keyword_and_in_expr(
+                                    cursor,
+                                    src,
+                                    expr,
+                                    Some(not_text),
+                                )?;
+                                Expr::Aligned(Box::new(aligned))
+                            }
+                            SyntaxKind::LIKE | SyntaxKind::ILIKE | SyntaxKind::SIMILAR => {
+                                // NOT_LA (LIKE | ILIKE | SIMILAR)
+                                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                    "visit_a_expr(): {} is not implemented.\n{}",
+                                    cursor.node().kind(),
+                                    pg_error_annotation_from_cursor(cursor, src)
+                                )));
+                            }
+                            _ => {
+                                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                                    "visit_a_expr(): Unexpected syntax. node: {}\n{}",
+                                    cursor.node().kind(),
+                                    pg_error_annotation_from_cursor(cursor, src)
+                                )));
+                            }
+                        }
                     }
                     _ => {
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
@@ -384,6 +433,15 @@ impl Visitor {
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
+            SyntaxKind::NOT_LA => {
+                // `NOT_LA a_expr`` が a_expr の定義に含まれるが、 NOT_LA はその後に BETWEEN, IN, LIKE, ILIKE, SIMILAR のいずれかが続く場合にしか生成されない
+                // そして、それらのキーワードは `a_expr NOT_LA <keyword> <...>` のようなケースでしか出現しないため、この位置に NOT_LA が現れることはない
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_a_expr(): Unexpected syntax. node: {}\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_a_expr(): Unexpected syntax. node: {}\n{}",
@@ -397,5 +455,160 @@ impl Visitor {
         pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
 
         Ok(expr)
+    }
+
+    /// Expr と NOT キーワード を受け取り、 `IN_P in_expr` を走査して AlignedExpr に変換する
+    /// a_expr の子として IN_P in_expr の場合と NOT_LA IN_P in_expr の場合があり、両者の処理を共通化するために利用
+    /// 呼出し時、 cursor は IN_P を指している
+    /// 呼出し後、cursor は in_expr （同階層の最後の要素）を指している
+    fn visit_flat_in_keyword_and_in_expr(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+        lhs: Expr,
+        not_keyword: Option<&str>,
+    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
+        // cursor -> IN_P
+        pg_ensure_kind(cursor, SyntaxKind::IN_P, src)?;
+
+        // op_text: NOT IN or IN
+        let op_text = if let Some(not_keyword) = not_keyword {
+            let mut op_text = String::from(not_keyword);
+            op_text.push(' ');
+
+            op_text.push_str(cursor.node().text());
+            op_text
+        } else {
+            cursor.node().text().to_string()
+        };
+
+        // TODO: バインドパラメータ対応
+
+        cursor.goto_next_sibling();
+        // cursor -> in_expr
+        let rhs = self.visit_pg_in_expr(cursor, src)?;
+
+        let mut aligned = AlignedExpr::new(lhs);
+        aligned.add_rhs(Some(convert_keyword_case(&op_text)), rhs);
+
+        Ok(aligned)
+    }
+
+    /// in_expr を Expr に変換する
+    /// 呼出し後、cursorは in_expr を指している
+    ///
+    /// AlignedExpr になるための右辺を返す
+    /// - select_with_parens の場合は Expr::Sub
+    ///   - visitor::Visitor::visit_in_subquery に対応
+    /// - '(' expr_list ')'の場合は Expr::ColumnList
+    ///   - visitor::Visitor::visit_in_expr に対応
+    ///
+    fn visit_pg_in_expr(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // in_expr
+        // - select_with_parens
+        // - '(' expr_list ')'
+
+        // cursor -> in_expr
+
+        cursor.goto_first_child();
+        // cursor -> select_with_parens | '('
+
+        match cursor.node().kind() {
+            SyntaxKind::select_with_parens => {
+                // Expr::Sub を返す
+                // Ok(Expr::Sub(Box::new(subquery)))
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_in_expr(): {} is not implemented.\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            SyntaxKind::LParen => {
+                // Expr::ColumnList を返す
+                // '(' expr_list ')' を ColumnList に変換する
+                let column_list = self.visit_parenthesized_expr_list(cursor, src)?;
+
+                cursor.goto_parent();
+                // cursor -> in_expr
+
+                Ok(Expr::ColumnList(Box::new(column_list)))
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_in_expr(): Unexpected syntax. node: {}\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        }
+    }
+
+    /// '(' expr_list ')' を ColumnList に変換する
+    /// parenthesized_expr_list というノードは存在しない
+    /// 呼出し後、cursor は RParen ')' を指している
+    fn visit_parenthesized_expr_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ColumnList, UroboroSQLFmtError> {
+        // parenthesized_expr_list
+        //   - '(' expr_list ')'
+        //
+        // expr_list
+        //   - a_expr (',' a_expr)*
+        //
+        // expr_list はフラット化されている:
+        // https://github.com/future-architect/postgresql-cst-parser/pull/10
+
+        // TODO: コメント処理
+
+        // cursor -> '('
+        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+
+        cursor.goto_next_sibling();
+        // cursor -> expr_list
+
+        cursor.goto_first_child();
+        // cursor -> a_expr
+
+        let first_expr = self.visit_a_expr(cursor, src)?;
+
+        let mut exprs = vec![first_expr.to_aligned()];
+
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                SyntaxKind::Comma => {}
+                SyntaxKind::a_expr => {
+                    exprs.push(self.visit_a_expr(cursor, src)?.to_aligned());
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_parenthesized_expr_list(): Unexpected syntax. node: {}\n{}",
+                        cursor.node().kind(),
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                }
+            }
+        }
+
+        cursor.goto_parent();
+        // cursor -> expr_list
+
+        cursor.goto_next_sibling();
+        // cursor -> ')'
+        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+
+        let parent = cursor
+            .node()
+            .parent()
+            .expect("visit_parenthesized_expr_list(): parent not found");
+        let loc = Location::from(parent.range());
+
+        // TODO: コメント処理
+        Ok(ColumnList::new(exprs, loc, vec![]))
     }
 }
