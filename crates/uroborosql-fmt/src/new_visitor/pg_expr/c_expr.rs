@@ -45,10 +45,60 @@ impl Visitor {
                 )))
             }
             SyntaxKind::LParen => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_c_expr(): LParen is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
+                // '(' a_expr ')' opt_indirection
+
+                // cursor -> '('
+                pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+
+                cursor.goto_next_sibling();
+                // cursor -> comments?
+
+                let mut start_comment_buf = vec![];
+                while cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    start_comment_buf.push(comment);
+                    cursor.goto_next_sibling();
+                }
+
+                // cursor -> expr
+                pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
+                let expr = self.visit_a_expr(cursor, src)?;
+                // TODO: remove_redundant_nest
+
+                cursor.goto_next_sibling();
+
+                // cursor -> comments?
+                let mut end_comment_buf = vec![];
+                while cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    end_comment_buf.push(comment);
+                    cursor.goto_next_sibling();
+                }
+
+                // cursor -> ")"
+                pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+
+                // 親(c_expr) の location を設定
+                // 親が無いことはありえないので、parent() の返り値が None の場合は panic する
+                let parent = cursor
+                    .node()
+                    .parent()
+                    .expect("visit_c_expr(): parent is None");
+
+                // 親の location を設定
+                let mut paren_expr = ParenExpr::new(expr, parent.range().into());
+
+                // 開きかっこと式の間にあるコメントを追加
+                for comment in start_comment_buf {
+                    paren_expr.add_start_comment(comment);
+                }
+
+                // 式から閉じかっこの間にあるコメントを追加
+                for comment in end_comment_buf {
+                    paren_expr.add_end_comment(comment);
+                }
+
+                Expr::ParenExpr(Box::new(paren_expr))
             }
             SyntaxKind::case_expr => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
