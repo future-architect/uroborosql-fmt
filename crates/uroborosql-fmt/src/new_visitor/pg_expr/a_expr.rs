@@ -155,7 +155,7 @@ impl Visitor {
                 }
 
                 match cursor.node().kind() {
-                    // 算術
+                    // 算術演算: ExprSeq
                     SyntaxKind::Plus
                     | SyntaxKind::Minus
                     | SyntaxKind::Star
@@ -187,7 +187,7 @@ impl Visitor {
                         let seq = ExprSeq::new(&[lhs, op.into(), rhs]);
                         Expr::ExprSeq(Box::new(seq))
                     }
-                    // 比較
+                    // 比較演算: AlignedExpr
                     SyntaxKind::Less
                     | SyntaxKind::Greater
                     | SyntaxKind::Equals
@@ -249,7 +249,7 @@ impl Visitor {
                             pg_error_annotation_from_cursor(cursor, src)
                         )))
                     }
-                    // NULL
+                    // IS: AlignedExpr
                     SyntaxKind::IS => {
                         let lhs = expr;
                         // cursor -> IS
@@ -272,6 +272,7 @@ impl Visitor {
                                 // IS NOT? NULL_P
                                 // IS NOT? TRUE_P
                                 // IS NOT? FALSE_P
+
                                 let primary = PrimaryExpr::with_pg_node(
                                     cursor.node(),
                                     PrimaryExprKind::Keyword,
@@ -280,6 +281,7 @@ impl Visitor {
                             }
                             SyntaxKind::DISTINCT => {
                                 // IS NOT? DISTINCT FROM
+
                                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                                     "visit_a_expr(): {} is not implemented.\n{}",
                                     cursor.node().kind(),
@@ -288,6 +290,7 @@ impl Visitor {
                             }
                             SyntaxKind::UNKNOWN => {
                                 // IS NOT? UNKNOWN
+
                                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                                     "visit_a_expr(): {} is not implemented.\n{}",
                                     cursor.node().kind(),
@@ -301,6 +304,7 @@ impl Visitor {
                                 // - IS NOT? DOCUMENT_P
                                 // - IS NOT? unicode_normal_form? NORMALIZED
                                 // - IS NOT? json_predicate_type_constraint json_key_uniqueness_constraint_opt
+
                                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                                     "visit_a_expr(): {} is not implemented.\n{}",
                                     cursor.node().kind(),
