@@ -2,8 +2,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
     cst::{
-        unary::UnaryExpr, AlignedExpr, ColumnList, Expr, ExprSeq, Location, PrimaryExpr,
-        PrimaryExprKind,
+        unary::UnaryExpr, AlignedExpr, ColumnList, Comment, Expr, ExprSeq, Location, PrimaryExpr,
+        PrimaryExprKind, SeparatedLines,
     },
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
@@ -151,6 +151,7 @@ impl Visitor {
                     return Ok(expr);
                 }
 
+                // cursor -> 算術演算子 | 比較演算子 | 論理演算子 | 型変換 | 属性関連 | パターンマッチング | IS | ISNULL | NOTNULL | IN | サブクエリ
                 match cursor.node().kind() {
                     // 算術演算: ExprSeq
                     SyntaxKind::Plus
@@ -216,11 +217,44 @@ impl Visitor {
                     }
                     // 論理
                     SyntaxKind::AND | SyntaxKind::OR => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): Operator {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )))
+                        let mut boolean_expr = SeparatedLines::new();
+
+                        let lhs = expr;
+
+                        // 左辺がBooleanの場合は初期化したBooleanExprを左辺で上書き
+                        match lhs {
+                            Expr::Boolean(boolean) => boolean_expr = *boolean,
+                            _ => boolean_expr.add_expr(lhs.to_aligned(), None, vec![]),
+                        }
+
+                        // cursor -> COMMENT | op
+
+                        while cursor.node().is_comment() {
+                            boolean_expr.add_comment_to_child(Comment::pg_new(cursor.node()))?;
+                            cursor.goto_next_sibling();
+                        }
+
+                        let sep = convert_keyword_case(cursor.node().text());
+
+                        cursor.goto_next_sibling();
+                        // cursor -> _expression
+
+                        let mut comments = vec![];
+                        while cursor.node().is_comment() {
+                            comments.push(Comment::pg_new(cursor.node()));
+                            cursor.goto_next_sibling();
+                        }
+
+                        let right = self.visit_a_expr(cursor, src)?;
+
+                        if let Expr::Boolean(boolean) = right {
+                            // 右辺がbooleanの場合はマージ処理を行う
+                            boolean_expr.merge_boolean_expr(sep, *boolean);
+                        } else {
+                            boolean_expr.add_expr(right.to_aligned(), Some(sep), comments);
+                        }
+
+                        Expr::Boolean(Box::new(boolean_expr))
                     }
                     // 型変換
                     SyntaxKind::TYPECAST => {
@@ -458,7 +492,7 @@ impl Visitor {
     }
 
     /// Expr と NOT キーワード を受け取り、 `IN_P in_expr` を走査して AlignedExpr に変換する
-    /// a_expr の子として IN_P in_expr の場合と NOT_LA IN_P in_expr の場合があり、両者の処理を共通化するために利用
+    /// a_expr の子が `IN_P in_expr` の場合と `NOT_LA IN_P in_expr` の場合があり、両者の処理を共通化するために利用
     /// 呼出し時、 cursor は IN_P を指している
     /// 呼出し後、cursor は in_expr （同階層の最後の要素）を指している
     fn visit_flat_in_keyword_and_in_expr(
