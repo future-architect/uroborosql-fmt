@@ -1,3 +1,5 @@
+mod a_expr;
+
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
@@ -32,30 +34,6 @@ use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
         - GROUPING '(' expr_list ')'
 */
 impl Visitor {
-    // 呼び出した後、cursorは a_expr を指している
-    pub(crate) fn visit_a_expr(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<Expr, UroboroSQLFmtError> {
-        cursor.goto_first_child();
-
-        let expr = match cursor.node().kind() {
-            SyntaxKind::c_expr => self.visit_c_expr(cursor, src)?,
-            _ => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_a_expr(): unimplemented expression\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
-            }
-        };
-
-        cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
-
-        Ok(expr)
-    }
-
     fn visit_b_expr(
         &mut self,
         cursor: &mut TreeCursor,
