@@ -1,3 +1,5 @@
+mod unary;
+
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
@@ -126,26 +128,13 @@ impl Visitor {
             }
             // Unary Expression
             SyntaxKind::Plus | SyntaxKind::Minus | SyntaxKind::NOT | SyntaxKind::qual_Op => {
-                // op a_expr
-
-                // cursor -> op
-                let operator = cursor.node().text();
-                let mut loc = Location::from(cursor.node().range());
-
-                cursor.goto_next_sibling();
-                // cursor -> a_expr
-
-                let operand = self.visit_a_expr(cursor, src)?;
-                loc.append(operand.loc());
-
-                Expr::Unary(Box::new(UnaryExpr::new(operator, operand, loc)))
+                self.handle_unary_expr(cursor, src)?
             }
-
             SyntaxKind::a_expr => {
                 // cursor -> a_expr
                 let expr = self.visit_a_expr(cursor, src)?;
 
-                // a_expr の 子供が a_expr のケース
+                // a_expr の 子供が 単一の a_expr のケース
                 if !cursor.goto_next_sibling() {
                     cursor.goto_parent();
                     return Ok(expr);
