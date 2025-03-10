@@ -7,23 +7,22 @@ use crate::{
 
 use super::Visitor;
 
-/// 単項演算子の処理
-///
-/// 呼出時、 cursor は演算子ノードを指している
-/// 呼出後、 cursor は a_expr を指している
-/// op a_expr
-/// ^  ^
-/// │  │
-/// │  └ 呼出後
-/// └ 呼出前
-///
 impl Visitor {
-    pub fn handle_unary_expr(
+    /// 単項演算子の処理
+    ///
+    /// 呼出時、 cursor は演算子ノードを指している
+    /// 呼出後、 cursor は a_expr を指している
+    ///
+    pub fn handle_unary_expr_nodes(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Expr, UroboroSQLFmtError> {
         // op a_expr
+        // ^  ^
+        // │  │
+        // │  └ 呼出後
+        // └ 呼出前
 
         // cursor -> op
         let operator = cursor.node().text();
