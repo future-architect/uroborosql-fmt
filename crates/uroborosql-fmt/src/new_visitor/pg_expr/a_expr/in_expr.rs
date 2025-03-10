@@ -57,12 +57,6 @@ impl Visitor {
     /// in_expr を Expr に変換する
     /// 呼出し後、cursorは in_expr を指している
     ///
-    /// AlignedExpr になるための右辺を返す
-    /// - select_with_parens の場合は Expr::Sub
-    ///   - visitor::Visitor::visit_in_subquery に対応
-    /// - '(' expr_list ')'の場合は Expr::ColumnList
-    ///   - visitor::Visitor::visit_in_expr に対応
-    ///
     fn visit_pg_in_expr(
         &mut self,
         cursor: &mut TreeCursor,
@@ -105,23 +99,12 @@ impl Visitor {
         }
     }
 
-    /// '(' expr_list ')' を ColumnList に変換する
-    /// parenthesized_expr_list というノードは存在しない
-    /// 呼出し後、cursor は RParen ')' を指している
+    /// 括弧で囲まれた式リストを処理するメソッド
     fn visit_parenthesized_expr_list(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<ColumnList, UroboroSQLFmtError> {
-        // parenthesized_expr_list
-        //   - '(' expr_list ')'
-        //
-        // expr_list
-        //   - a_expr (',' a_expr)*
-        //
-        // expr_list はフラット化されている:
-        // https://github.com/future-architect/postgresql-cst-parser/pull/10
-
         // TODO: コメント処理
 
         // cursor -> '('
@@ -130,38 +113,11 @@ impl Visitor {
         cursor.goto_next_sibling();
         // cursor -> expr_list
 
-        cursor.goto_first_child();
-        // cursor -> a_expr | ','
-
-        let mut exprs = Vec::new();
-
-        // 最初の要素
-        if cursor.node().kind() == SyntaxKind::a_expr {
-            exprs.push(self.visit_a_expr(cursor, src)?.to_aligned());
-        }
-
-        // 残りの要素
-        while cursor.goto_next_sibling() {
-            match cursor.node().kind() {
-                SyntaxKind::Comma => {}
-                SyntaxKind::a_expr => {
-                    exprs.push(self.visit_a_expr(cursor, src)?.to_aligned());
-                }
-                _ => {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_parenthesized_expr_list(): Unexpected syntax. node: {}\n{}",
-                        cursor.node().kind(),
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
-                }
-            }
-        }
-
-        cursor.goto_parent();
-        // cursor -> expr_list
+        let exprs = self.visit_expr_list(cursor, src)?;
 
         cursor.goto_next_sibling();
         // cursor -> ')'
+
         pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
 
         let parent = cursor
