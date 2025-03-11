@@ -11,72 +11,6 @@ use crate::{
     CONFIG,
 };
 
-/// 補完の種類
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ComplementKind {
-    /// テーブル名
-    TableName,
-    /// カラム名
-    ColumnName,
-}
-
-/// AS補完/除去、エイリアス補完に関する設定
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ComplementConfig {
-    /// 補完の種類
-    kind: ComplementKind,
-    /// kindに合わせてASキーワードを補完/除去するかどうか
-    complement_or_remove_as: bool,
-    /// kindに合わせてエイリアスを補完するかどうか
-    complement_alias: bool,
-}
-
-impl Default for ComplementConfig {
-    fn default() -> Self {
-        ComplementConfig {
-            // デフォルト値としてTableNameを設定しているが、デフォルトでは補完しないのでTableNameとColumnNameのどちらを設定していても変わらない
-            kind: ComplementKind::TableName,
-            complement_or_remove_as: false,
-            complement_alias: false,
-        }
-    }
-}
-
-impl ComplementConfig {
-    pub(crate) fn new(
-        kind: ComplementKind,
-        complement_or_remove_as: bool,
-        complement_alias: bool,
-    ) -> ComplementConfig {
-        ComplementConfig {
-            kind,
-            complement_or_remove_as,
-            complement_alias,
-        }
-    }
-
-    /// 自身の設定と定義ファイルの設定を考慮してASを補完をすべきかどうか返す
-    fn complement_as_keyword(&self) -> bool {
-        self.complement_or_remove_as
-            && CONFIG.read().unwrap().complement_column_as_keyword
-            && self.kind == ComplementKind::ColumnName
-    }
-
-    /// 自身の設定と定義ファイルの設定を考慮してASを削除をすべきかどうか返す
-    fn remove_as_keyword(&self) -> bool {
-        self.complement_or_remove_as
-            && CONFIG.read().unwrap().remove_table_as_keyword
-            && self.kind == ComplementKind::TableName
-    }
-
-    /// 自身の設定と定義ファイルの設定を考慮してエイリアスを補完すべきかどうか返す
-    pub(crate) fn complement_alias(&self) -> bool {
-        self.complement_alias
-            && CONFIG.read().unwrap().complement_alias
-            && self.kind == ComplementKind::ColumnName
-    }
-}
-
 impl Visitor {
     /// SELECT句
     /// 呼び出し後、cursor は target_list があれば target_list を、無ければ SELECT キーワードを指している
@@ -177,8 +111,7 @@ impl Visitor {
         // cursor -> target_el
         let mut sep_lines = SeparatedLines::new();
 
-        let complement_config = ComplementConfig::new(ComplementKind::ColumnName, true, true);
-        let target_el = self.visit_target_el(cursor, src, &complement_config)?;
+        let target_el = self.visit_target_el(cursor, src)?;
         sep_lines.add_expr(target_el, None, vec![]);
 
         while cursor.goto_next_sibling() {
@@ -186,7 +119,7 @@ impl Visitor {
             match cursor.node().kind() {
                 SyntaxKind::Comma => {}
                 SyntaxKind::target_el => {
-                    let target_el = self.visit_target_el(cursor, src, &complement_config)?;
+                    let target_el = self.visit_target_el(cursor, src)?;
                     sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
                 }
                 SyntaxKind::SQL_COMMENT => {
@@ -215,8 +148,7 @@ impl Visitor {
                     {
                         cursor.goto_next_sibling();
 
-                        let mut target_el =
-                            self.visit_target_el(cursor, src, &complement_config)?;
+                        let mut target_el = self.visit_target_el(cursor, src)?;
                         target_el.set_head_comment(comment);
 
                         sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
@@ -244,7 +176,6 @@ impl Visitor {
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
-        complement_config: &ComplementConfig,
     ) -> Result<AlignedExpr, UroboroSQLFmtError> {
         // target_el
         // - a_expr
@@ -302,15 +233,10 @@ impl Visitor {
                 let keyword = cursor.node().text();
                 cursor.goto_next_sibling();
 
-                // ASキーワードが存在する場合
-                if complement_config.remove_as_keyword() {
-                    None
-                } else {
-                    Some(convert_keyword_case(keyword))
-                }
+                Some(convert_keyword_case(keyword))
             } else {
                 // ASキーワードが存在しない場合
-                if complement_config.complement_as_keyword() {
+                if CONFIG.read().unwrap().complement_column_as_keyword {
                     Some(convert_keyword_case("AS"))
                 } else {
                     None
@@ -330,8 +256,7 @@ impl Visitor {
             // エイリアスがない場合
             let mut aligned = AlignedExpr::new(lhs_expr.clone());
 
-            // エイリアス補完オプションが有効であり、カラム参照である場合にエイリアス補完を行う
-            if complement_config.complement_alias() && is_columnref {
+            if CONFIG.read().unwrap().complement_alias && is_columnref {
                 if let Some(alias_name) = create_alias_from_expr(&lhs_expr) {
                     aligned.add_rhs(Some(convert_keyword_case("AS")), alias_name);
                 }
