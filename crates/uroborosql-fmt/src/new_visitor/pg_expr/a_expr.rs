@@ -116,8 +116,29 @@ impl Visitor {
         cursor.goto_first_child();
 
         // cursor -> c_expr | DEFAULT | Plus | Minus | NOT | qual_Op | a_expr | UNIQUE
-        let expr = match cursor.node().kind() {
-            SyntaxKind::c_expr => self.visit_c_expr(cursor, src)?,
+        let expr = self.handle_a_expr_inner(cursor, src)?;
+
+        // cursor -> (last_node)
+        assert!(!cursor.goto_next_sibling());
+
+        cursor.goto_parent();
+        // cursor -> a_expr (parent)
+        pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
+
+        Ok(expr)
+    }
+
+    /// a_expr の 子ノードを走査する
+    /// 呼出し時、cursor は a_expr の最初の子ノードを指している
+    /// 呼出し後、cursor は a_expr の最後の子ノードを指している
+    fn handle_a_expr_inner(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // cursor -> c_expr | DEFAULT | Plus | Minus | NOT | qual_Op | a_expr | UNIQUE
+        match cursor.node().kind() {
+            SyntaxKind::c_expr => self.visit_c_expr(cursor, src),
             SyntaxKind::DEFAULT => {
                 return Err(UroboroSQLFmtError::Unimplemented(
                     "visit_a_expr(): DEFAULT is not implemented".to_string(),
@@ -125,143 +146,18 @@ impl Visitor {
             }
             // Unary Expression
             SyntaxKind::Plus | SyntaxKind::Minus | SyntaxKind::NOT | SyntaxKind::qual_Op => {
-                self.handle_unary_expr_nodes(cursor, src)?
+                self.handle_unary_expr_nodes(cursor, src)
             }
             SyntaxKind::a_expr => {
                 // cursor -> a_expr
-                let expr = self.visit_a_expr(cursor, src)?;
+                let lhs = self.visit_a_expr(cursor, src)?;
 
                 cursor.goto_next_sibling();
-
                 // cursor -> 算術演算子 | 比較演算子 | 論理演算子 | TYPECAST | COLLATE | AT | LIKE | ILIKE | SIMILAR | IS | ISNULL | NOTNULL | IN | サブクエリ
-                match cursor.node().kind() {
-                    // 算術演算
-                    SyntaxKind::Plus
-                    | SyntaxKind::Minus
-                    | SyntaxKind::Star
-                    | SyntaxKind::Slash
-                    | SyntaxKind::Percent
-                    | SyntaxKind::Caret => {
-                        self.handle_arithmetic_binary_expr_nodes(cursor, src, expr)?
-                    }
-                    // 比較演算
-                    SyntaxKind::Less
-                    | SyntaxKind::Greater
-                    | SyntaxKind::Equals
-                    | SyntaxKind::LESS_EQUALS
-                    | SyntaxKind::GREATER_EQUALS
-                    | SyntaxKind::NOT_EQUALS
-                    | SyntaxKind::qual_Op => {
-                        self.handle_comparison_expr_nodes(cursor, src, expr)?
-                    }
-                    // 論理
-                    SyntaxKind::AND | SyntaxKind::OR => {
-                        self.handle_logical_expr_nodes(cursor, src, expr)?
-                    }
-                    // 型変換
-                    SyntaxKind::TYPECAST => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )))
-                    }
-                    // 属性関連
-                    SyntaxKind::COLLATE | SyntaxKind::AT => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )))
-                    }
-                    // パターンマッチング
-                    SyntaxKind::LIKE | SyntaxKind::ILIKE | SyntaxKind::SIMILAR => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )))
-                    }
-                    // IS
-                    SyntaxKind::IS => self.handle_is_expr_nodes(cursor, src, expr)?,
-                    SyntaxKind::ISNULL | SyntaxKind::NOTNULL => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )))
-                    }
-                    // IN
-                    SyntaxKind::IN_P => {
-                        // IN_P in_expr
 
-                        let aligned = self.handle_in_expr_nodes(cursor, src, expr, None)?;
-                        Expr::Aligned(Box::new(aligned))
-                    }
-                    // BETWEEN
-                    SyntaxKind::BETWEEN => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )))
-                    }
-                    // サブクエリ
-                    SyntaxKind::subquery_Op => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )))
-                    }
-                    SyntaxKind::NOT_LA => {
-                        // NOT キーワードのうち、 後に BETWEEN, IN, LIKE, ILIKE, SIMILAR のいずれかが続くケース
-                        // cursor -> NOT_LA
-                        let not_text = cursor.node().text();
+                let expr = self.handle_nodes_after_a_expr(cursor, src, lhs)?;
 
-                        cursor.goto_next_sibling();
-                        // cursor -> BETWEEN | IN | LIKE | ILIKE | SIMILAR
-
-                        match cursor.node().kind() {
-                            SyntaxKind::BETWEEN => {
-                                // NOT_LA BETWEEN
-                                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                                    "visit_a_expr(): {} is not implemented.\n{}",
-                                    cursor.node().kind(),
-                                    pg_error_annotation_from_cursor(cursor, src)
-                                )));
-                            }
-                            SyntaxKind::IN_P => {
-                                // NOT_LA IN_P
-                                let aligned =
-                                    self.handle_in_expr_nodes(cursor, src, expr, Some(not_text))?;
-                                Expr::Aligned(Box::new(aligned))
-                            }
-                            SyntaxKind::LIKE | SyntaxKind::ILIKE | SyntaxKind::SIMILAR => {
-                                // NOT_LA (LIKE | ILIKE | SIMILAR)
-                                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                                    "visit_a_expr(): {} is not implemented.\n{}",
-                                    cursor.node().kind(),
-                                    pg_error_annotation_from_cursor(cursor, src)
-                                )));
-                            }
-                            _ => {
-                                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                                    "visit_a_expr(): Unexpected syntax. node: {}\n{}",
-                                    cursor.node().kind(),
-                                    pg_error_annotation_from_cursor(cursor, src)
-                                )));
-                            }
-                        }
-                    }
-                    _ => {
-                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                            "visit_a_expr(): Unexpected syntax. node: {}\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )));
-                    }
-                }
+                Ok(expr)
             }
             SyntaxKind::row => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
@@ -284,13 +180,139 @@ impl Visitor {
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
-        };
+        }
+    }
 
-        // cursor -> (last_node)
-        cursor.goto_parent();
-        // cursor -> a_expr (parent)
-        pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
+    /// a_expr の子ノードのうち、最初に a_expr が現れた後のノードを走査する
+    /// 呼出時、cursor は a_expr の次のノードを指している
+    /// 呼出後、cursor は a_expr の最後の子ノードを指している
+    fn handle_nodes_after_a_expr(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+        lhs: Expr,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // cursor -> 算術演算子 | 比較演算子 | 論理演算子 | TYPECAST | COLLATE | AT | LIKE | ILIKE | SIMILAR | IS | ISNULL | NOTNULL | IN | サブクエリ
+        match cursor.node().kind() {
+            // 算術演算
+            SyntaxKind::Plus
+            | SyntaxKind::Minus
+            | SyntaxKind::Star
+            | SyntaxKind::Slash
+            | SyntaxKind::Percent
+            | SyntaxKind::Caret => self.handle_arithmetic_binary_expr_nodes(cursor, src, lhs),
+            // 比較演算
+            SyntaxKind::Less
+            | SyntaxKind::Greater
+            | SyntaxKind::Equals
+            | SyntaxKind::LESS_EQUALS
+            | SyntaxKind::GREATER_EQUALS
+            | SyntaxKind::NOT_EQUALS
+            | SyntaxKind::qual_Op => self.handle_comparison_expr_nodes(cursor, src, lhs),
+            // 論理
+            SyntaxKind::AND | SyntaxKind::OR => self.handle_logical_expr_nodes(cursor, src, lhs),
+            // 型変換
+            SyntaxKind::TYPECAST => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_a_expr(): {} is not implemented.\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            // 属性関連
+            SyntaxKind::COLLATE | SyntaxKind::AT => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_a_expr(): {} is not implemented.\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            // パターンマッチング
+            SyntaxKind::LIKE | SyntaxKind::ILIKE | SyntaxKind::SIMILAR => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_a_expr(): {} is not implemented.\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            // IS
+            SyntaxKind::IS => self.handle_is_expr_nodes(cursor, src, lhs),
+            SyntaxKind::ISNULL | SyntaxKind::NOTNULL => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_a_expr(): {} is not implemented.\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            // IN
+            SyntaxKind::IN_P => {
+                // IN_P in_expr
+                let aligned = self.handle_in_expr_nodes(cursor, src, lhs, None)?;
+                Ok(Expr::Aligned(Box::new(aligned)))
+            }
+            // BETWEEN
+            SyntaxKind::BETWEEN => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_a_expr(): {} is not implemented.\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            // サブクエリ
+            SyntaxKind::subquery_Op => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_a_expr(): {} is not implemented.\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            SyntaxKind::NOT_LA => {
+                // NOT キーワードのうち、 後に BETWEEN, IN, LIKE, ILIKE, SIMILAR のいずれかが続くケース
+                // cursor -> NOT_LA
+                let not_text = cursor.node().text();
 
-        Ok(expr)
+                cursor.goto_next_sibling();
+                // cursor -> BETWEEN | IN | LIKE | ILIKE | SIMILAR
+
+                match cursor.node().kind() {
+                    SyntaxKind::BETWEEN => {
+                        // NOT_LA BETWEEN
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                    SyntaxKind::IN_P => {
+                        // NOT_LA IN_P
+                        let aligned =
+                            self.handle_in_expr_nodes(cursor, src, lhs, Some(not_text))?;
+                        Ok(Expr::Aligned(Box::new(aligned)))
+                    }
+                    SyntaxKind::LIKE | SyntaxKind::ILIKE | SyntaxKind::SIMILAR => {
+                        // NOT_LA (LIKE | ILIKE | SIMILAR)
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_a_expr(): {} is not implemented.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                    _ => {
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_a_expr(): Unexpected syntax. node: {}\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                }
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_a_expr(): Unexpected syntax. node: {}\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        }
     }
 }
