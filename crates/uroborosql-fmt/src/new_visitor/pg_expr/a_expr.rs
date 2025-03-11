@@ -131,11 +131,7 @@ impl Visitor {
                 // cursor -> a_expr
                 let expr = self.visit_a_expr(cursor, src)?;
 
-                // a_expr の 子供が 単一の a_expr のケース
-                if !cursor.goto_next_sibling() {
-                    cursor.goto_parent();
-                    return Ok(expr);
-                }
+                cursor.goto_next_sibling();
 
                 // cursor -> 算術演算子 | 比較演算子 | 論理演算子 | TYPECAST | COLLATE | AT | LIKE | ILIKE | SIMILAR | IS | ISNULL | NOTNULL | IN | サブクエリ
                 match cursor.node().kind() {
