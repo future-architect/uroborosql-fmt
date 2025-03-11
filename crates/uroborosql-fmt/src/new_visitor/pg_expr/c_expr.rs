@@ -1,4 +1,4 @@
-mod function;
+mod func_expr;
 
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
