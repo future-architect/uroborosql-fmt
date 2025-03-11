@@ -1,7 +1,9 @@
+mod function;
+
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{AsteriskExpr, Comment, Expr, Location, ParenExpr, PrimaryExpr, PrimaryExprKind},
+    cst::{AsteriskExpr, Comment, Expr, ParenExpr, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
     util::convert_identifier_case,
 };
@@ -106,12 +108,7 @@ impl Visitor {
                     pg_error_annotation_from_cursor(cursor, src)
                 )))
             }
-            SyntaxKind::func_expr => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_c_expr(): func_expr is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
-            }
+            SyntaxKind::func_expr => self.visit_func_expr(cursor, src)?,
             SyntaxKind::select_with_parens => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_c_expr(): select_with_parens is not implemented\n{}",
