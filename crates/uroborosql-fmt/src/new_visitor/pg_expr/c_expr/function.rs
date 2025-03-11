@@ -3,6 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{
         AlignedExpr, AsteriskExpr, Comment, Expr, FunctionCall, FunctionCallArgs, FunctionCallKind,
+        PrimaryExpr, PrimaryExprKind,
     },
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
@@ -28,10 +29,7 @@ impl Visitor {
         let func = match cursor.node().kind() {
             SyntaxKind::func_application => self.visit_func_application(cursor, src)?,
             SyntaxKind::func_expr_common_subexpr => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_func_expr(): func_expr_common_subexpr is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
+                self.visit_func_expr_common_subexpr(cursor, src)?
             }
             SyntaxKind::json_aggregate_func => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
@@ -131,7 +129,77 @@ impl Visitor {
         // - XMLSERIALIZE '(' document_or_content a_expr AS SimpleTypename ')'
         // - special_function
 
-        todo!()
+        cursor.goto_first_child();
+
+        let func = match cursor.node().kind() {
+            SyntaxKind::CAST => self.handle_cast_function(cursor, src)?,
+            _ => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_func_expr_common_subexpr(): function `{}` is not implemented\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::func_expr_common_subexpr, src)?;
+
+        Ok(func)
+    }
+
+    /// 呼出時、cursor は CAST キーワード を指している
+    /// 呼出後、cursor は 最後の要素の RParen を指している
+    fn handle_cast_function(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<FunctionCall, UroboroSQLFmtError> {
+        // CAST '(' a_expr AS typename ')'
+
+        // cursor -> CAST
+        pg_ensure_kind(cursor, SyntaxKind::CAST, src)?;
+        let cast_keyword = convert_keyword_case(cursor.node().text());
+
+        cursor.goto_next_sibling();
+        // cursor -> '('
+        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+
+        cursor.goto_next_sibling();
+        // cursor -> a_expr
+        pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
+        let expr = self.visit_a_expr(cursor, src)?;
+
+        cursor.goto_next_sibling();
+        // cursor -> AS
+        pg_ensure_kind(cursor, SyntaxKind::AS, src)?;
+        let as_keyword = convert_keyword_case(cursor.node().text());
+
+        cursor.goto_next_sibling();
+        // cursor -> Typename
+        pg_ensure_kind(cursor, SyntaxKind::Typename, src)?;
+        let type_name = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Keyword)?;
+
+        cursor.goto_next_sibling();
+        // cursor -> ')'
+        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+
+        // 最後の要素
+        assert!(!cursor.goto_next_sibling());
+
+        let mut aligned = AlignedExpr::new(expr);
+        aligned.add_rhs(Some(as_keyword), Expr::Primary(Box::new(type_name)));
+
+        let args = FunctionCallArgs::new(vec![aligned], cursor.node().range().into());
+
+        let function = FunctionCall::new(
+            cast_keyword,
+            args,
+            FunctionCallKind::BuiltIn,
+            cursor.node().range().into(),
+        );
+
+        Ok(function)
     }
 
     fn visit_func_application(
