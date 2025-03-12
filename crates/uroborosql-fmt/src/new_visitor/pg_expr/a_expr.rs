@@ -7,7 +7,10 @@ mod unary;
 
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
-use crate::{cst::{Comment, Expr}, error::UroboroSQLFmtError};
+use crate::{
+    cst::{Comment, Expr},
+    error::UroboroSQLFmtError,
+};
 
 use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
 
@@ -157,7 +160,7 @@ impl Visitor {
                 if cursor.node().is_comment() {
                     let comment = Comment::pg_new(cursor.node());
                     lhs.add_comment_to_child(comment)?;
-                    
+
                     cursor.goto_next_sibling();
                 }
 
