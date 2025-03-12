@@ -42,7 +42,7 @@ pub(crate) fn format_sql_with_config(
 ) -> Result<String, UroboroSQLFmtError> {
     if config.use_pg_parser {
         // postgresql-cst-parser を使用してパースする
-        let tree = pg_parse(src).unwrap();
+        let tree = pg_parse(src).expect("pg: Parse error");
 
         pg_validate_format_result(src)?;
 
