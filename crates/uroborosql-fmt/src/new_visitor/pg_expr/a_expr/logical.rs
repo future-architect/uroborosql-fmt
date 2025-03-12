@@ -19,7 +19,7 @@ impl Visitor {
         cursor: &mut TreeCursor,
         src: &str,
         lhs: Expr,
-    ) -> Result<Expr, UroboroSQLFmtError> {
+    ) -> Result<SeparatedLines, UroboroSQLFmtError> {
         // a_expr AND/OR a_expr
         // ^      ^      ^
         // lhs    │      │
@@ -61,6 +61,6 @@ impl Visitor {
             boolean_expr.add_expr(right.to_aligned(), Some(sep), comments);
         }
 
-        Ok(Expr::Boolean(Box::new(boolean_expr)))
+        Ok(boolean_expr)
     }
 }

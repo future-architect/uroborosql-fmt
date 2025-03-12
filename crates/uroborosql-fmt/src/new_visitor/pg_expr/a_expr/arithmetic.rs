@@ -18,7 +18,7 @@ impl Visitor {
         cursor: &mut TreeCursor,
         src: &str,
         lhs: Expr,
-    ) -> Result<Expr, UroboroSQLFmtError> {
+    ) -> Result<ExprSeq, UroboroSQLFmtError> {
         // a_expr op a_expr
         // ^      ^  ^
         // lhs    │  │
@@ -36,7 +36,7 @@ impl Visitor {
         let op = PrimaryExpr::with_pg_node(op_node, PrimaryExprKind::Expr)?;
 
         // ExprSeq として返す
-        let seq = ExprSeq::new(&[lhs, op.into(), rhs]);
-        Ok(Expr::ExprSeq(Box::new(seq)))
+        let expr_seq = ExprSeq::new(&[lhs, op.into(), rhs]);
+        Ok(expr_seq)
     }
 }
