@@ -5,7 +5,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use postgresql_cst_parser::tree_sitter::TreeCursor;
 
 use crate::{
-    cst::{AlignedExpr, Expr},
+    cst::{AlignedExpr, Comment, Expr},
     error::UroboroSQLFmtError,
 };
 
@@ -40,12 +40,61 @@ impl Visitor {
         }
 
         // 残りの要素
-        // cursor -> a_expr | Comma
+        // cursor -> a_expr | Comma | C_COMMENT | SQL_COMMENT
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
                 SyntaxKind::Comma => {}
                 SyntaxKind::a_expr => {
                     exprs.push(self.visit_a_expr(cursor, src)?.to_aligned());
+                }
+                // バインドパラメータを想定
+                SyntaxKind::C_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+
+                    // 次の式へ
+                    if !cursor.goto_next_sibling() {
+                        // バインドパラメータでないブロックコメントは想定していない
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_expr_list(): Unexpected syntax. node: {}\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+
+                    // cursor -> a_expr
+                    pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
+                    let mut expr = self.visit_a_expr(cursor, src)?;
+
+                    // コメントがバインドパラメータならば式に付与
+                    if comment.is_block_comment() && comment.loc().is_next_to(&expr.loc()) {
+                        expr.set_head_comment(comment.clone());
+                    } else {
+                        // バインドパラメータでないブロックコメントは想定していない
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_expr_list(): Unexpected comment\nnode_kind: {}\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+
+                    exprs.push(expr.to_aligned());
+                }
+                // 行末コメント
+                SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+
+                    // exprs は必ず1つ以上要素を持っている
+                    let last = exprs.last_mut().unwrap();
+                    if last.loc().is_same_line(&comment.loc()) {
+                        last.set_trailing_comment(comment)?;
+                    } else {
+                        // 行末コメント以外のコメントは想定していない
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_expr_list(): Unexpected comment\nnode_kind: {}\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
