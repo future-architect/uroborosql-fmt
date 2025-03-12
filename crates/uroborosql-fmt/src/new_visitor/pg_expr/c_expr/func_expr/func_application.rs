@@ -1,0 +1,229 @@
+use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
+
+use crate::{
+    cst::{
+        AlignedExpr, AsteriskExpr, Comment, Expr, FunctionCall, FunctionCallArgs, FunctionCallKind,
+    },
+    error::UroboroSQLFmtError,
+    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
+    util::convert_keyword_case,
+};
+
+use super::Visitor;
+
+impl Visitor {
+    pub fn visit_func_application(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<FunctionCall, UroboroSQLFmtError> {
+        // func_application
+        // - func_name '(' ')'
+        // - func_name '(' '*' ')'
+        // - func_name '('  (ALL|DISTINCT|VARIADIC)? func_arg_list opt_sort_clause? ')'
+        // - func_name '(' func_arg_list ',' VARIADIC func_arg_expr opt_sort_clause ')'
+
+        cursor.goto_first_child();
+        // cursor -> func_name
+        pg_ensure_kind(cursor, SyntaxKind::func_name, src)?;
+        let func_name = convert_keyword_case(cursor.node().text());
+
+        cursor.goto_next_sibling();
+        // cursor -> '('
+        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+
+        let args = self.handle_function_call_args(cursor, src)?;
+
+        let func_call = FunctionCall::new(
+            func_name,
+            args,
+            FunctionCallKind::UserDefined,
+            cursor.node().range().into(),
+        );
+
+        if cursor.node().kind() == SyntaxKind::opt_sort_clause {
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_func_application(): opt_sort_clause is not implemented\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            )));
+        }
+
+        // cursor -> ')'
+        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+        cursor.goto_parent();
+
+        // cursor -> func_application
+        pg_ensure_kind(cursor, SyntaxKind::func_application, src)?;
+
+        Ok(func_call)
+    }
+
+    /// 呼出時、cursor は LParen を指している
+    /// 呼出後、cursor は RParen または opt_sort_clause を指している
+    fn handle_function_call_args(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<FunctionCallArgs, UroboroSQLFmtError> {
+        // function_call_args というノードは存在しない
+        // '(' function_call_args opt_sort_clause? ')'
+        //  ^                      ^
+        //  |                      |
+        //  └ 呼出前                └ 呼出後
+        //
+        // function_call_args
+        // - '*'
+        // - (ALL|DISTINCT|VARIADIC)? func_arg_list
+        // - func_arg_list ',' VARIADIC func_arg_expr
+
+        let mut function_call_args = FunctionCallArgs::new(vec![], cursor.node().range().into());
+
+        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+
+        cursor.goto_next_sibling();
+
+        // 引数が空の場合
+        if cursor.node().kind() == SyntaxKind::RParen {
+            return Ok(function_call_args);
+        }
+
+        // ALL | DISTINCT | VARIADIC ?
+        match cursor.node().kind() {
+            SyntaxKind::ALL | SyntaxKind::DISTINCT | SyntaxKind::VARIADIC => {
+                let all_distinct_clause = pg_create_clause(cursor, cursor.node().kind())?;
+                function_call_args.set_all_distinct(all_distinct_clause);
+
+                cursor.goto_next_sibling();
+            }
+            _ => {}
+        }
+
+        // cursor -> Star | func_arg_list
+        match cursor.node().kind() {
+            SyntaxKind::Star => {
+                let asterisk_expr = AsteriskExpr::new(
+                    convert_keyword_case(cursor.node().text()),
+                    cursor.node().range().into(),
+                );
+                function_call_args.add_expr(Expr::Asterisk(Box::new(asterisk_expr)).to_aligned());
+            }
+            SyntaxKind::func_arg_list => {
+                self.visit_func_arg_list(cursor, src, &mut function_call_args)?;
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_func_call_args(): unexpected node kind\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        }
+
+        cursor.goto_next_sibling();
+
+        // cursor -> comment?
+        if cursor.node().is_comment() {
+            let comment = Comment::pg_new(cursor.node());
+            function_call_args.set_trailing_comment(comment)?;
+
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> Comma?
+        if cursor.node().kind() == SyntaxKind::Comma {
+            cursor.goto_next_sibling();
+            // cursor -> VARIADIC
+            if cursor.node().kind() == SyntaxKind::VARIADIC {
+                // 通常の引数と可変長引数の組み合わせのパターン
+                // e.g. concat_ws('a', 'b', VARIADIC array['c', 'd'])
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_func_call_args(): VARIADIC after func_arg_list is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        }
+
+        // cursor -> opt_sort_clause | ')'
+
+        Ok(function_call_args)
+    }
+
+    /// 呼出時、cursor は func_arg_list を指している
+    /// 引数に FunctionCallArgs を受け取り、ミュータブルに追加する
+    fn visit_func_arg_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+        function_call_args: &mut FunctionCallArgs,
+    ) -> Result<(), UroboroSQLFmtError> {
+        // func_arg_list
+        // - func_arg_expr (',' func_arg_expr)*
+
+        cursor.goto_first_child();
+
+        let first_arg = self.visit_func_arg_expr(cursor, src)?;
+        function_call_args.add_expr(first_arg);
+
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                SyntaxKind::Comma => {}
+                SyntaxKind::func_arg_expr => {
+                    let arg = self.visit_func_arg_expr(cursor, src)?;
+                    function_call_args.add_expr(arg);
+                }
+                SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+                    function_call_args.set_trailing_comment(comment)?;
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_func_arg_list(): unexpected node kind\n{}",
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                }
+            }
+        }
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::func_arg_list, src)?;
+
+        Ok(())
+    }
+
+    /// 呼出し後、 cursor は func_arg_expr を指している
+    fn visit_func_arg_expr(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
+        // func_arg_expr
+        // - a_expr
+        // - param_name COLON_EQUALS|EQUALS_GREATER a_expr
+
+        cursor.goto_first_child();
+
+        let arg = match cursor.node().kind() {
+            SyntaxKind::a_expr => {
+                let expr = self.visit_a_expr(cursor, src)?;
+                expr.to_aligned()
+            }
+            // 名前付き引数
+            SyntaxKind::param_name => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_func_arg_expr(): named argument is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_func_arg_expr(): unexpected node kind\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::func_arg_expr, src)?;
+
+        Ok(arg)
+    }
+}

@@ -1,9 +1,10 @@
 mod clause;
 mod expr;
+mod pg_expr;
 mod statement;
 
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
-use tree_sitter::{Node, TreeCursor};
+use tree_sitter::TreeCursor;
 
 pub(crate) const COMMENT: &str = "comment";
 pub(crate) const COMMA: &str = ",";
@@ -284,6 +285,33 @@ impl Visitor {
         }
     }
 
+    /// カーソルが指すノードがSQL_IDであれば、clauseに追加する
+    /// もし (_SQL_ID_が存在していない) && (_SQL_ID_がまだ出現していない) && (_SQL_ID_の補完がオン)
+    /// の場合は補完する
+    fn pg_consume_or_complement_sql_id(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        clause: &mut Clause,
+    ) {
+        if cursor.node().kind() == SyntaxKind::C_COMMENT {
+            let text = cursor.node().text();
+
+            if SqlID::is_sql_id(text) {
+                clause.set_sql_id(SqlID::new(text.to_string()));
+                cursor.goto_next_sibling();
+                self.should_complement_sql_id = false;
+
+                return;
+            }
+        }
+
+        // SQL_IDがない、かつSQL補完フラグがtrueの場合、補完する
+        if self.should_complement_sql_id {
+            clause.set_sql_id(SqlID::new("/* _SQL_ID_ */".to_string()));
+            self.should_complement_sql_id = false;
+        }
+    }
+
     /// カーソルが指すノードがコメントであれば、コメントを消費してclauseに追加する
     fn consume_comment_in_clause(
         &mut self,
@@ -293,6 +321,21 @@ impl Visitor {
     ) -> Result<(), UroboroSQLFmtError> {
         while cursor.node().kind() == COMMENT {
             let comment = Comment::new(cursor.node(), src);
+            clause.add_comment_to_child(comment)?;
+            cursor.goto_next_sibling();
+        }
+
+        Ok(())
+    }
+
+    /// カーソルが指すノードがコメントであれば、コメントを消費してclauseに追加する
+    fn pg_consume_comments_in_clause(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        clause: &mut Clause,
+    ) -> Result<(), UroboroSQLFmtError> {
+        while cursor.node().is_comment() {
+            let comment = Comment::pg_new(cursor.node());
             clause.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
@@ -330,7 +373,7 @@ fn pg_ensure_kind<'a>(
             "pg_ensure_kind(): excepted node is {}, but actual {}\n{}",
             kind,
             cursor.node().kind(),
-            "TODO: annotation".to_string() // error_annotation_from_cursor(cursor, src)
+            pg_error_annotation_from_cursor(cursor, src)
         )))
     } else {
         Ok(cursor)
@@ -352,6 +395,20 @@ fn create_alias(lhs: &Expr) -> Option<Expr> {
                 .last()
                 .map(|s| Expr::Primary(Box::new(PrimaryExpr::new(convert_identifier_case(s), loc))))
         }
+        _ => None,
+    }
+}
+
+fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
+    let loc = lhs.loc();
+
+    match lhs {
+        Expr::Primary(prim) => prim.element().split('.').last().map(|last| {
+            Expr::Primary(Box::new(PrimaryExpr::new(
+                convert_identifier_case(last),
+                loc,
+            )))
+        }),
         _ => None,
     }
 }
@@ -391,7 +448,6 @@ fn pg_create_clause(
     // TODO: 複数の語からなるキーワードについて検討
     // とりあえず一つの語からなるキーワードをカバー
     let clause = Clause::from_pg_node(cursor.node());
-    cursor.goto_next_sibling();
 
     Ok(clause)
 }
@@ -416,7 +472,7 @@ fn error_annotation_from_cursor(cursor: &TreeCursor, src: &str) -> String {
 }
 
 fn pg_error_annotation_from_cursor(
-    cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+    cursor: &postgresql_cst_parser::tree_sitter::TreeCursor,
     src: &str,
 ) -> String {
     let label = format!(r#"Appears as "{}" node on the CST"#, cursor.node().kind());

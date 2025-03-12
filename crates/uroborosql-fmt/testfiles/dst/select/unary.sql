@@ -27,7 +27,7 @@ select
 ;
 -- select @-5 as absolute_value; : PostgreSQLでは、`@-5` と書くと `@-` が一つのトークンとして扱われるため無効なSQLになる
 select
-	@-5	as	absolute_value
+	@	-5	as	absolute_value
 ;
 select
 	||/8	as	cube_root

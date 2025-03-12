@@ -237,3 +237,15 @@ impl Expr {
         }
     }
 }
+
+impl From<PrimaryExpr> for Expr {
+    fn from(primary: PrimaryExpr) -> Self {
+        Expr::Primary(Box::new(primary))
+    }
+}
+
+impl From<AsteriskExpr> for Expr {
+    fn from(asterisk: AsteriskExpr) -> Self {
+        Expr::Asterisk(Box::new(asterisk))
+    }
+}

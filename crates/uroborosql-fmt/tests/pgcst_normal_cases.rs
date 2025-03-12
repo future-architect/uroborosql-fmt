@@ -1,6 +1,9 @@
 use std::fs;
 use std::path::Path;
 
+mod pgcst_util;
+use pgcst_util::print_diff;
+
 #[derive(Debug)]
 struct TestCase {
     name: String,
@@ -71,13 +74,18 @@ fn print_test_report(results: &[TestResult]) {
                 TestStatus::Fail => {
                     println!("\n❌ Failed: {}", result.name);
                     println!("\nInput:\n{}", result.input);
-                    println!("\nExpected:\n{}", result.expected);
-                    println!("\nGot:\n{}", result.got.as_ref().unwrap());
+                    // println!("\nExpected:\n{}", result.expected);
+                    // println!("\nGot:\n{}", result.got.as_ref().unwrap());
+                    println!("\nDiff(expected vs. got):");
+                    print_diff(
+                        result.expected.clone(),
+                        result.got.as_ref().unwrap().clone(),
+                    );
 
-                    println!("Escaped version:");
-                    println!("sql     : {}", result.input.escape_debug());
-                    println!("expected: {}", result.expected.escape_debug());
-                    println!("got     : {}", result.got.as_ref().unwrap().escape_debug());
+                    // println!("Escaped version:");
+                    // println!("sql     : {}", result.input.escape_debug());
+                    // println!("expected: {}", result.expected.escape_debug());
+                    // println!("got     : {}", result.got.as_ref().unwrap().escape_debug());
                 }
                 TestStatus::Error => {
                     println!("\n💥 Error: {}", result.name);

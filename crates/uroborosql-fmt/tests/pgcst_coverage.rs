@@ -1,15 +1,17 @@
+mod pgcst_util;
+use pgcst_util::print_diff;
+
 #[derive(Debug)]
 enum TestStatus {
-    Supported,   // 新パーサーで対応済み
-    Unsupported, // まだ未対応
-    Skipped,     // 意図的にスキップ
+    Supported,           // 新パーサーで対応済み
+    Unsupported(String), // 未対応（理由を保持）
+    Skipped,             // 意図的にスキップ
 }
 
 #[derive(Debug)]
 struct TestResult {
     file_path: String,
     status: TestStatus,
-    error_message: Option<String>,
 }
 
 #[derive(Debug)]
@@ -19,6 +21,7 @@ struct TestReportConfig {
     show_supported_cases: bool,
     show_skipped_cases: bool,
     show_failed_cases: bool,
+    show_error_annotations: bool,
 }
 
 impl Default for TestReportConfig {
@@ -29,6 +32,7 @@ impl Default for TestReportConfig {
             show_supported_cases: true,
             show_skipped_cases: false,
             show_failed_cases: false,
+            show_error_annotations: false,
         }
     }
 }
@@ -63,6 +67,7 @@ fn extract_category(file_path: &str) -> String {
 
 fn try_format_with_new_parser(file_path: &str) -> Result<String, String> {
     use std::fs;
+    use uroborosql_fmt::error::UroboroSQLFmtError;
 
     // 2way-sqlのケースは明示的にスキップ
     if file_path.contains("2way_sql") {
@@ -70,27 +75,36 @@ fn try_format_with_new_parser(file_path: &str) -> Result<String, String> {
     }
 
     let input = fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
-
-    // 期待される出力を取得
     let dst_path = file_path.replace("/src", "/dst");
-
     let expected =
         fs::read_to_string(&dst_path).map_err(|e| format!("Failed to read dst file: {}", e))?;
 
-    // フォーマット実行
     match uroborosql_fmt::format_sql(&input, None, Some("test_normal_cases/use_new_parser.json")) {
         Ok(formatted) => {
             if formatted.trim() == expected.trim() {
                 Ok(formatted)
             } else {
-                Err(format!(
-                    "❌ Formatting result does not match\nExpected:\n{}\nGot:\n{}",
-                    expected.trim(),
-                    formatted.trim()
-                ))
+                println!("\nDiff(expected vs. got):");
+                print_diff(expected.trim(), formatted.trim());
+                Err(format!("Formatting result does not match"))
             }
         }
-        Err(e) => Err(format!("❌ Formatting error: {}", e)),
+        Err(e) => {
+            // エラーの種類に応じてメッセージを詳細化
+            let error_detail = match e {
+                UroboroSQLFmtError::IllegalOperation(msg) => format!("Illegal operation: {}", msg),
+                UroboroSQLFmtError::UnexpectedSyntax(msg) => format!("Syntax error: {}", msg),
+                UroboroSQLFmtError::Unimplemented(msg) => format!("Unimplemented: {}", msg),
+                UroboroSQLFmtError::FileNotFound(msg) => format!("File not found: {}", msg),
+                UroboroSQLFmtError::IllegalSettingFile(msg) => format!("Invalid config: {}", msg),
+                UroboroSQLFmtError::Rendering(msg) => format!("Rendering error: {}", msg),
+                UroboroSQLFmtError::Runtime(msg) => format!("Runtime error: {}", msg),
+                UroboroSQLFmtError::Validation { error_msg, .. } => {
+                    format!("Validation error: {}", error_msg)
+                }
+            };
+            Err(format!("❌ {}", error_detail))
+        }
     }
 }
 
@@ -184,24 +198,88 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
         println!("\nSkipped Cases:");
         for result in results {
             if matches!(result.status, TestStatus::Skipped) {
-                println!(
-                    "{} - {}",
-                    result.file_path,
-                    result
-                        .error_message
-                        .as_ref()
-                        .unwrap_or(&"No message".to_string())
-                );
+                println!("  {} - intentionally skipped", result.file_path);
             }
         }
     }
 
     if config.show_failed_cases {
-        println!("\nFailed Cases:");
+        println!("\nFailed Cases (by error type):");
+
+        // エラーの種類でグループ化して出力
+        let mut syntax_errors = Vec::new();
+        let mut validation_errors = Vec::new();
+        let mut unimplemented_errors = Vec::new();
+        let mut config_errors = Vec::new();
+        let mut runtime_errors = Vec::new();
+        let mut other_errors = Vec::new();
+
         for result in results {
-            if matches!(result.status, TestStatus::Unsupported) {
-                if let Some(error) = &result.error_message {
-                    println!("{} - {}", result.file_path, error);
+            if let TestStatus::Unsupported(error_msg) = &result.status {
+                let (message, _annotation) = if let Some(idx) = error_msg.find('\n') {
+                    (error_msg[..idx].to_string(), Some(&error_msg[idx..]))
+                } else {
+                    (error_msg.clone(), None)
+                };
+
+                if error_msg.contains("Syntax error:") {
+                    syntax_errors.push((result.file_path.clone(), message, _annotation));
+                } else if error_msg.contains("Validation error:") {
+                    validation_errors.push((result.file_path.clone(), message, _annotation));
+                } else if error_msg.contains("Unimplemented:") {
+                    unimplemented_errors.push((result.file_path.clone(), message, _annotation));
+                } else if error_msg.contains("Invalid config:") {
+                    config_errors.push((result.file_path.clone(), message, _annotation));
+                } else if error_msg.contains("Runtime error:") {
+                    runtime_errors.push((result.file_path.clone(), message, _annotation));
+                } else {
+                    other_errors.push((result.file_path.clone(), message, _annotation));
+                }
+            }
+        }
+
+        // エラータイプごとに出力
+        print_error_group(
+            "Syntax Errors",
+            &syntax_errors,
+            config.show_error_annotations,
+        );
+        print_error_group(
+            "Validation Errors",
+            &validation_errors,
+            config.show_error_annotations,
+        );
+        print_error_group(
+            "Unimplemented Features",
+            &unimplemented_errors,
+            config.show_error_annotations,
+        );
+        print_error_group(
+            "Configuration Errors",
+            &config_errors,
+            config.show_error_annotations,
+        );
+        print_error_group(
+            "Runtime Errors",
+            &runtime_errors,
+            config.show_error_annotations,
+        );
+        print_error_group("Other Errors", &other_errors, config.show_error_annotations);
+    }
+}
+
+fn print_error_group(
+    group_name: &str,
+    errors: &[(String, String, Option<&str>)],
+    show_annotations: bool,
+) {
+    if !errors.is_empty() {
+        println!("\n{}:", group_name);
+        for (file, message, annotation) in errors {
+            println!("  {} - {}", file, message);
+            if show_annotations {
+                if let Some(ann) = annotation {
+                    println!("{}", ann);
                 }
             }
         }
@@ -216,17 +294,14 @@ fn run_test_suite() -> Vec<TestResult> {
             Ok(_) => TestResult {
                 file_path: test_file,
                 status: TestStatus::Supported,
-                error_message: None,
             },
             Err(e) if e.contains("intentionally skipped") => TestResult {
                 file_path: test_file,
                 status: TestStatus::Skipped,
-                error_message: Some(e),
             },
             Err(e) => TestResult {
                 file_path: test_file,
-                status: TestStatus::Unsupported,
-                error_message: Some(e),
+                status: TestStatus::Unsupported(e),
             },
         };
         results.push(result);
@@ -238,5 +313,11 @@ fn run_test_suite() -> Vec<TestResult> {
 fn test_with_coverage() {
     let results = run_test_suite();
 
-    print_coverage_report(&results, &TestReportConfig::default());
+    let config = TestReportConfig::default();
+
+    // let mut config = TestReportConfig::default();
+    // config.show_failed_cases = true; // 失敗したケースを表示
+    // config.show_error_annotations = true; // アノテーションを表示
+
+    print_coverage_report(&results, &config);
 }
