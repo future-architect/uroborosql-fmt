@@ -17,7 +17,7 @@ impl Visitor {
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
-    ) -> Result<Expr, UroboroSQLFmtError> {
+    ) -> Result<UnaryExpr, UroboroSQLFmtError> {
         // op a_expr
         // ^  ^
         // │  │
@@ -34,8 +34,6 @@ impl Visitor {
         let operand = self.visit_a_expr(cursor, src)?;
         loc.append(operand.loc());
 
-        Ok(Expr::Unary(Box::new(UnaryExpr::new(
-            operator, operand, loc,
-        ))))
+        Ok(UnaryExpr::new(operator, operand, loc))
     }
 }
