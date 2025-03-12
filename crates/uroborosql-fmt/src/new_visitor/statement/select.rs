@@ -80,6 +80,10 @@ impl Visitor {
                 // - group_clause
                 // - having_clause
                 // - window_clause
+                SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+                    statement.add_comment_to_child(comment)?;
+                }
                 SyntaxKind::into_clause => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "visit_select_stmt(): into_clause is not implemented\n{}",
