@@ -108,7 +108,7 @@ impl Visitor {
                 function_call_args.add_expr(Expr::Asterisk(Box::new(asterisk_expr)).to_aligned());
             }
             SyntaxKind::func_arg_list => {
-                self._visit_func_arg_list(cursor, src, &mut function_call_args)?;
+                self.visit_func_arg_list(cursor, src, &mut function_call_args)?;
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
@@ -149,7 +149,7 @@ impl Visitor {
 
     /// 呼出時、cursor は func_arg_list を指している
     /// 引数に FunctionCallArgs を受け取り、ミュータブルに追加する
-    fn _visit_func_arg_list(
+    fn visit_func_arg_list(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
