@@ -2,6 +2,7 @@ mod arithmetic;
 mod comparison;
 mod in_expr;
 mod is_expr;
+mod like;
 mod logical;
 mod unary;
 
@@ -237,8 +238,12 @@ impl Visitor {
                     pg_error_annotation_from_cursor(cursor, src)
                 )))
             }
-            // パターンマッチング
-            SyntaxKind::LIKE | SyntaxKind::ILIKE | SyntaxKind::SIMILAR => {
+            SyntaxKind::LIKE | SyntaxKind::ILIKE => {
+                // LIKE, ILIKE は同じ構造
+                let aligned = self.handle_like_expr_nodes(cursor, src, lhs, None)?;
+                Ok(Expr::Aligned(Box::new(aligned)))
+            }
+            SyntaxKind::SIMILAR => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_a_expr(): {} is not implemented.\n{}",
                     cursor.node().kind(),
@@ -299,8 +304,17 @@ impl Visitor {
                             self.handle_in_expr_nodes(cursor, src, lhs, Some(not_text))?;
                         Ok(Expr::Aligned(Box::new(aligned)))
                     }
-                    SyntaxKind::LIKE | SyntaxKind::ILIKE | SyntaxKind::SIMILAR => {
-                        // NOT_LA (LIKE | ILIKE | SIMILAR)
+                    SyntaxKind::LIKE | SyntaxKind::ILIKE => {
+                        // NOT_LA LIKE
+                        // NOT_LA ILIKE
+
+                        // ILIKE も LIKE と同じ構造
+                        let aligned =
+                            self.handle_like_expr_nodes(cursor, src, lhs, Some(not_text))?;
+                        Ok(Expr::Aligned(Box::new(aligned)))
+                    }
+                    SyntaxKind::SIMILAR => {
+                        // NOT_LA SIMILAR
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "visit_a_expr(): {} is not implemented.\n{}",
                             cursor.node().kind(),
