@@ -42,11 +42,30 @@ impl Visitor {
             cursor.node().text().to_string()
         };
 
-        // TODO: バインドパラメータ対応
-
         cursor.goto_next_sibling();
+
+        // cursor -> comment?
+        let bind_param = if cursor.node().is_comment() {
+            let comment = Comment::pg_new(cursor.node());
+            cursor.goto_next_sibling();
+            Some(comment)
+        } else {
+            None
+        };
+
         // cursor -> in_expr
-        let rhs = self.visit_pg_in_expr(cursor, src)?;
+        let mut rhs = self.visit_pg_in_expr(cursor, src)?;
+
+        if let Some(comment) = bind_param {
+            if comment.is_block_comment() && comment.loc().is_next_to(&rhs.loc()) {
+                rhs.set_head_comment(comment);
+            } else {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "handle_in_expr_nodes(): Unexpected comment\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        }
 
         let mut aligned = AlignedExpr::new(lhs);
         aligned.add_rhs(Some(convert_keyword_case(&op_text)), rhs);
