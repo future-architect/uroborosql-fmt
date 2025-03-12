@@ -20,7 +20,7 @@ impl Visitor {
         cursor: &mut TreeCursor,
         src: &str,
         lhs: Expr,
-    ) -> Result<Expr, UroboroSQLFmtError> {
+    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
         // a_expr IS [NOT] NULL/TRUE/FALSE/...
         // ^      ^        ^
         // lhs    │        │
@@ -106,6 +106,6 @@ impl Visitor {
         let mut aligned = AlignedExpr::new(lhs);
         aligned.add_rhs(Some(op), rhs);
 
-        Ok(Expr::Aligned(Box::new(aligned)))
+        Ok(aligned)
     }
 }
