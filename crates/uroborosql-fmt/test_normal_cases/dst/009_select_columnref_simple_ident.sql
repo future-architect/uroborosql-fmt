@@ -1,0 +1,3 @@
+select
+	a	as	a
+;
