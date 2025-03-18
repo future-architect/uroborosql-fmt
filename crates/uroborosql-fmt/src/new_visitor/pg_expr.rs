@@ -5,7 +5,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use postgresql_cst_parser::tree_sitter::TreeCursor;
 
 use crate::{
-    cst::{AlignedExpr, Comment, Expr},
+    cst::{AlignedExpr, ColumnList, Comment, Expr, Location},
     error::UroboroSQLFmtError,
 };
 
@@ -110,5 +110,75 @@ impl Visitor {
         // cursor -> expr_list
 
         Ok(exprs)
+    }
+
+    /// 括弧で囲まれた式リストを処理するメソッド
+    pub(crate) fn visit_parenthesized_expr_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ColumnList, UroboroSQLFmtError> {
+        // cursor -> '('
+        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+        let mut loc = Location::from(cursor.node().range());
+
+        cursor.goto_next_sibling();
+        // cursor -> comment?
+
+        // 開き括弧と式との間にあるコメントを保持
+        // 最後の要素はバインドパラメータの可能性があるので、最初の式を処理した後で付け替える
+        let mut start_comments = vec![];
+        while cursor.node().is_comment() {
+            let comment = Comment::pg_new(cursor.node());
+            start_comments.push(comment);
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> expr_list
+        pg_ensure_kind(cursor, SyntaxKind::expr_list, src)?;
+        let mut exprs = self.visit_expr_list(cursor, src)?;
+
+        // start_comments のうち最後のものは、 expr_list の最初の要素のバインドパラメータの可能性がある
+        if let Some(comment) = start_comments.last() {
+            // 定義上、 expr_list は必ず一つ以上の要素を持つ
+            let first_expr = exprs.first_mut().unwrap();
+
+            if comment.is_block_comment() && comment.loc().is_next_to(&first_expr.loc()) {
+                // ブロックコメントかつ式に隣接していればバインドパラメータなので、式に付与する
+                first_expr.set_head_comment(comment.clone());
+
+                // start_comments からも削除
+                start_comments.pop().unwrap();
+            }
+        }
+
+        cursor.goto_next_sibling();
+        // cursor -> comment?
+
+        if cursor.node().is_comment() {
+            // 行末コメントを想定する
+            let comment = Comment::pg_new(cursor.node());
+
+            // exprs は必ず1つ以上要素を持っている
+            let last = exprs.last_mut().unwrap();
+            if last.loc().is_same_line(&comment.loc()) {
+                last.set_trailing_comment(comment)?;
+            } else {
+                // 行末コメント以外のコメントは想定していない
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_parenthesized_expr_list(): Unexpected comment\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> ')'
+        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+        // Location が括弧全体を指すよう更新
+        loc.append(Location::from(cursor.node().range()));
+
+        Ok(ColumnList::new(exprs, loc, start_comments))
     }
 }
