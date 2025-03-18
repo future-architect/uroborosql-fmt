@@ -33,53 +33,75 @@ impl Visitor {
 
         let mut select_body = SelectBody::new();
 
-        // TODO: all, distinct
-        // // [ ALL | DISTINCT [ ON ( expression [, ...] ) ] ] ]
-        // match cursor.node().kind() {
-        //     "ALL" => {
-        //         let all_clause = create_clause(cursor, src, "ALL")?;
+        // TODO: opt_distinct_clause の考慮
+        // opt_all_clause | distinct_clause
+        match cursor.node().kind() {
+            SyntaxKind::opt_all_clause => {
+                // opt_all_clause
+                // - ALL
 
-        //         select_body.set_all_distinct(all_clause);
+                cursor.goto_first_child();
+                // cursor -> ALL
+                pg_ensure_kind(cursor, SyntaxKind::ALL, src)?;
 
-        //         cursor.goto_next_sibling();
-        //     }
-        //     "DISTINCT" => {
-        //         let mut distinct_clause = create_clause(cursor, src, "DISTINCT")?;
+                let all_clause = pg_create_clause(cursor, SyntaxKind::ALL)?;
 
-        //         cursor.goto_next_sibling();
+                select_body.set_all_distinct(all_clause);
 
-        //         // ON ( expression [, ...] )
-        //         if cursor.node().kind() == "ON" {
-        //             // DISTINCTにONキーワードを追加
-        //             distinct_clause.extend_kw(cursor.node(), src);
+                cursor.goto_parent();
+                // cursor -> opt_all_clause
+                pg_ensure_kind(cursor, SyntaxKind::opt_all_clause, src)?;
 
-        //             cursor.goto_next_sibling();
+                cursor.goto_next_sibling();
+            }
+            SyntaxKind::distinct_clause => {
+                // distinct_clause
+                // - DISTINCT
+                // - DISTINCT ON '(' expr_list ')'
 
-        //             // ( expression [, ...] ) をColumnList構造体に格納
-        //             let mut column_list = self.visit_column_list(cursor, src)?;
-        //             // 改行によるフォーマットを強制
-        //             column_list.set_force_multi_line(true);
+                cursor.goto_first_child();
+                // cursor -> DISTINCT
+                pg_ensure_kind(cursor, SyntaxKind::DISTINCT, src)?;
+                let mut distinct_clause = pg_create_clause(cursor, SyntaxKind::DISTINCT)?;
 
-        //             // ColumntListをSeparatedLinesに格納してBody
-        //             let mut sep_lines = SeparatedLines::new();
+                cursor.goto_next_sibling();
 
-        //             sep_lines.add_expr(
-        //                 Expr::ColumnList(Box::new(column_list)).to_aligned(),
-        //                 None,
-        //                 vec![],
-        //             );
+                // cursor -> ON?
+                if cursor.node().kind() == SyntaxKind::ON {
+                    // DISTINCTにONキーワードを追加
+                    distinct_clause.pg_extend_kw(cursor.node());
 
-        //             distinct_clause.set_body(Body::SepLines(sep_lines));
-        //         }
+                    cursor.goto_next_sibling();
 
-        //         select_body.set_all_distinct(distinct_clause);
+                    // 括弧と expr_list を ColumnList に格納
+                    let mut column_list = self.visit_parenthesized_expr_list(cursor, src)?;
+                    // 改行によるフォーマットを強制
+                    column_list.set_force_multi_line(true);
 
-        //         cursor.goto_next_sibling();
-        //     }
-        //     _ => {}
-        // }
+                    // ColumnListをSeparatedLinesに格納してBody
+                    let mut sep_lines = SeparatedLines::new();
 
-        // cursor -> target_list
+                    sep_lines.add_expr(
+                        Expr::ColumnList(Box::new(column_list)).to_aligned(),
+                        None,
+                        vec![],
+                    );
+
+                    distinct_clause.set_body(Body::SepLines(sep_lines));
+                }
+
+                select_body.set_all_distinct(distinct_clause);
+
+                cursor.goto_parent();
+                // cursor -> distinct_clause
+                pg_ensure_kind(cursor, SyntaxKind::distinct_clause, src)?;
+
+                cursor.goto_next_sibling();
+            }
+            _ => {}
+        }
+
+        // cursor -> target_list?
         if cursor.node().kind() == SyntaxKind::target_list {
             let target_list = self.visit_target_list(cursor, src)?;
             // select_clause_body 部分に target_list から生成した Body をセット
