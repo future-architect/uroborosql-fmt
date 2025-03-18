@@ -65,6 +65,15 @@ impl Clause {
         ));
     }
 
+    /// postgresql-cst-parser の Node でキーワードを延長する (延長にはスペースを使用)
+    /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
+    pub(crate) fn pg_extend_kw(&mut self, node: postgresql_cst_parser::tree_sitter::Node) {
+        let loc = Location::from(node.range());
+        self.loc.append(loc);
+        self.keyword.push(' ');
+        self.keyword.push_str(&convert_keyword_case(node.text()));
+    }
+
     /// 文字列を受け取ってキーワードを延長する
     /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
     pub(crate) fn extend_kw_with_string(&mut self, kw: &str) {
