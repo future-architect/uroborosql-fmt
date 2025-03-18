@@ -120,6 +120,7 @@ impl Visitor {
     ) -> Result<ColumnList, UroboroSQLFmtError> {
         // cursor -> '('
         pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+        let mut loc = Location::from(cursor.node().range());
 
         cursor.goto_next_sibling();
         // cursor -> comment?
@@ -175,12 +176,8 @@ impl Visitor {
 
         // cursor -> ')'
         pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
-
-        let parent = cursor
-            .node()
-            .parent()
-            .expect("visit_parenthesized_expr_list(): parent not found");
-        let loc = Location::from(parent.range());
+        // Location が括弧全体を指すよう更新
+        loc.append(Location::from(cursor.node().range()));
 
         Ok(ColumnList::new(exprs, loc, start_comments))
     }
