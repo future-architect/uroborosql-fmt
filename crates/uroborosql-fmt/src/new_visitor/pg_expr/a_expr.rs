@@ -4,6 +4,7 @@ mod in_expr;
 mod is_expr;
 mod like;
 mod logical;
+mod type_cast;
 mod unary;
 
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
@@ -234,11 +235,8 @@ impl Visitor {
             }
             // 型変換
             SyntaxKind::TYPECAST => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_a_expr(): {} is not implemented.\n{}",
-                    cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
+                let expr = self.handle_typecast_nodes(cursor, src, lhs)?;
+                Ok(expr)
             }
             // 属性関連
             SyntaxKind::COLLATE | SyntaxKind::AT => {
