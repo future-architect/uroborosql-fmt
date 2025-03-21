@@ -3,6 +3,7 @@ use postgresql_cst_parser::tree_sitter::TreeCursor;
 use crate::{
     cst::{unary::UnaryExpr, Expr, Location},
     error::UroboroSQLFmtError,
+    new_visitor::pg_expr::AExprOrBExpr,
 };
 
 use super::Visitor;
@@ -31,7 +32,7 @@ impl Visitor {
         cursor.goto_next_sibling();
         // cursor -> a_expr
 
-        let operand = self.visit_a_expr(cursor, src)?;
+        let operand = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?;
         loc.append(operand.loc());
 
         Ok(UnaryExpr::new(operator, operand, loc))

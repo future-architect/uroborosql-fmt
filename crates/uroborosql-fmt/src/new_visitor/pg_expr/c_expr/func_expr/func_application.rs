@@ -5,7 +5,9 @@ use crate::{
         AlignedExpr, AsteriskExpr, Comment, Expr, FunctionCall, FunctionCallArgs, FunctionCallKind,
     },
     error::UroboroSQLFmtError,
-    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::{
+        pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, pg_expr::AExprOrBExpr,
+    },
     util::convert_keyword_case,
 };
 
@@ -203,7 +205,7 @@ impl Visitor {
 
         let arg = match cursor.node().kind() {
             SyntaxKind::a_expr => {
-                let expr = self.visit_a_expr(cursor, src)?;
+                let expr = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?;
                 expr.to_aligned()
             }
             // 名前付き引数

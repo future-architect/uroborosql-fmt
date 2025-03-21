@@ -3,7 +3,7 @@ use postgresql_cst_parser::tree_sitter::TreeCursor;
 use crate::{
     cst::{AlignedExpr, Comment, Expr},
     error::UroboroSQLFmtError,
-    new_visitor::pg_error_annotation_from_cursor,
+    new_visitor::{pg_error_annotation_from_cursor, pg_expr::AExprOrBExpr},
     CONFIG,
 };
 
@@ -50,7 +50,7 @@ impl Visitor {
         };
 
         // cursor -> a_expr
-        let mut rhs = self.visit_a_expr(cursor, src)?;
+        let mut rhs = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?;
 
         // バインドパラメータなら付与
         if let Some(comment) = bind_param {
