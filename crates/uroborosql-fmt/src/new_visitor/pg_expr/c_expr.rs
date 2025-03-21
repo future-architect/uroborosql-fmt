@@ -1,4 +1,5 @@
 mod aexpr_const;
+mod case_expr;
 mod columnref;
 mod func_expr;
 
@@ -104,10 +105,8 @@ impl Visitor {
                 Expr::ParenExpr(Box::new(paren_expr))
             }
             SyntaxKind::case_expr => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_c_expr(): case_expr is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
+                let cond_expr = self.visit_case_expr(cursor, src)?;
+                Expr::Cond(Box::new(cond_expr))
             }
             SyntaxKind::func_expr => self.visit_func_expr(cursor, src)?,
             SyntaxKind::select_with_parens => {
