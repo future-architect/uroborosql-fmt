@@ -1,4 +1,5 @@
 mod arithmetic;
+mod between;
 mod comparison;
 mod in_expr;
 mod is_expr;
@@ -162,11 +163,8 @@ impl Visitor {
             }
             // BETWEEN
             SyntaxKind::BETWEEN => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_a_expr(): {} is not implemented.\n{}",
-                    cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
+                let aligned = self.handle_between_expr_nodes(cursor, src, lhs, None)?;
+                Ok(Expr::Aligned(Box::new(aligned)))
             }
             // サブクエリ
             SyntaxKind::subquery_Op => {
@@ -187,11 +185,9 @@ impl Visitor {
                 match cursor.node().kind() {
                     SyntaxKind::BETWEEN => {
                         // NOT_LA BETWEEN
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr(): {} is not implemented.\n{}",
-                            cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )));
+                        let aligned =
+                            self.handle_between_expr_nodes(cursor, src, lhs, Some(not_text))?;
+                        Ok(Expr::Aligned(Box::new(aligned)))
                     }
                     SyntaxKind::IN_P => {
                         // NOT_LA IN_P
