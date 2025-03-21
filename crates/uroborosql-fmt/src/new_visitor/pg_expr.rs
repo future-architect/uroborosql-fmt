@@ -41,7 +41,10 @@ impl Visitor {
         let expr = self.handle_a_expr_inner(cursor, src)?;
 
         // cursor -> (last_node)
-        assert!(!cursor.goto_next_sibling());
+        assert!(
+            !cursor.goto_next_sibling(),
+            "visit_a_expr_or_b_expr(): cursor is not at the last node."
+        );
 
         cursor.goto_parent();
         // cursor -> a_expr or b_expr (parent)
