@@ -223,10 +223,29 @@ impl Visitor {
             SyntaxKind::select_with_parens => {
                 // サブクエリ
                 // select_with_parens opt_alias_clause
-                // - (SELECT * FROM users WHERE active = true) AS active_users
+
                 let mut aligned = AlignedExpr::new(self.visit_select_with_parens(cursor, src)?);
 
                 cursor.goto_next_sibling();
+
+                // cursor -> comment?
+                // エイリアスの直前にコメントが来る場合
+                if cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+
+                    // 行末以外のコメント（次行以降のコメント）は未定義
+                    // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
+                    if !comment.is_block_comment() && comment.loc().is_same_line(&aligned.loc()) {
+                        aligned.set_lhs_trailing_comment(comment)?;
+                    } else {
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_table_ref(): unexpected comment\n{}",
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                    cursor.goto_next_sibling();
+                }
+
                 // cursor -> opt_alias_clause?
                 if cursor.node().kind() == SyntaxKind::opt_alias_clause {
                     // opt_alias_clause
