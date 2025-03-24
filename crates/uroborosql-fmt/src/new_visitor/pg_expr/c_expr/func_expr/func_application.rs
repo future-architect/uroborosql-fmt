@@ -203,7 +203,7 @@ impl Visitor {
 
         let arg = match cursor.node().kind() {
             SyntaxKind::a_expr => {
-                let expr = self.visit_a_expr(cursor, src)?;
+                let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
                 expr.to_aligned()
             }
             // 名前付き引数
