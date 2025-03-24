@@ -36,7 +36,6 @@ pub unsafe extern "C" fn get_error_msg_address() -> *const c_char {
 /// This is unsafe because it uses unsafe function
 /// [`CStr::from_ptr`](https://doc.rust-lang.org/stable/std/ffi/struct.CStr.html#method.from_ptr).
 #[export_name = "format_sql"]
-#[no_mangle]
 pub unsafe extern "C" fn format_sql_for_wasm(src: *const c_char, config_json_str: *const c_char) {
     // Clear previous format result
     *RESULT.lock().unwrap() = CString::new("").unwrap();
