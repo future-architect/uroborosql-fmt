@@ -50,7 +50,7 @@ impl Visitor {
         };
 
         // cursor -> a_expr
-        let mut rhs = self.visit_a_expr(cursor, src)?;
+        let mut rhs = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         // バインドパラメータなら付与
         if let Some(comment) = bind_param {

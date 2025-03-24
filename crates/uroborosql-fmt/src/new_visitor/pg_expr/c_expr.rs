@@ -66,7 +66,7 @@ impl Visitor {
 
                 // cursor -> expr
                 pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
-                let expr = self.visit_a_expr(cursor, src)?;
+                let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
                 // TODO: remove_redundant_nest
 
                 cursor.goto_next_sibling();
