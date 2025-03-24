@@ -44,7 +44,7 @@ impl Visitor {
         cursor.goto_next_sibling();
 
         // cursor -> a_expr
-        let pattern = self.visit_a_expr(cursor, src)?;
+        let pattern = self.visit_a_expr_or_b_expr(cursor, src)?;
         cursor.goto_next_sibling();
 
         let mut comments_after_pattern = Vec::new();
@@ -63,7 +63,7 @@ impl Visitor {
             let escape_keyword = Expr::Primary(Box::new(escape_keyword));
 
             cursor.goto_next_sibling();
-            let escape_character = self.visit_a_expr(cursor, src)?;
+            let escape_character = self.visit_a_expr_or_b_expr(cursor, src)?;
 
             exprs.push(escape_keyword);
             exprs.push(escape_character);

@@ -228,7 +228,7 @@ impl Visitor {
         };
 
         let lhs_expr = match cursor.node().kind() {
-            SyntaxKind::a_expr => self.visit_a_expr(cursor, src)?,
+            SyntaxKind::a_expr => self.visit_a_expr_or_b_expr(cursor, src)?,
             SyntaxKind::Star => {
                 // Star は postgresql-cst-parser の語彙で、uroborosql-fmt::cst では AsteriskExpr として扱う
                 // Star は postgres の文法上 Expression ではないが、 cst モジュールの Expr に変換する

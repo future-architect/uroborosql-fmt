@@ -148,7 +148,7 @@ impl Visitor {
         cursor.goto_first_child();
 
         // cursor -> a_expr
-        let mut expr = self.visit_a_expr(cursor, src)?;
+        let mut expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         // コメントノードがバインドパラメータであるかを判定する
         // バインドパラメータならば式として処理し、そうでなければエラー
@@ -197,7 +197,7 @@ impl Visitor {
         self.pg_consume_comments_in_clause(cursor, &mut when_clause)?;
 
         // cursor -> a_expr
-        let when_expr = self.visit_a_expr(cursor, src)?;
+        let when_expr = self.visit_a_expr_or_b_expr(cursor, src)?;
         when_clause.set_body(Body::from(when_expr));
 
         cursor.goto_next_sibling();
@@ -211,7 +211,7 @@ impl Visitor {
         self.pg_consume_comments_in_clause(cursor, &mut then_clause)?;
 
         // cursor -> a_expr
-        let then_expr = self.visit_a_expr(cursor, src)?;
+        let then_expr = self.visit_a_expr_or_b_expr(cursor, src)?;
         then_clause.set_body(Body::from(then_expr));
 
         cond_expr.add_when_then_clause(when_clause, then_clause);
@@ -245,7 +245,7 @@ impl Visitor {
         self.pg_consume_comments_in_clause(cursor, &mut else_clause)?;
 
         // cursor -> a_expr
-        let else_expr = self.visit_a_expr(cursor, src)?;
+        let else_expr = self.visit_a_expr_or_b_expr(cursor, src)?;
         else_clause.set_body(Body::from(else_expr));
 
         cond_expr.set_else_clause(else_clause);

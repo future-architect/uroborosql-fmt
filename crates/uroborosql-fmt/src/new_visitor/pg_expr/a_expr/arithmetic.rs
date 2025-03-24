@@ -30,7 +30,7 @@ impl Visitor {
 
         // cursor -> a_expr
         cursor.goto_next_sibling();
-        let rhs = self.visit_a_expr(cursor, src)?;
+        let rhs = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         // 演算子を PrimaryExpr として扱う
         let op = PrimaryExpr::with_pg_node(op_node, PrimaryExprKind::Expr)?;

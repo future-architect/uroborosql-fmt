@@ -49,7 +49,7 @@ impl Visitor {
         self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> a_expr
-        let expr = self.visit_a_expr(cursor, src)?;
+        let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         // 結果として得られた式をBodyに変換する
         let body = Body::from(expr);

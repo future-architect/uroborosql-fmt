@@ -103,7 +103,7 @@ impl Visitor {
         cursor.goto_next_sibling();
         // cursor -> a_expr
         pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
-        let expr = self.visit_a_expr(cursor, src)?;
+        let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         cursor.goto_next_sibling();
         // cursor -> AS
