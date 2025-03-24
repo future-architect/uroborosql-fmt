@@ -35,3 +35,10 @@ select
 select
 	||/8	as	cube_root
 ;
+-- 単項演算子がある場合の縦揃え
+select
+	1		as	positive_value	-- 式
+,	-2		as	negative_value	-- 1文字
+,	|/4		as	square_root		-- 2文字
+,	||/8	as	cube_root		-- 3文字
+;
