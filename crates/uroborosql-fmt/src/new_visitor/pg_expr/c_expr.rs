@@ -110,10 +110,7 @@ impl Visitor {
                 Expr::Cond(Box::new(cond_expr))
             }
             SyntaxKind::func_expr => self.visit_func_expr(cursor, src)?,
-            SyntaxKind::select_with_parens => {
-                let sub_expr = self.visit_select_with_parens(cursor, src)?;
-                Expr::Sub(Box::new(sub_expr))
-            }
+            SyntaxKind::select_with_parens => self.visit_select_with_parens(cursor, src)?,
             SyntaxKind::EXISTS => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_c_expr(): EXISTS is not implemented\n{}",

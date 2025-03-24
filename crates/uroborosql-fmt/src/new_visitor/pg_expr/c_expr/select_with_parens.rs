@@ -1,9 +1,10 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{Comment, Location, SubExpr},
+    cst::{Comment, Expr, Location, ParenExpr, SubExpr},
     error::UroboroSQLFmtError,
-    new_visitor::pg_ensure_kind,
+    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    CONFIG,
 };
 
 use super::Visitor;
@@ -15,7 +16,7 @@ impl Visitor {
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
-    ) -> Result<SubExpr, UroboroSQLFmtError> {
+    ) -> Result<Expr, UroboroSQLFmtError> {
         // select_with_parens
         // - '(' select_no_parens ')'
         // - '(' select_with_parens ')'
@@ -40,23 +41,55 @@ impl Visitor {
             cursor.goto_next_sibling();
         }
 
-        // cursor -> SELECT keyword
+        // cursor -> SELECT keyword | select_with_parens
+        let expr = match cursor.node().kind() {
+            SyntaxKind::SELECT => {
+                // SelectStmt の子要素にあたるノード群が並ぶ
+                // 呼出し後、cursor は ')' を指す
+                let mut select_stmt = self.visit_select_stmt_inner(cursor, src)?;
+                pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
 
-        // SelectStmt の子要素にあたるノード群が並ぶ
-        // 呼出し後、cursor は ')' を指す
-        let mut select_stmt = self.visit_select_stmt_inner(cursor, src)?;
+                // select 文の前にコメントがあった場合、コメントを追加
+                comment_buf
+                    .into_iter()
+                    .for_each(|c| select_stmt.add_comment(c));
 
-        // select 文の前にコメントがあった場合、コメントを追加
-        comment_buf
-            .into_iter()
-            .for_each(|c| select_stmt.add_comment(c));
+                // 閉じかっこの前にあるコメントは visit_select_stmt_inner で処理済み
+                let sub_expr = SubExpr::new(select_stmt, loc);
 
-        // cursor -> ')'
-        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+                Expr::Sub(Box::new(sub_expr))
+            }
+            // ネストした select_with_parens は ParenExpr で表現する
+            SyntaxKind::select_with_parens => {
+                let select_with_parens = self.visit_select_with_parens(cursor, src)?;
+                let paren_expr = match select_with_parens {
+                    Expr::ParenExpr(mut paren_expr)
+                        if CONFIG.read().unwrap().remove_redundant_nest =>
+                    {
+                        // remove_redundant_nest オプションが有効のとき、 ParenExpr をネストさせない
+                        paren_expr.set_loc(loc);
+                        *paren_expr
+                    }
+                    _ => ParenExpr::new(select_with_parens, loc),
+                };
+
+                cursor.goto_next_sibling();
+                // cursor -> ')'
+                pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+
+                Expr::ParenExpr(Box::new(paren_expr))
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_select_with_parens(): unexpected syntax kind\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+        };
 
         cursor.goto_parent();
         pg_ensure_kind(cursor, SyntaxKind::select_with_parens, src)?;
 
-        Ok(SubExpr::new(select_stmt, loc))
+        Ok(expr)
     }
 }
