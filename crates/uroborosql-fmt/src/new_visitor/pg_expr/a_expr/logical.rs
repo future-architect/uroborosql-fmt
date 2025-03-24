@@ -3,7 +3,6 @@ use postgresql_cst_parser::tree_sitter::TreeCursor;
 use crate::{
     cst::{Comment, Expr, SeparatedLines},
     error::UroboroSQLFmtError,
-    new_visitor::pg_expr::AExprOrBExpr,
     util::convert_keyword_case,
 };
 
@@ -53,7 +52,7 @@ impl Visitor {
             cursor.goto_next_sibling();
         }
 
-        let right = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?;
+        let right = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         if let Expr::Boolean(boolean) = right {
             // 右辺がbooleanの場合はマージ処理を行う

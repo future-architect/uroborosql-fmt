@@ -5,7 +5,7 @@ use crate::{
     error::UroboroSQLFmtError,
     new_visitor::{
         create_alias_from_expr, pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor,
-        pg_expr::AExprOrBExpr, Visitor, COMMA,
+        Visitor, COMMA,
     },
     util::convert_keyword_case,
     CONFIG,
@@ -228,7 +228,7 @@ impl Visitor {
         };
 
         let lhs_expr = match cursor.node().kind() {
-            SyntaxKind::a_expr => self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?,
+            SyntaxKind::a_expr => self.visit_a_expr_or_b_expr(cursor, src)?,
             SyntaxKind::Star => {
                 // Star は postgresql-cst-parser の語彙で、uroborosql-fmt::cst では AsteriskExpr として扱う
                 // Star は postgres の文法上 Expression ではないが、 cst モジュールの Expr に変換する

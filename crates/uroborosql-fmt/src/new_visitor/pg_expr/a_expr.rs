@@ -15,13 +15,13 @@ use crate::{
     error::UroboroSQLFmtError,
 };
 
-use super::{pg_error_annotation_from_cursor, AExprOrBExpr, Visitor};
+use super::{pg_error_annotation_from_cursor, Visitor};
 
 impl Visitor {
-    /// a_expr の 子ノードを走査する
-    /// 呼出し時、cursor は a_expr の最初の子ノードを指している
-    /// 呼出し後、cursor は a_expr の最後の子ノードを指している
-    pub fn handle_a_expr_inner(
+    /// a_expr または b_expr の 子ノードを走査する
+    /// 呼出し時、cursor は a_expr または b_expr の最初の子ノードを指している
+    /// 呼出し後、cursor は a_expr または b_expr の最後の子ノードを指している
+    pub fn handle_a_expr_or_b_expr_inner(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -41,7 +41,7 @@ impl Visitor {
             }
             SyntaxKind::a_expr => {
                 // cursor -> a_expr
-                let mut lhs = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?;
+                let mut lhs = self.visit_a_expr_or_b_expr(cursor, src)?;
 
                 cursor.goto_next_sibling();
                 // cursor -> comment?

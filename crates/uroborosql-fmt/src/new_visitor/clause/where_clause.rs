@@ -4,10 +4,7 @@ use tree_sitter::TreeCursor;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    new_visitor::{
-        create_clause, ensure_kind, pg_create_clause, pg_ensure_kind, pg_expr::AExprOrBExpr,
-        Visitor,
-    },
+    new_visitor::{create_clause, ensure_kind, pg_create_clause, pg_ensure_kind, Visitor},
 };
 
 impl Visitor {
@@ -52,7 +49,7 @@ impl Visitor {
         self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> a_expr
-        let expr = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?;
+        let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         // 結果として得られた式をBodyに変換する
         let body = Body::from(expr);

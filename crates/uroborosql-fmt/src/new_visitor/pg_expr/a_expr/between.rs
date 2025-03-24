@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{AlignedExpr, Comment, Expr},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, pg_expr::AExprOrBExpr},
+    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
     util::convert_keyword_case,
 };
 
@@ -52,7 +52,7 @@ impl Visitor {
         }
 
         // cursor -> b_expr
-        let from_expr = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::BExpr)?;
+        let from_expr = self.visit_a_expr_or_b_expr(cursor, src)?;
         cursor.goto_next_sibling();
 
         // AND の直前に現れる行末コメントを処理する
@@ -72,7 +72,7 @@ impl Visitor {
         cursor.goto_next_sibling();
 
         // cursor -> a_expr
-        let to_expr = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?;
+        let to_expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         // (from_expr AND to_expr) をAlignedExprにまとめる
         let mut rhs = AlignedExpr::new(from_expr);

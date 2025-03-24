@@ -10,19 +10,6 @@ use crate::{
 };
 
 use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
-pub(crate) enum AExprOrBExpr {
-    AExpr,
-    BExpr,
-}
-
-impl AExprOrBExpr {
-    pub(crate) fn kind(&self) -> SyntaxKind {
-        match self {
-            AExprOrBExpr::AExpr => SyntaxKind::a_expr,
-            AExprOrBExpr::BExpr => SyntaxKind::b_expr,
-        }
-    }
-}
 
 impl Visitor {
     /// a_expr または b_expr を走査する
@@ -33,7 +20,6 @@ impl Visitor {
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
-        expr_type: AExprOrBExpr,
     ) -> Result<Expr, UroboroSQLFmtError> {
         // b_expr は a_expr のサブセットであるため、a_expr および b_expr の走査には a_expr 用の visitor をそのまま使う
 
@@ -48,10 +34,11 @@ impl Visitor {
             None
         };
 
+        let expr_kind = cursor.node().kind();
         cursor.goto_first_child();
 
         // cursor -> c_expr | DEFAULT | Plus | Minus | NOT | qual_Op | a_expr | UNIQUE
-        let mut expr = self.handle_a_expr_inner(cursor, src)?;
+        let mut expr = self.handle_a_expr_or_b_expr_inner(cursor, src)?;
 
         // バインドパラメータの追加
         if let Some(comment_node) = head_comment_node {
@@ -76,7 +63,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> a_expr or b_expr (parent)
-        pg_ensure_kind(cursor, expr_type.kind(), src)?;
+        pg_ensure_kind(cursor, expr_kind, src)?;
 
         Ok(expr)
     }
@@ -97,10 +84,7 @@ impl Visitor {
 
         // 最初の要素
         if cursor.node().kind() == SyntaxKind::a_expr {
-            exprs.push(
-                self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?
-                    .to_aligned(),
-            );
+            exprs.push(self.visit_a_expr_or_b_expr(cursor, src)?.to_aligned());
         }
 
         // 残りの要素
@@ -109,10 +93,7 @@ impl Visitor {
             match cursor.node().kind() {
                 SyntaxKind::Comma => {}
                 SyntaxKind::a_expr => {
-                    exprs.push(
-                        self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?
-                            .to_aligned(),
-                    );
+                    exprs.push(self.visit_a_expr_or_b_expr(cursor, src)?.to_aligned());
                 }
                 // バインドパラメータを想定
                 SyntaxKind::C_COMMENT => {
@@ -130,7 +111,7 @@ impl Visitor {
 
                     // cursor -> a_expr
                     pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
-                    let mut expr = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?;
+                    let mut expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
                     // コメントがバインドパラメータならば式に付与
                     if comment.is_block_comment() && comment.loc().is_next_to(&expr.loc()) {

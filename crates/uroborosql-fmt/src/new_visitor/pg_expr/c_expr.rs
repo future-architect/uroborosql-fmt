@@ -10,7 +10,7 @@ use crate::{
     error::UroboroSQLFmtError,
 };
 
-use super::{pg_ensure_kind, pg_error_annotation_from_cursor, AExprOrBExpr, Visitor};
+use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
 
 /*
  * c_expr の構造
@@ -66,7 +66,7 @@ impl Visitor {
 
                 // cursor -> expr
                 pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
-                let expr = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?;
+                let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
                 // TODO: remove_redundant_nest
 
                 cursor.goto_next_sibling();

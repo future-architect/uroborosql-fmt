@@ -6,7 +6,7 @@ use crate::{
         PrimaryExprKind,
     },
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, pg_expr::AExprOrBExpr},
+    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
     util::convert_keyword_case,
 };
 
@@ -103,7 +103,7 @@ impl Visitor {
         cursor.goto_next_sibling();
         // cursor -> a_expr
         pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
-        let expr = self.visit_a_expr_or_b_expr(cursor, src, AExprOrBExpr::AExpr)?;
+        let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         cursor.goto_next_sibling();
         // cursor -> AS
