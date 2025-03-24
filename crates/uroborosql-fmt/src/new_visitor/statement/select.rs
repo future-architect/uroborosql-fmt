@@ -84,6 +84,34 @@ impl Visitor {
                     let comment = Comment::pg_new(cursor.node());
                     statement.add_comment_to_child(comment)?;
                 }
+                SyntaxKind::UNION | SyntaxKind::INTERSECT | SyntaxKind::EXCEPT => {
+                    // (UNION | INTERSECT | EXCEPT) set_quantifier? (select_clause)
+
+                    let mut combining_clause = Clause::from_pg_node(cursor.node());
+                    cursor.goto_next_sibling();
+
+                    // cursor -> set_quantifier?
+                    if cursor.node().kind() == SyntaxKind::set_quantifier {
+                        // set_quantifier
+                        // - ALL
+                        // - DISTINCT
+                        combining_clause.pg_extend_kw(cursor.node());
+                        cursor.goto_next_sibling();
+                    }
+
+                    // 演算子のみからなる句を追加
+                    statement.add_clause(combining_clause);
+
+                    while cursor.node().is_comment() {
+                        let comment = Comment::pg_new(cursor.node());
+                        statement.add_comment_to_child(comment)?;
+                        cursor.goto_next_sibling();
+                    }
+
+                    // cursor -> (select_clause)
+                    let select_clause = self.visit_select_clause(cursor, src)?;
+                    statement.add_clause(select_clause);
+                }
                 SyntaxKind::into_clause => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "visit_select_stmt(): into_clause is not implemented\n{}",
