@@ -62,7 +62,7 @@ impl Visitor {
             // ネストした select_with_parens は ParenExpr で表現する
             SyntaxKind::select_with_parens => {
                 let select_with_parens = self.visit_select_with_parens(cursor, src)?;
-                let paren_expr = match select_with_parens {
+                let mut paren_expr = match select_with_parens {
                     Expr::ParenExpr(mut paren_expr)
                         if CONFIG.read().unwrap().remove_redundant_nest =>
                     {
@@ -73,9 +73,19 @@ impl Visitor {
                     _ => ParenExpr::new(select_with_parens, loc),
                 };
 
+                // 開きかっこと式の間にあるコメントを追加
+                for comment in comment_buf {
+                    paren_expr.add_start_comment(comment);
+                }
+
                 cursor.goto_next_sibling();
-                // cursor -> ')'
-                pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+
+                // cursor -> comments?
+                // 閉じかっこの前にあるコメントを追加
+                while cursor.node().is_comment() {
+                    paren_expr.add_comment_to_child(Comment::pg_new(cursor.node()))?;
+                    cursor.goto_next_sibling();
+                }
 
                 Expr::ParenExpr(Box::new(paren_expr))
             }
@@ -86,6 +96,9 @@ impl Visitor {
                 )))
             }
         };
+
+        // cursor -> ')'
+        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
 
         cursor.goto_parent();
         pg_ensure_kind(cursor, SyntaxKind::select_with_parens, src)?;
