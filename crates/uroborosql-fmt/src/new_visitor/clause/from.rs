@@ -223,11 +223,58 @@ impl Visitor {
             SyntaxKind::select_with_parens => {
                 // サブクエリ
                 // select_with_parens opt_alias_clause
-                // - (SELECT * FROM users WHERE active = true) AS active_users
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_table_ref(): select_with_parens node appeared. Derived tables (subqueries) are not implemented yet.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
+
+                let mut aligned = AlignedExpr::new(self.visit_select_with_parens(cursor, src)?);
+
+                cursor.goto_next_sibling();
+
+                // cursor -> comment?
+                // エイリアスの直前にコメントが来る場合
+                if cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+
+                    // 行末以外のコメント（次行以降のコメント）は未定義
+                    // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
+                    if !comment.is_block_comment() && comment.loc().is_same_line(&aligned.loc()) {
+                        aligned.set_lhs_trailing_comment(comment)?;
+                    } else {
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_table_ref(): unexpected comment\n{}",
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                    cursor.goto_next_sibling();
+                }
+
+                // cursor -> opt_alias_clause?
+                if cursor.node().kind() == SyntaxKind::opt_alias_clause {
+                    // opt_alias_clause
+                    // - alias_clause
+                    cursor.goto_first_child();
+
+                    let (as_keyword, col_id) = self.visit_alias_clause(cursor, src)?;
+
+                    if let Some(as_keyword) = as_keyword {
+                        // AS があり、かつ AS を除去する設定が有効ならば AS を除去する
+                        if CONFIG.read().unwrap().remove_table_as_keyword {
+                            aligned.add_rhs(None, col_id);
+                        } else {
+                            aligned.add_rhs(Some(convert_keyword_case(&as_keyword)), col_id);
+                        }
+                    } else {
+                        // ASが無い場合は補完しない
+                        aligned.add_rhs(None, col_id);
+                    }
+
+                    cursor.goto_parent();
+                    pg_ensure_kind(cursor, SyntaxKind::opt_alias_clause, src)?;
+                }
+
+                cursor.goto_parent();
+                // cursor -> table_ref
+                pg_ensure_kind(cursor, SyntaxKind::table_ref, src)?;
+
+                Ok(aligned)
             }
             SyntaxKind::joined_table => {
                 // テーブル結合
