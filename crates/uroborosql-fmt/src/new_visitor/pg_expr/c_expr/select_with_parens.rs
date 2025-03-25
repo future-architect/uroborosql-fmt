@@ -10,7 +10,7 @@ use crate::{
 use super::Visitor;
 
 impl Visitor {
-    /// かっこで囲まれたSELECTサブクエリをフォーマットする
+    /// かっこで囲まれたSELECT文をフォーマットする
     /// 呼び出し後、cursor は select_subexpression を指している
     pub fn visit_select_with_parens(
         &mut self,

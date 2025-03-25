@@ -89,24 +89,18 @@ impl Visitor {
         cursor.goto_first_child();
         // cursor -> select_with_parens | '('
 
-        match cursor.node().kind() {
+        let expr = match cursor.node().kind() {
             SyntaxKind::select_with_parens => {
-                // Expr::Sub を返す
-                // Ok(Expr::Sub(Box::new(subquery)))
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_in_expr(): {} is not implemented.\n{}",
-                    cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
+                let subquery_expr = self.visit_select_with_parens(cursor, src)?;
+
+                subquery_expr
             }
             SyntaxKind::LParen => {
                 // Expr::ColumnList を返す
                 // '(' expr_list ')' を ColumnList に変換する
                 let column_list = self.visit_parenthesized_expr_list(cursor, src)?;
-                cursor.goto_parent();
-                // cursor -> in_expr
 
-                Ok(Expr::ColumnList(Box::new(column_list)))
+                Expr::ColumnList(Box::new(column_list))
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
@@ -115,6 +109,12 @@ impl Visitor {
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
-        }
+        };
+
+        cursor.goto_parent();
+        // cursor -> in_expr
+        pg_ensure_kind(cursor, SyntaxKind::in_expr, src)?;
+
+        Ok(expr)
     }
 }
