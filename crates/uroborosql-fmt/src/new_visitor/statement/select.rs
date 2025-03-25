@@ -36,17 +36,31 @@ impl Visitor {
         // ├── with_clause (select_clause) opt_sort_clause for_locking_clause opt_select_limit
         // ├── with_clause (select_clause) opt_sort_clause select_limit opt_for_locking_clause
         // └── select_with_parens
-        //     ├── '(' select_no_parens ')'
+        //     ├── '(' (select_no_parens) ')'
         //     └── '(' select_with_parens ')'
         //
         // select_clause (clause 自体はない)
         // - context: https://github.com/future-architect/postgresql-cst-parser/pull/2#discussion_r1897026688
 
+        cursor.goto_first_child();
+
+        let statement = self.visit_select_stmt_inner(cursor, src)?;
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::SelectStmt, src)?;
+
+        Ok(statement)
+    }
+
+    /// SelectStmt の子要素をフォーマットする
+    pub(crate) fn visit_select_stmt_inner(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        src: &str,
+    ) -> Result<Statement, UroboroSQLFmtError> {
         let mut statement = Statement::new();
 
-        cursor.goto_first_child();
-        // cusor -> with_clause?
-
+        // cursor -> with_clause?
         if cursor.node().kind() == SyntaxKind::with_clause {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_select_stmt(): with_clause is not implemented\n{}",
@@ -144,6 +158,10 @@ impl Visitor {
                         pg_error_annotation_from_cursor(cursor, src)
                     )));
                 }
+                SyntaxKind::RParen => {
+                    // select_with_parens をフォーマットする場合
+                    break;
+                }
                 _ => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "visit_select_stmt(): {} node appeared. This node is not considered yet.\n{}",
@@ -153,9 +171,6 @@ impl Visitor {
                 }
             }
         }
-
-        cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::SelectStmt, src)?;
 
         Ok(statement)
     }

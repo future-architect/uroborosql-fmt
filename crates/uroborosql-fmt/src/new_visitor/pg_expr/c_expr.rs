@@ -2,6 +2,7 @@ mod aexpr_const;
 mod case_expr;
 mod columnref;
 mod func_expr;
+mod select_with_parens;
 
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
@@ -109,12 +110,7 @@ impl Visitor {
                 Expr::Cond(Box::new(cond_expr))
             }
             SyntaxKind::func_expr => self.visit_func_expr(cursor, src)?,
-            SyntaxKind::select_with_parens => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_c_expr(): select_with_parens is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
-            }
+            SyntaxKind::select_with_parens => self.visit_select_with_parens(cursor, src)?,
             SyntaxKind::EXISTS => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_c_expr(): EXISTS is not implemented\n{}",
