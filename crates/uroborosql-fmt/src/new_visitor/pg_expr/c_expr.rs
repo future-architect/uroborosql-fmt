@@ -1,6 +1,7 @@
 mod aexpr_const;
 mod case_expr;
 mod columnref;
+mod exists_subquery;
 mod func_expr;
 mod select_with_parens;
 
@@ -112,10 +113,8 @@ impl Visitor {
             SyntaxKind::func_expr => self.visit_func_expr(cursor, src)?,
             SyntaxKind::select_with_parens => self.visit_select_with_parens(cursor, src)?,
             SyntaxKind::EXISTS => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_c_expr(): EXISTS is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
+                let exists_subquery = self.handle_exists_subquery_nodes(cursor, src)?;
+                Expr::ExistsSubquery(Box::new(exists_subquery))
             }
             SyntaxKind::ARRAY => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
