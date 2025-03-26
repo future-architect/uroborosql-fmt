@@ -96,7 +96,7 @@ impl Visitor {
             let mut loc = Location::from(not_node.range());
             loc.append(last_expr.loc());
 
-            let unary = UnaryExpr::new(not_node.text(), last_expr, loc);
+            let unary = UnaryExpr::new(convert_keyword_case(not_node.text()), last_expr, loc);
             Expr::Unary(Box::new(unary))
         } else {
             last_expr
