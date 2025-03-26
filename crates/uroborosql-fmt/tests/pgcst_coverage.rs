@@ -84,7 +84,8 @@ fn try_format_with_new_parser(file_path: &str) -> Result<String, String> {
             if formatted.trim() == expected.trim() {
                 Ok(formatted)
             } else {
-                println!("\nDiff(expected vs. got):");
+                println!("\n❌ {}", file_path);
+                println!("Diff(expected vs. got):");
                 print_diff(expected.trim(), formatted.trim());
                 Err(format!("Formatting result does not match"))
             }
