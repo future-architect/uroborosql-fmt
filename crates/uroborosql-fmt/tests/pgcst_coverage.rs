@@ -311,6 +311,7 @@ fn run_test_suite() -> Vec<TestResult> {
 }
 
 #[test]
+#[ignore = "Development-only test for checking parser coverage. Not part of regular test suite"]
 fn test_with_coverage() {
     let results = run_test_suite();
 
