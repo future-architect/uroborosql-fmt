@@ -154,7 +154,7 @@ impl Visitor {
         // バインドパラメータならば式として処理し、そうでなければエラー
         // ここで、単純CASE式の条件以外の部分では、バインドパラメータを持つ式は現れないことを想定している
         if let Some(comment) = head_comment {
-            if comment.is_block_comment() && comment.loc().is_next_to(&Location::from(expr.loc())) {
+            if comment.is_block_comment() && comment.loc().is_next_to(&expr.loc()) {
                 expr.set_head_comment(comment);
                 cond_expr.set_expr(expr);
             } else {

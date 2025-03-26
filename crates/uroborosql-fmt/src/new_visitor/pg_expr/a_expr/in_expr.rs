@@ -90,11 +90,7 @@ impl Visitor {
         // cursor -> select_with_parens | '('
 
         let expr = match cursor.node().kind() {
-            SyntaxKind::select_with_parens => {
-                let subquery_expr = self.visit_select_with_parens(cursor, src)?;
-
-                subquery_expr
-            }
+            SyntaxKind::select_with_parens => self.visit_select_with_parens(cursor, src)?,
             SyntaxKind::LParen => {
                 // Expr::ColumnList を返す
                 // '(' expr_list ')' を ColumnList に変換する

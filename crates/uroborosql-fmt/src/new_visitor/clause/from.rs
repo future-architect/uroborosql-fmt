@@ -1,12 +1,9 @@
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
-use tree_sitter::TreeCursor;
 
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     new_visitor::{
-        create_clause, ensure_kind,
-        expr::{ComplementConfig, ComplementKind},
         pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA,
     },
     util::{convert_identifier_case, convert_keyword_case},
@@ -14,37 +11,6 @@ use crate::{
 };
 
 impl Visitor {
-    /// FROM句をClause構造体で返す
-    pub(crate) fn visit_from_clause(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<Clause, UroboroSQLFmtError> {
-        // from_clauseは必ずFROMを子供に持つ
-        cursor.goto_first_child();
-
-        // cursor -> FROM
-        let mut clause = create_clause(cursor, src, "FROM")?;
-        cursor.goto_next_sibling();
-        self.consume_comment_in_clause(cursor, src, &mut clause)?;
-
-        // cursor -> aliasable_expression
-        // commaSep1(_aliasable_expression)
-
-        // ASがあれば除去する
-        // エイリアス補完は現状行わない
-        let complement_config = ComplementConfig::new(ComplementKind::TableName, true, false);
-        let body = self.visit_comma_sep_alias(cursor, src, Some(&complement_config))?;
-
-        clause.set_body(body);
-
-        // cursorをfrom_clauseに戻す
-        cursor.goto_parent();
-        ensure_kind(cursor, "from_clause", src)?;
-
-        Ok(clause)
-    }
-
     pub(crate) fn pg_visit_from_clause(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
@@ -280,29 +246,29 @@ impl Visitor {
                 // テーブル結合
                 // joined_table
                 // - users INNER JOIN orders ON users.id = orders.user_id
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_table_ref(): joined_table node appeared. Table joins are not implemented yet.\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
-                )));
+                )))
             }
             SyntaxKind::LParen => {
                 // 括弧付き結合
                 // '(' joined_table ')' alias_clause
                 // - (users JOIN orders ON users.id = orders.user_id) AS uo
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_table_ref(): parenthesized join node appeared. Parenthesized joins are not implemented yet.\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
-                )));
+                )))
             }
             SyntaxKind::func_table => {
                 // テーブル関数呼び出し
                 // func_table func_alias_clause
                 // - generate_series(1, 10) as g(val)
                 // - unnest(array[1, 2, 3]) as nums(n)
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_table_ref(): func_table node appeared. Table function calls are not implemented yet.\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
-                )));
+                )))
             }
             SyntaxKind::LATERAL_P => {
                 // LATERAL系
@@ -310,26 +276,26 @@ impl Visitor {
                 // LATERAL xmltable opt_alias_clause
                 // LATERAL select_with_parens opt_alias_clause
                 // LATERAL json_table opt_alias_clause
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_table_ref(): LATERAL_P node appeared. LATERAL expressions are not implemented yet.\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
-                )));
+                )))
             }
             SyntaxKind::xmltable => {
                 // XMLテーブル
                 // xmltable opt_alias_clause
                 // - XMLTABLE('/root/row' PASSING data COLUMNS id int PATH '@id')
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_table_ref(): xmltable node appeared. XML tables are not implemented yet.\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
-                )));
+                )))
             }
             _ => {
                 // TODO: json_table
-                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_table_ref(): unexpected node kind\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
-                )));
+                )))
             }
         }
     }
