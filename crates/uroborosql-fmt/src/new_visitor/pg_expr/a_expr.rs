@@ -1,3 +1,4 @@
+mod all_some_any_subquery;
 mod arithmetic;
 mod between;
 mod comparison;
@@ -166,13 +167,10 @@ impl Visitor {
                 let aligned = self.handle_between_expr_nodes(cursor, src, lhs, None)?;
                 Ok(Expr::Aligned(Box::new(aligned)))
             }
-            // サブクエリ
+            // ALL, ANY, SOME 式
             SyntaxKind::subquery_Op => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_a_expr_or_b_expr(): {} is not implemented.\n{}",
-                    cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
+                let aligned = self.handle_all_some_any_nodes(cursor, src, lhs)?;
+                Ok(Expr::Aligned(Box::new(aligned)))
             }
             SyntaxKind::NOT_LA => {
                 // NOT キーワードのうち、 後に BETWEEN, IN, LIKE, ILIKE, SIMILAR のいずれかが続くケース
