@@ -25,7 +25,7 @@ pub(crate) fn validate_format_result(src: &str) -> Result<(), UroboroSQLFmtError
     let format_result = pg_format_tree(&src_ts_tree, src)?;
     let dst_ts_tree = ts_parse(&format_result).unwrap();
 
-    let validate_result = compare_tree(src, &format_result, &src_ts_tree, &dst_ts_tree, src);
+    let validate_result = compare_tree(&src_ts_tree, &dst_ts_tree, src, &format_result);
 
     if dbg && validate_result.is_err() {
         eprintln!(
@@ -47,17 +47,16 @@ pub(crate) fn validate_format_result(src: &str) -> Result<(), UroboroSQLFmtError
 /// tree-sitter-sqlによって得られた二つのCSTをトークン列に変形させ、それらを比較して等価であるかを判定する。
 /// 等価であれば true を、そうでなければ false を返す。
 fn compare_tree(
-    src_str: &str,
-    format_result: &str,
     src_ts_tree: &Tree,
     dst_ts_tree: &Tree,
     src: &str,
+    format_result: &str,
 ) -> Result<(), UroboroSQLFmtError> {
     let mut src_tokens: Vec<Token> = vec![];
-    construct_tokens(&src_ts_tree.root_node(), src_str, &mut src_tokens);
+    construct_tokens(&src_ts_tree.root_node(), &mut src_tokens);
 
     let mut dst_tokens: Vec<Token> = vec![];
-    construct_tokens(&dst_ts_tree.root_node(), format_result, &mut dst_tokens);
+    construct_tokens(&dst_ts_tree.root_node(), &mut dst_tokens);
 
     swap_comma_and_trailing_comment(&mut src_tokens);
 
@@ -111,7 +110,7 @@ impl Token {
     }
 }
 
-fn construct_tokens(node: &Node, src: &str, tokens: &mut Vec<Token>) {
+fn construct_tokens(node: &Node, tokens: &mut Vec<Token>) {
     if node.child_count() == 0 {
         let token = Token::new(node);
         tokens.push(token);
@@ -119,7 +118,7 @@ fn construct_tokens(node: &Node, src: &str, tokens: &mut Vec<Token>) {
         let mut cursor = node.walk();
         if cursor.goto_first_child() {
             loop {
-                construct_tokens(&cursor.node(), src, tokens);
+                construct_tokens(&cursor.node(), tokens);
                 if !cursor.goto_next_sibling() {
                     break;
                 }
@@ -235,7 +234,7 @@ mod tests {
         let src_ts_tree = ts_parse(src).unwrap();
         let dst_ts_tree = ts_parse(dst).unwrap();
 
-        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
+        assert!(compare_tree(&src_ts_tree, &dst_ts_tree, src, dst).is_err());
     }
 
     #[test]
@@ -246,7 +245,7 @@ mod tests {
         let src_ts_tree = ts_parse(src).unwrap();
         let dst_ts_tree = ts_parse(dst).unwrap();
 
-        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
+        assert!(compare_tree(&src_ts_tree, &dst_ts_tree, src, dst).is_err());
     }
 
     #[test]
@@ -257,7 +256,7 @@ mod tests {
         let src_ts_tree = ts_parse(src).unwrap();
         let dst_ts_tree = ts_parse(dst).unwrap();
 
-        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
+        assert!(compare_tree(&src_ts_tree, &dst_ts_tree, src, dst).is_err());
     }
 
     #[test]
@@ -281,7 +280,7 @@ ORDER BY
         let src_ts_tree = ts_parse(src).unwrap();
         let dst_ts_tree = ts_parse(dst).unwrap();
 
-        compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src)
+        compare_tree(&src_ts_tree, &dst_ts_tree, src, dst)
     }
 
     #[test]
@@ -308,15 +307,13 @@ ORDER BY
         let src_ts_tree = ts_parse(src).unwrap();
         let dst_ts_tree = ts_parse(dst).unwrap();
 
-        assert!(compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src).is_err());
+        assert!(compare_tree(&src_ts_tree, &dst_ts_tree, src, dst).is_err());
     }
 
     fn new_token(kind: SyntaxKind, text: impl Into<String>, location: Location) -> Token {
-        let kind = kind.into();
-        let text = text.into();
         Token {
             kind,
-            text,
+            text: text.into(),
             location,
         }
     }
@@ -327,7 +324,7 @@ ORDER BY
 
         let ts_tree = ts_parse(src).unwrap();
         let mut tokens: Vec<Token> = vec![];
-        construct_tokens(&ts_tree.root_node(), src, &mut tokens);
+        construct_tokens(&ts_tree.root_node(), &mut tokens);
 
         let expected_tokens = vec![
             new_token(
@@ -408,6 +405,6 @@ select
         let src_ts_tree = ts_parse(src).unwrap();
         let dst_ts_tree = ts_parse(dst).unwrap();
 
-        compare_tree(src, dst, &src_ts_tree, &dst_ts_tree, src)
+        compare_tree(&src_ts_tree, &dst_ts_tree, src, dst)
     }
 }

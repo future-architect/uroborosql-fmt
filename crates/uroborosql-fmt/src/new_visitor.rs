@@ -1,12 +1,9 @@
 mod clause;
-mod expr;
 mod pg_expr;
 mod statement;
 
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
-use tree_sitter::TreeCursor;
 
-pub(crate) const COMMENT: &str = "comment";
 pub(crate) const COMMA: &str = ",";
 
 use crate::{
@@ -15,8 +12,6 @@ use crate::{
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, create_error_annotation},
 };
-
-use self::expr::ComplementConfig;
 
 pub(crate) struct Visitor {
     /// select文、insert文などが複数回出てきた際に1度だけSQL_IDを補完する、という処理を実現するためのフラグ
@@ -57,9 +52,7 @@ impl Visitor {
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
     ) -> Result<Vec<Statement>, UroboroSQLFmtError> {
-        use postgresql_cst_parser::syntax_kind::SyntaxKind::{
-            DeleteStmt, InsertStmt, SelectStmt, Semicolon, UpdateStmt,
-        };
+        use postgresql_cst_parser::syntax_kind::SyntaxKind::{SelectStmt, Semicolon};
 
         // source_file -> _statement*
         let mut source: Vec<Statement> = vec![];
@@ -146,145 +139,6 @@ impl Visitor {
         Ok(source)
     }
 
-    /// _aliasable_expressionが,で区切られた構造をBodyにして返す
-    fn visit_comma_sep_alias(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-        // エイリアス/AS補完に関する設定
-        // Noneの場合は補完を行わない
-        complement_config: Option<&ComplementConfig>,
-    ) -> Result<Body, UroboroSQLFmtError> {
-        let mut separated_lines = SeparatedLines::new();
-
-        // commaSep(_aliasable_expression)
-        let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
-        separated_lines.add_expr(alias, None, vec![]);
-
-        // ("," _aliasable_expression)*
-        while cursor.goto_next_sibling() {
-            // cursor -> , または comment または _aliasable_expression
-            match cursor.node().kind() {
-                // tree-sitter-sqlにより、構文エラーは検出されるはずなので、"," は読み飛ばしてもよい。
-                "," => {}
-                COMMENT => {
-                    let comment_node = cursor.node();
-                    let comment = Comment::new(comment_node, src);
-
-                    // tree-sitter-sqlの性質上、コメントが最後の子供になることはないはずなので、panicしない。
-                    let sibling_node = cursor.node().next_sibling().unwrap();
-
-                    // コメントノードがバインドパラメータであるかを判定し、バインドパラメータならば式として処理し、
-                    // そうでなければ単にコメントとして処理する。
-                    if comment.is_block_comment()
-                        && comment
-                            .loc()
-                            .is_next_to(&Location::new(sibling_node.range()))
-                    {
-                        let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
-                        separated_lines.add_expr(alias, Some(COMMA.to_string()), vec![]);
-                    } else {
-                        separated_lines.add_comment_to_child(comment)?;
-                    }
-                }
-                _ => {
-                    let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
-                    separated_lines.add_expr(alias, Some(COMMA.to_string()), vec![]);
-                }
-            }
-        }
-
-        Ok(Body::SepLines(separated_lines))
-    }
-
-    /// identifierが,で区切られた構造をBodyにして返す
-    /// 呼び出し後、cursorは区切られた構造の次の要素を指す
-    fn visit_comma_sep_identifier(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<Body, UroboroSQLFmtError> {
-        let mut separated_lines = SeparatedLines::new();
-
-        // commaSep(identifier)
-        let identifier = self.visit_expr(cursor, src)?;
-        separated_lines.add_expr(identifier.to_aligned(), None, vec![]);
-
-        // ("," identifier)*
-        while cursor.goto_next_sibling() {
-            // cursor -> , または comment または identifier
-            match cursor.node().kind() {
-                // tree-sitter-sqlにより、構文エラーは検出されるはずなので、"," は読み飛ばしてもよい。
-                "," => {}
-                COMMENT => {
-                    let comment_node = cursor.node();
-                    let comment = Comment::new(comment_node, src);
-
-                    // tree-sitter-sqlの性質上、コメントが最後の子供になることはないはずなので、panicしない。
-                    let sibling_node = cursor.node().next_sibling().unwrap();
-
-                    // コメントノードがバインドパラメータであるかを判定し、バインドパラメータならば式として処理し、
-                    // そうでなければ単にコメントとして処理する。
-                    if comment.is_block_comment()
-                        && comment
-                            .loc()
-                            .is_next_to(&Location::new(sibling_node.range()))
-                    {
-                        let identifier = self.visit_expr(cursor, src)?;
-                        separated_lines.add_expr(
-                            identifier.to_aligned(),
-                            Some(COMMA.to_string()),
-                            vec![],
-                        );
-                    } else {
-                        separated_lines.add_comment_to_child(comment)?;
-                    }
-                }
-                "identifier" => {
-                    let identifier = self.visit_expr(cursor, src)?;
-                    separated_lines.add_expr(
-                        identifier.to_aligned(),
-                        Some(COMMA.to_string()),
-                        vec![],
-                    );
-                }
-                _ => {
-                    break;
-                }
-            }
-        }
-
-        Ok(Body::SepLines(separated_lines))
-    }
-
-    /// カーソルが指すノードがSQL_IDであれば、clauseに追加する
-    /// もし (_SQL_ID_が存在していない) && (_SQL_ID_がまだ出現していない) && (_SQL_ID_の補完がオン)
-    /// の場合は補完する
-    fn consume_or_complement_sql_id(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-        clause: &mut Clause,
-    ) {
-        if cursor.node().kind() == COMMENT {
-            let text = cursor.node().utf8_text(src.as_bytes()).unwrap();
-
-            if SqlID::is_sql_id(text) {
-                clause.set_sql_id(SqlID::new(text.to_string()));
-                cursor.goto_next_sibling();
-                self.should_complement_sql_id = false;
-
-                return;
-            }
-        }
-
-        // SQL_IDがない、かつSQL補完フラグがtrueの場合、補完する
-        if self.should_complement_sql_id {
-            clause.set_sql_id(SqlID::new("/* _SQL_ID_ */".to_string()));
-            self.should_complement_sql_id = false;
-        }
-    }
-
     /// カーソルが指すノードがSQL_IDであれば、clauseに追加する
     /// もし (_SQL_ID_が存在していない) && (_SQL_ID_がまだ出現していない) && (_SQL_ID_の補完がオン)
     /// の場合は補完する
@@ -313,22 +167,6 @@ impl Visitor {
     }
 
     /// カーソルが指すノードがコメントであれば、コメントを消費してclauseに追加する
-    fn consume_comment_in_clause(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-        clause: &mut Clause,
-    ) -> Result<(), UroboroSQLFmtError> {
-        while cursor.node().kind() == COMMENT {
-            let comment = Comment::new(cursor.node(), src);
-            clause.add_comment_to_child(comment)?;
-            cursor.goto_next_sibling();
-        }
-
-        Ok(())
-    }
-
-    /// カーソルが指すノードがコメントであれば、コメントを消費してclauseに追加する
     fn pg_consume_comments_in_clause(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
@@ -341,25 +179,6 @@ impl Visitor {
         }
 
         Ok(())
-    }
-}
-
-/// cursorが指定した種類のノードを指しているかどうかをチェックする関数
-/// 期待しているノードではない場合、エラーを返す
-fn ensure_kind<'a>(
-    cursor: &'a TreeCursor<'a>,
-    kind: &'a str,
-    src: &'a str,
-) -> Result<&'a TreeCursor<'a>, UroboroSQLFmtError> {
-    if cursor.node().kind() != kind {
-        Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-            "ensure_kind(): excepted node is {}, but actual {}\n{}",
-            kind,
-            cursor.node().kind(),
-            error_annotation_from_cursor(cursor, src)
-        )))
-    } else {
-        Ok(cursor)
     }
 }
 
@@ -380,25 +199,6 @@ fn pg_ensure_kind<'a>(
     }
 }
 
-/// エイリアス補完を行う際に、エイリアス名を持つ Expr を生成する関数。
-/// 引数に元の式を与える。その式がPrimary式ではない場合は、エイリアス名を生成できないので、None を返す。
-fn create_alias(lhs: &Expr) -> Option<Expr> {
-    // 補完用に生成した式には、仮に左辺の位置情報を入れておく
-    let loc = lhs.loc();
-
-    match lhs {
-        Expr::Primary(prim) if prim.is_identifier() => {
-            // Primary式であり、さらに識別子である場合のみ、エイリアス名を作成する
-            let element = prim.element();
-            element
-                .split('.')
-                .last()
-                .map(|s| Expr::Primary(Box::new(PrimaryExpr::new(convert_identifier_case(s), loc))))
-        }
-        _ => None,
-    }
-}
-
 fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
     let loc = lhs.loc();
 
@@ -411,32 +211,6 @@ fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
         }),
         _ => None,
     }
-}
-
-/// keyword の Clauseを生成する関数。
-/// 呼び出し後の cursor はキーワードの最後のノードを指す。
-/// cursor のノードがキーワードと異なっていたら UroboroSQLFmtErrorを返す。
-/// 複数の語からなるキーワードは '_' で区切られており、それぞれのノードは同じ kind を持っている。
-///
-/// 例: "ORDER_BY" は
-///     (content: "ORDER", kind: "ORDER_BY")
-///     (content: "BY", kind: "ORDER_BY")
-/// というノードになっている。
-fn create_clause(
-    cursor: &mut TreeCursor,
-    src: &str,
-    keyword: &str,
-) -> Result<Clause, UroboroSQLFmtError> {
-    ensure_kind(cursor, keyword, src)?;
-    let mut clause = Clause::from_node(cursor.node(), src);
-
-    for _ in 1..keyword.split('_').count() {
-        cursor.goto_next_sibling();
-        ensure_kind(cursor, keyword, src)?;
-        clause.extend_kw(cursor.node(), src);
-    }
-
-    Ok(clause)
 }
 
 fn pg_create_clause(
@@ -461,16 +235,6 @@ fn pg_create_clause(
 ///   | ^^^^^^^^^^^^^ Appears as "ERROR" node on the CST
 ///   |
 /// ```
-fn error_annotation_from_cursor(cursor: &TreeCursor, src: &str) -> String {
-    let label = format!(r#"Appears as "{}" node on the CST"#, cursor.node().kind());
-    let location = Location::new(cursor.node().range());
-
-    match create_error_annotation(&location, &label, src) {
-        Ok(error_annotation) => error_annotation,
-        Err(_) => "".to_string(),
-    }
-}
-
 fn pg_error_annotation_from_cursor(
     cursor: &postgresql_cst_parser::tree_sitter::TreeCursor,
     src: &str,
