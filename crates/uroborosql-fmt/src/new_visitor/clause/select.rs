@@ -189,7 +189,7 @@ impl Visitor {
 
         // cursorをtarget_listに
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::target_list, &src)?;
+        pg_ensure_kind(cursor, SyntaxKind::target_list, src)?;
 
         Ok(Body::SepLines(sep_lines))
     }

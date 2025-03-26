@@ -84,9 +84,10 @@ fn try_format_with_new_parser(file_path: &str) -> Result<String, String> {
             if formatted.trim() == expected.trim() {
                 Ok(formatted)
             } else {
-                println!("\nDiff(expected vs. got):");
+                println!("\n❌ {}", file_path);
+                println!("Diff(expected vs. got):");
                 print_diff(expected.trim(), formatted.trim());
-                Err(format!("Formatting result does not match"))
+                Err("Formatting result does not match".to_string())
             }
         }
         Err(e) => {
@@ -310,6 +311,7 @@ fn run_test_suite() -> Vec<TestResult> {
 }
 
 #[test]
+#[ignore = "Development-only test for checking parser coverage. Not part of regular test suite"]
 fn test_with_coverage() {
     let results = run_test_suite();
 
