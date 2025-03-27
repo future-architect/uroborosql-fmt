@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 use std::path::Path;
 
@@ -26,6 +27,35 @@ enum TestStatus {
     Pass,
     Fail,
     Error,
+}
+
+#[derive(Debug)]
+struct TestOptions {
+    fail_fast: bool,
+    sort_descending: bool,
+}
+
+impl TestOptions {
+    fn new() -> Self {
+        TestOptions {
+            fail_fast: false,
+            sort_descending: false,
+        }
+    }
+
+    fn from_args(args: &[String]) -> Self {
+        let mut options = TestOptions::new();
+
+        for arg in args.iter() {
+            match arg.as_str() {
+                "--fail-fast" => options.fail_fast = true,
+                "--sort-descending" => options.sort_descending = true,
+                _ => {}
+            }
+        }
+
+        options
+    }
 }
 
 impl TestCase {
@@ -131,9 +161,19 @@ fn collect_test_cases() -> Vec<TestCase> {
 
 #[test]
 fn test_normal_cases() {
+    let args = env::args().collect::<Vec<String>>();
+    let options = TestOptions::from_args(&args);
     let mut results = Vec::new();
 
-    for case in collect_test_cases() {
+    // sort testcases by name
+    let mut cases = collect_test_cases();
+    if options.sort_descending {
+        cases.sort_by_key(|c| std::cmp::Reverse(c.name.clone()));
+    } else {
+        cases.sort_by_key(|c| c.name.clone());
+    }
+
+    for case in cases {
         println!("\nTesting: {}", case.name);
 
         let result = match uroborosql_fmt::format_sql(
@@ -177,7 +217,21 @@ fn test_normal_cases() {
             }
         };
 
-        results.push(result);
+        // エラー時にテストを中止するモードの場合
+        if options.fail_fast {
+            match &result.status {
+                TestStatus::Fail | TestStatus::Error => {
+                    results.push(result);
+                    print_test_report(&results);
+                    panic!("Test failed in fail-fast mode");
+                }
+                TestStatus::Pass => {
+                    results.push(result);
+                }
+            }
+        } else {
+            results.push(result);
+        }
     }
 
     print_test_report(&results);
