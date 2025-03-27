@@ -333,7 +333,7 @@ impl Visitor {
         Ok(expr)
     }
 
-    fn visit_qualified_name(
+    pub(crate) fn visit_qualified_name(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,

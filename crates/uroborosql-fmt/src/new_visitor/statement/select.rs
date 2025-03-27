@@ -158,6 +158,10 @@ impl Visitor {
                     let sort_clause = self.visit_sort_clause(cursor, src)?;
                     statement.add_clause(sort_clause);
                 }
+                SyntaxKind::for_locking_clause => {
+                    let for_locking_clauses = self.visit_for_locking_clause(cursor, src)?;
+                    statement.add_clauses(for_locking_clauses);
+                }
                 SyntaxKind::RParen => {
                     // select_with_parens をフォーマットする場合
                     break;
