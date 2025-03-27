@@ -141,16 +141,12 @@ impl Visitor {
                     statement.add_clause(where_clause);
                 }
                 SyntaxKind::group_clause => {
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_select_stmt(): group_clause is not implemented\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
+                    let group_clause = self.visit_group_clause(cursor, src)?;
+                    statement.add_clause(group_clause);
                 }
                 SyntaxKind::having_clause => {
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_select_stmt(): having_clause is not implemented\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
+                    let having_clause = self.visit_having_clause(cursor, src)?;
+                    statement.add_clause(having_clause);
                 }
                 SyntaxKind::window_clause => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
@@ -161,6 +157,10 @@ impl Visitor {
                 SyntaxKind::sort_clause => {
                     let sort_clause = self.visit_sort_clause(cursor, src)?;
                     statement.add_clause(sort_clause);
+                }
+                SyntaxKind::for_locking_clause => {
+                    let for_locking_clauses = self.visit_for_locking_clause(cursor, src)?;
+                    statement.add_clauses(for_locking_clauses);
                 }
                 SyntaxKind::RParen => {
                     // select_with_parens をフォーマットする場合
