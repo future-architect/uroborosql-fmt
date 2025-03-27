@@ -141,10 +141,8 @@ impl Visitor {
                     statement.add_clause(where_clause);
                 }
                 SyntaxKind::group_clause => {
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_select_stmt(): group_clause is not implemented\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
+                    let group_clause = self.visit_group_clause(cursor, src)?;
+                    statement.add_clause(group_clause);
                 }
                 SyntaxKind::having_clause => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
