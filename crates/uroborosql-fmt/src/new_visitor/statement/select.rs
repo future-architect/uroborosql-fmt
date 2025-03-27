@@ -158,6 +158,10 @@ impl Visitor {
                         pg_error_annotation_from_cursor(cursor, src)
                     )));
                 }
+                SyntaxKind::sort_clause => {
+                    let sort_clause = self.visit_sort_clause(cursor, src)?;
+                    statement.add_clause(sort_clause);
+                }
                 SyntaxKind::RParen => {
                     // select_with_parens をフォーマットする場合
                     break;
