@@ -66,13 +66,32 @@ cargo test -- --exact test_with_coverage --nocapture
 パーサ移行用のテストで、`test_normal_cases`ディレクトリ内のSQLファイルを対象に新パーサーでのテストを実行します。このテストは、段階的に機能を増やしたSQLを用意し、リグレッションを管理しながら移行を進めるために使用します。
 
 ```bash
-# 実行方法
+# 基本的な実行方法
 cargo test -- --exact test_normal_cases
 ```
+
 ```bash
 # 各ケースの実行結果を確認する場合
 cargo test -- --exact test_normal_cases --nocapture
 ```
+
+#### テストオプション
+
+以下のオプションを使用してテストの動作をカスタマイズできます：
+
+```bash
+# fail-fast mode
+cargo test -- --exact test_normal_cases -- --fail-fast
+
+# sort desc mode
+cargo test -- --exact test_normal_cases -- --sort-descending
+
+# オプションの組み合わせ
+cargo test -- --exact test_normal_cases -- --fail-fast --sort-descending
+```
+
+- `--fail-fast`: エラーや失敗が発生した時点でテストを中止します。デバッグ時に便利です。
+- `--sort-descending`: テストケースを名前の降順（ZからA）でソートして実行します。
 
 ## ユーティリティ
 
