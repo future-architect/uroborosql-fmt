@@ -145,10 +145,8 @@ impl Visitor {
                     statement.add_clause(group_clause);
                 }
                 SyntaxKind::having_clause => {
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_select_stmt(): having_clause is not implemented\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
+                    let having_clause = self.visit_having_clause(cursor, src)?;
+                    statement.add_clause(having_clause);
                 }
                 SyntaxKind::window_clause => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
