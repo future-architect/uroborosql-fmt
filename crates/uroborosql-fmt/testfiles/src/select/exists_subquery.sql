@@ -7,7 +7,7 @@ WHERE
         SELECT
             department_id
         FROM
-            user
+            users
         WHERE
             address = 'TOKYO'
     )

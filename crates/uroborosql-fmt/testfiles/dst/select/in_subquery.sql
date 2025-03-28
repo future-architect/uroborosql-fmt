@@ -7,7 +7,7 @@ where
 		select
 			department_id	as	department_id
 		from
-			user
+			users
 		where
 			address	=	'TOKYO'
 	)

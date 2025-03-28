@@ -52,6 +52,27 @@ impl PrimaryExpr {
         PrimaryExpr::new(converted_element, Location::new(node.range()))
     }
 
+    pub(crate) fn with_pg_node(
+        node: postgresql_cst_parser::tree_sitter::Node,
+        expr_kind: PrimaryExprKind,
+    ) -> Result<PrimaryExpr, UroboroSQLFmtError> {
+        let element = node.text();
+
+        // PrimaryExprKindによって適用するルールを変更する
+        let converted_element = if matches!(expr_kind, PrimaryExprKind::Keyword) {
+            // キーワードの大文字小文字設定を適用した文字列
+            convert_keyword_case(element)
+        } else {
+            // 文字列リテラルであればそのまま、DBオブジェクトであれば大文字小文字設定を適用した文字列
+            convert_identifier_case(element)
+        };
+
+        Ok(PrimaryExpr::new(
+            converted_element,
+            Location::from(node.range()),
+        ))
+    }
+
     pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }

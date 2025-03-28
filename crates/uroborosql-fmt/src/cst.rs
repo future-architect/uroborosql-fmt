@@ -102,6 +102,13 @@ impl Comment {
         }
     }
 
+    pub(crate) fn pg_new(node: postgresql_cst_parser::tree_sitter::Node) -> Comment {
+        Comment {
+            text: node.text().to_string(),
+            loc: node.range().into(),
+        }
+    }
+
     pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }
@@ -311,6 +318,28 @@ impl SqlID {
         } else {
             // 行コメント
             false
+        }
+    }
+}
+
+/*
+    postgresql-cst-parser 用
+*/
+
+impl From<postgresql_cst_parser::tree_sitter::Point> for Position {
+    fn from(point: postgresql_cst_parser::tree_sitter::Point) -> Self {
+        Position {
+            row: point.row,
+            col: point.column,
+        }
+    }
+}
+
+impl From<postgresql_cst_parser::tree_sitter::Range> for Location {
+    fn from(range: postgresql_cst_parser::tree_sitter::Range) -> Self {
+        Location {
+            start_position: range.start_position.into(),
+            end_position: range.end_position.into(),
         }
     }
 }

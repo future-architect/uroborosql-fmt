@@ -10,7 +10,7 @@ use uroborosql_fmt::error::UroboroSQLFmtError;
 
 // 並列実行するとグローバル変数の問題が発生するため並列実行しない
 #[test]
-fn test() {
+fn test_all() {
     let result_all_files = test_all_files();
     let result_config_file = test_config_file();
     assert!(result_all_files);
