@@ -36,3 +36,16 @@ for update of
 ,	tbl2
 nowait
 ;
+-- comment after `of`
+select
+	*
+from
+	employee
+where
+	id	=	'1'
+for update of
+-- comment
+	tbl
+,	tbl2
+nowait
+;

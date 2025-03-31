@@ -38,3 +38,13 @@ FOR UPDATE OF
     , tbl2
 NOWAIT
 ; 
+
+-- comment after `of`
+SELECT
+    *
+FROM
+    employee
+WHERE
+    ID = '1'
+FOR UPDATE OF -- comment
+tbl, tbl2 NOWAIT;

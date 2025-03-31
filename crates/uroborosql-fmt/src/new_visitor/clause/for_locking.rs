@@ -166,6 +166,10 @@ impl Visitor {
         clause.pg_extend_kw(cursor.node());
         cursor.goto_next_sibling();
 
+        // cursor -> comments?
+        self.pg_consume_comments_in_clause(cursor, clause)?;
+
+        // cursor -> qualified_name_list
         let table_name_list = self.visit_qualified_name_list(cursor, src)?;
 
         clause.set_body(table_name_list);
