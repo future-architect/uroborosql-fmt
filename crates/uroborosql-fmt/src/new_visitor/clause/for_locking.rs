@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{Body, Clause, SeparatedLines},
+    cst::{Body, Clause, Comment, SeparatedLines},
     error::UroboroSQLFmtError,
     new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
     NewVisitor as Visitor,
@@ -114,6 +114,10 @@ impl Visitor {
             self.visit_locked_rels_list(cursor, src, &mut for_update_clause)?;
             cursor.goto_next_sibling();
         }
+
+        // cursor -> comments?
+        self.pg_consume_comments_in_clause(cursor, &mut for_update_clause)?;
+
         clauses.push(for_update_clause);
 
         // cursor -> opt_nowait_or_skip?
@@ -198,6 +202,35 @@ impl Visitor {
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
                 SyntaxKind::Comma => {}
+                SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+                    separated_lines.add_comment_to_child(comment)?;
+                }
+                SyntaxKind::C_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+
+                    // コメントノードはリストにおける最後の要素になることはないため panic しない
+                    let sibling_node = cursor.node().next_sibling().unwrap();
+
+                    // コメントがバインドパラメータであれば次の要素を走査し、得られた式に対してバインドパラメータとして付与する
+                    // そうでなければコメントをそのまま追加する
+                    if sibling_node.kind() == SyntaxKind::qualified_name
+                        && comment.loc().is_next_to(&sibling_node.range().into())
+                    {
+                        cursor.goto_next_sibling();
+
+                        let mut element = self.visit_qualified_name(cursor, src)?;
+                        element.set_head_comment(comment);
+
+                        separated_lines.add_expr(
+                            element.to_aligned(),
+                            Some(COMMA.to_string()),
+                            vec![],
+                        );
+                    } else {
+                        separated_lines.add_comment_to_child(comment)?;
+                    }
+                }
                 SyntaxKind::qualified_name => {
                     let element = self.visit_qualified_name(cursor, src)?;
                     separated_lines.add_expr(element.to_aligned(), Some(COMMA.to_string()), vec![]);
