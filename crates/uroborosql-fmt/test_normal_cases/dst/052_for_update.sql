@@ -71,9 +71,9 @@ from
 where
 	id	=	'1'
 for update of
-	/*param*/tbl	-- comment 1
+	/*$param*/tbl	-- comment 1
 -- comment 2
 /* comment 3 */
-,	/*param*/tbl2	-- comment 4
+,	/*$param*/tbl2	-- comment 4
 nowait
 ;
