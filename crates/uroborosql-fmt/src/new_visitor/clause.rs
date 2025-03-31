@@ -40,7 +40,8 @@ impl Visitor {
 
             if indirection_text.contains('[') {
                 // この場所での subscript （[1] など）は構文定義上可能だが、PostgreSQL側でrejectされる不正な記述
-                // - https://github.com/postgres/postgres/blob/master/src/backend/parser/gram.y#L17303-L17304
+                // - https://github.com/postgres/postgres/blob/e2809e3a1015697832ee4d37b75ba1cd0caac0f0/src/backend/parser/gram.y#L17317-L17323
+                // - https://github.com/postgres/postgres/blob/e2809e3a1015697832ee4d37b75ba1cd0caac0f0/src/backend/parser/gram.y#L18963-L18967
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_qualified_name(): invalid subscript notation appeared.\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
