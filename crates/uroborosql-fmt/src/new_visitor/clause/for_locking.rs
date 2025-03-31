@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause, SeparatedLines},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, COMMA},
+    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
     NewVisitor as Visitor,
 };
 
@@ -31,6 +31,7 @@ use crate::{
 // - SKIP LOCKED
 
 impl Visitor {
+    /// for_locking_clause を走査して、Clause のベクタを返す
     pub(crate) fn visit_for_locking_clause(
         &mut self,
         cursor: &mut TreeCursor,
@@ -47,7 +48,8 @@ impl Visitor {
             SyntaxKind::FOR => {
                 // FOR READ ONLY
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_for_locking_clause: FOR READ ONLY is not implemented"
+                    "visit_for_locking_clause: FOR READ ONLY is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
@@ -89,6 +91,7 @@ impl Visitor {
         Ok(clauses)
     }
 
+    /// for_locking_item を走査して、Clause をベクタに追加する
     fn visit_for_locking_item(
         &mut self,
         cursor: &mut TreeCursor,
@@ -97,6 +100,8 @@ impl Visitor {
     ) -> Result<(), UroboroSQLFmtError> {
         // for_locking_item
         // - for_locking_strength locked_rels_list? opt_nowait_or_skip?
+
+        // for_locking_strength locked_rels_list までで一つ、 opt_nowait_or_skip で一つの Clause になる
 
         cursor.goto_first_child();
 
