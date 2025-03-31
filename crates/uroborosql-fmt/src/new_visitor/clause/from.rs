@@ -6,7 +6,7 @@ use crate::{
     new_visitor::{
         pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA,
     },
-    util::{convert_identifier_case, convert_keyword_case},
+    util::convert_keyword_case,
     CONFIG,
 };
 
@@ -331,56 +331,6 @@ impl Visitor {
         pg_ensure_kind(cursor, SyntaxKind::relation_expr, src)?;
 
         Ok(expr)
-    }
-
-    fn visit_qualified_name(
-        &mut self,
-        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
-        src: &str,
-    ) -> Result<Expr, UroboroSQLFmtError> {
-        // qualified_name
-        // - ColId
-        // - ColId indirection
-
-        cursor.goto_first_child();
-        pg_ensure_kind(cursor, SyntaxKind::ColId, src)?;
-
-        let mut qualified_name_text = cursor.node().text().to_string();
-
-        if cursor.goto_next_sibling() {
-            // indirection が存在する場合
-            pg_ensure_kind(cursor, SyntaxKind::indirection, src)?;
-
-            let indirection_text = cursor.node().text().to_string();
-
-            if indirection_text.contains('[') {
-                // この場所での subscript （[1] など）は構文定義上可能だが、PostgreSQL側でrejectされる不正な記述
-                // - https://github.com/postgres/postgres/blob/master/src/backend/parser/gram.y#L17303-L17304
-                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_qualified_name(): invalid subscript notation appeared.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
-            }
-
-            // 空白を除去してqualified_name_textに追加
-            qualified_name_text.push_str(
-                &indirection_text
-                    .chars()
-                    .filter(|c| !c.is_whitespace())
-                    .collect::<String>(),
-            );
-        }
-
-        cursor.goto_parent();
-        // cursor -> qualified_name
-        pg_ensure_kind(cursor, SyntaxKind::qualified_name, src)?;
-
-        let primary = PrimaryExpr::new(
-            convert_identifier_case(&qualified_name_text),
-            cursor.node().range().into(),
-        );
-
-        Ok(primary.into())
     }
 
     /// alias_clause を visit し、 as キーワード (Option) と Expr を返す
