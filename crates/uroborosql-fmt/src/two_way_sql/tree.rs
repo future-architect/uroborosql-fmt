@@ -126,8 +126,8 @@ impl TreeNode {
 ///     1. 子供がENDのみの場合 -> 分岐の末尾まで進んだことを意味するので、結果とENDのidを返して終了
 ///     2. 子供がPLAINのみの場合 -> 通常のテキストなので、子供を現在のノードとして、1に戻る
 ///     3. 子供がIF/ELSE分岐の場合
-///         -> 各子供に対して traverse() を再帰的に呼び出し、ENDの手前まで走査を進める。
-///         結果に子供の結果を結合し、ENDノードを現在のノードとして、1に戻る
+///        -> 各子供に対して traverse() を再帰的に呼び出し、ENDの手前まで走査を進める。
+///        結果に子供の結果を結合し、ENDノードを現在のノードとして、1に戻る
 /// 3. 子供がいなくなったら、結果を返して終了   
 fn traverse(dag: &Dag, node_id: usize) -> Result<(TreeNode, usize), UroboroSQLFmtError> {
     let mut current_node = dag.get(&node_id)?;

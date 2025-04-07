@@ -318,7 +318,7 @@ fn create_alias(lhs: &Expr) -> Option<Expr> {
             let element = prim.element();
             element
                 .split('.')
-                .last()
+                .next_back()
                 .map(|s| Expr::Primary(Box::new(PrimaryExpr::new(convert_identifier_case(s), loc))))
         }
         _ => None,
