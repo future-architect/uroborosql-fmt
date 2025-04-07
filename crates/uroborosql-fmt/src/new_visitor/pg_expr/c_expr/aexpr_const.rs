@@ -22,7 +22,7 @@ impl Visitor {
         // - BCONST
         // - XCONST
         // - func_name Sconst
-        // - func_name '(' func_arg_list opt_sort_clause ')' Sconst
+        // - func_name '(' func_arg_list sort_clause? ')' Sconst
         // - ConstTypename Sconst
         // - ConstInterval Sconst opt_interval
         // - ConstInterval '(' Iconst ')' Sconst
@@ -41,7 +41,7 @@ impl Visitor {
             }
             SyntaxKind::func_name => {
                 // func_name Sconst
-                // func_name '(' func_arg_list opt_sort_clause ')' Sconst
+                // func_name '(' func_arg_list sort_clause? ')' Sconst
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_aexpr_const(): func_name is not implemented\n{}",
                     pg_error_annotation_from_cursor(cursor, src)

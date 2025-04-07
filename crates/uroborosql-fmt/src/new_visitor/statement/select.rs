@@ -29,12 +29,12 @@ impl Visitor {
         // ├── (select_clause) INTERSECT [ALL | DISTINCT] (select_clause)
         // ├── (select_clause) EXCEPT [ALL | DISTINCT] (select_clause)
         // ├── (select_clause) sort_clause
-        // ├── (select_clause) opt_sort_clause for_locking_clause opt_select_limit
-        // ├── (select_clause) opt_sort_clause select_limit opt_for_locking_clause
+        // ├── (select_clause) sort_clause? for_locking_clause select_limit
+        // ├── (select_clause) sort_clause? select_limit opt_for_locking_clause
         // ├── with_clause (select_clause)
         // ├── with_clause (select_clause) sort_clause
-        // ├── with_clause (select_clause) opt_sort_clause for_locking_clause opt_select_limit
-        // ├── with_clause (select_clause) opt_sort_clause select_limit opt_for_locking_clause
+        // ├── with_clause (select_clause) sort_clause? for_locking_clause select_limit
+        // ├── with_clause (select_clause) sort_clause? select_limit opt_for_locking_clause
         // └── select_with_parens
         //     ├── '(' (select_no_parens) ')'
         //     └── '(' select_with_parens ')'
