@@ -32,21 +32,28 @@ impl Visitor {
         // cursor -> '('
         pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
 
-        let args = self.handle_function_call_args(cursor, src)?;
+        let mut args = self.handle_function_call_args(cursor, src)?;
+
+        // cursor -> sort_clause | ')'
+        if cursor.node().kind() == SyntaxKind::sort_clause {
+            let sort_clause = self.visit_sort_clause(cursor, src)?;
+            args.set_order_by(sort_clause);
+            cursor.goto_next_sibling();
+        }
+
+        // 関数呼び出しの位置は親ノード (func_application) にあたる
+        let parent_loc = cursor
+            .node()
+            .parent()
+            .expect("visit_func_application(): parent is None")
+            .range();
 
         let func_call = FunctionCall::new(
             func_name,
             args,
             FunctionCallKind::UserDefined,
-            cursor.node().range().into(),
+            parent_loc.into(),
         );
-
-        if cursor.node().kind() == SyntaxKind::sort_clause {
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_func_application(): sort_clause is not implemented\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
-            )));
-        }
 
         // cursor -> ')'
         pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
