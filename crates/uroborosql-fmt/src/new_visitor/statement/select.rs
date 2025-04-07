@@ -158,6 +158,14 @@ impl Visitor {
                     let sort_clause = self.visit_sort_clause(cursor, src)?;
                     statement.add_clause(sort_clause);
                 }
+                SyntaxKind::limit_clause => {
+                    let limit_clause = self.visit_limit_clause(cursor, src)?;
+                    statement.add_clause(limit_clause);
+                }
+                SyntaxKind::offset_clause => {
+                    let offset_clause = self.visit_offset_clause(cursor, src)?;
+                    statement.add_clause(offset_clause);
+                }
                 SyntaxKind::for_locking_clause => {
                     let for_locking_clauses = self.visit_for_locking_clause(cursor, src)?;
                     statement.add_clauses(for_locking_clauses);
