@@ -203,7 +203,7 @@ fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
     let loc = lhs.loc();
 
     match lhs {
-        Expr::Primary(prim) => prim.element().split('.').last().map(|last| {
+        Expr::Primary(prim) => prim.element().split('.').next_back().map(|last| {
             Expr::Primary(Box::new(PrimaryExpr::new(
                 convert_identifier_case(last),
                 loc,
