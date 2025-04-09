@@ -192,7 +192,7 @@ impl Visitor {
         cursor.goto_first_child();
         // cursor -> WHEN
 
-        let mut when_clause = pg_create_clause!(cursor, SyntaxKind::when_clause);
+        let mut when_clause = pg_create_clause!(cursor, SyntaxKind::WHEN);
         cursor.goto_next_sibling();
         // cursor -> Comment?
         self.pg_consume_comments_in_clause(cursor, &mut when_clause)?;

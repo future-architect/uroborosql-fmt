@@ -19,7 +19,10 @@ impl Visitor {
         cursor.goto_first_child();
 
         // cursor -> RANGE | ROWS | GROUPS
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::RANGE); // TODO: keyword は 要らない
+        let mut clause = pg_create_clause!(
+            cursor,
+            SyntaxKind::RANGE | SyntaxKind::ROWS | SyntaxKind::GROUPS
+        );
 
         // frame 句の各要素を Expr の Vec として持つ
         let mut exprs: Vec<Expr> = vec![];
