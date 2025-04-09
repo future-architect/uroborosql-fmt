@@ -23,6 +23,8 @@ impl Visitor {
         // - func_name '('  (ALL|DISTINCT|VARIADIC)? func_arg_list sort_clause? ')'
         // - func_name '(' func_arg_list ',' VARIADIC func_arg_expr sort_clause? ')'
 
+        let parent_loc = cursor.node().range();
+
         cursor.goto_first_child();
         // cursor -> func_name
         pg_ensure_kind!(cursor, SyntaxKind::func_name, src);
@@ -32,21 +34,21 @@ impl Visitor {
         // cursor -> '('
         pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
 
-        let args = self.handle_function_call_args(cursor, src)?;
+        let mut args = self.handle_function_call_args(cursor, src)?;
+
+        // cursor -> sort_clause | ')'
+        if cursor.node().kind() == SyntaxKind::sort_clause {
+            let sort_clause = self.visit_sort_clause(cursor, src)?;
+            args.set_order_by(sort_clause);
+            cursor.goto_next_sibling();
+        }
 
         let func_call = FunctionCall::new(
             func_name,
             args,
             FunctionCallKind::UserDefined,
-            cursor.node().range().into(),
+            parent_loc.into(),
         );
-
-        if cursor.node().kind() == SyntaxKind::sort_clause {
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_func_application(): sort_clause is not implemented\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
-            )));
-        }
 
         // cursor -> ')'
         pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
