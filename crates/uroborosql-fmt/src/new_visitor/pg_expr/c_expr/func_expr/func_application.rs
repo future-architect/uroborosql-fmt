@@ -20,8 +20,8 @@ impl Visitor {
         // func_application
         // - func_name '(' ')'
         // - func_name '(' '*' ')'
-        // - func_name '('  (ALL|DISTINCT|VARIADIC)? func_arg_list opt_sort_clause? ')'
-        // - func_name '(' func_arg_list ',' VARIADIC func_arg_expr opt_sort_clause ')'
+        // - func_name '('  (ALL|DISTINCT|VARIADIC)? func_arg_list sort_clause? ')'
+        // - func_name '(' func_arg_list ',' VARIADIC func_arg_expr sort_clause? ')'
 
         cursor.goto_first_child();
         // cursor -> func_name
@@ -41,9 +41,9 @@ impl Visitor {
             cursor.node().range().into(),
         );
 
-        if cursor.node().kind() == SyntaxKind::opt_sort_clause {
+        if cursor.node().kind() == SyntaxKind::sort_clause {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_func_application(): opt_sort_clause is not implemented\n{}",
+                "visit_func_application(): sort_clause is not implemented\n{}",
                 pg_error_annotation_from_cursor(cursor, src)
             )));
         }
@@ -59,14 +59,14 @@ impl Visitor {
     }
 
     /// 呼出時、cursor は LParen を指している
-    /// 呼出後、cursor は RParen または opt_sort_clause を指している
+    /// 呼出後、cursor は RParen または sort_clause を指している
     fn handle_function_call_args(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<FunctionCallArgs, UroboroSQLFmtError> {
         // function_call_args というノードは存在しない
-        // '(' function_call_args opt_sort_clause? ')'
+        // '(' function_call_args sort_clause? ')'
         //  ^                      ^
         //  |                      |
         //  └ 呼出前                └ 呼出後
@@ -142,7 +142,7 @@ impl Visitor {
             }
         }
 
-        // cursor -> opt_sort_clause | ')'
+        // cursor -> sort_clause | ')'
 
         Ok(function_call_args)
     }

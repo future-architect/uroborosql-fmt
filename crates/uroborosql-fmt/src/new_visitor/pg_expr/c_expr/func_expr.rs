@@ -28,7 +28,7 @@ use super::Visitor;
 // - OVER ColId
 
 // window_specification:
-// - '(' opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause ')'
+// - '(' opt_existing_window_name opt_partition_clause sort_clause? opt_frame_clause ')'
 
 impl Visitor {
     pub fn visit_func_expr(
