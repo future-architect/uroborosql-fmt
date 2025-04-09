@@ -4,7 +4,7 @@ mod func_expr_common_subexpr;
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{Body, Clause, Expr},
+    cst::{AlignedExpr, Body, Clause, Expr, SeparatedLines},
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
     util::convert_keyword_case,
@@ -81,10 +81,9 @@ impl Visitor {
 
         // cursor -> over_clause?
         if cursor.node().kind() == SyntaxKind::over_clause {
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_func_expr(): over_clause is not implemented\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
-            )));
+            let (over_keyword, over_window_definition) = self.visit_over_clause(cursor, src)?;
+            func.set_over_keyword(&over_keyword);
+            func.set_over_window_definition(&over_window_definition);
         }
 
         cursor.goto_parent();
@@ -133,5 +132,139 @@ impl Visitor {
         pg_ensure_kind(cursor, SyntaxKind::filter_clause, src)?;
 
         Ok((filter_keyword, where_clause))
+    }
+
+    fn visit_over_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<(String, Vec<Clause>), UroboroSQLFmtError> {
+        // over_clause:
+        // - OVER window_specification
+        // - OVER ColId
+
+        cursor.goto_first_child();
+        // cursor -> OVER
+        pg_ensure_kind(cursor, SyntaxKind::OVER, src)?;
+        let over_keyword = convert_keyword_case(cursor.node().text());
+
+        cursor.goto_next_sibling();
+
+        // cursor -> window_specification | ColId
+        let clauses = match cursor.node().kind() {
+            SyntaxKind::window_specification => self.visit_window_specification(cursor, src)?,
+            SyntaxKind::ColId => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_over_clause(): ColId is not implemented\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_over_clause(): unexpected node kind\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::over_clause, src)?;
+
+        Ok((over_keyword, clauses))
+    }
+
+    fn visit_window_specification(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Vec<Clause>, UroboroSQLFmtError> {
+        // window_specification:
+        // - '(' opt_existing_window_name? opt_partition_clause? sort_clause? opt_frame_clause? ')'
+
+        cursor.goto_first_child();
+        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+
+        cursor.goto_next_sibling();
+
+        let mut clauses = vec![];
+
+        // cursor -> opt_existing_window_name?
+        if cursor.node().kind() == SyntaxKind::opt_existing_window_name {
+            // opt_existing_window_name:
+            // - ColId
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_window_specification(): opt_existing_window_name is not implemented\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            )));
+        }
+
+        // cursor -> opt_partition_clause?
+        if cursor.node().kind() == SyntaxKind::opt_partition_clause {
+            let mut clause = self.visit_opt_partition_clause(cursor, src)?;
+            cursor.goto_next_sibling();
+            self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+            clauses.push(clause);
+        }
+
+        // cursor -> sort_clause?
+        if cursor.node().kind() == SyntaxKind::sort_clause {
+            let mut clause = self.visit_sort_clause(cursor, src)?;
+            cursor.goto_next_sibling();
+            self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+            clauses.push(clause);
+        }
+
+        // cursor -> opt_frame_clause?
+        if cursor.node().kind() == SyntaxKind::opt_frame_clause {
+            let mut clause = self.visit_opt_frame_clause(cursor, src)?;
+            cursor.goto_next_sibling();
+            self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+            clauses.push(clause);
+        }
+
+        // cursor -> ')'
+        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::window_specification, src)?;
+
+        Ok(clauses)
+    }
+
+    fn visit_opt_partition_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        // opt_partition_clause:
+        // - PARTITION BY expr_list
+
+        cursor.goto_first_child();
+        // cursor -> PARTITION
+        let mut clause = pg_create_clause(cursor, SyntaxKind::PARTITION)?;
+
+        cursor.goto_next_sibling();
+        // cursor -> BY
+        pg_ensure_kind(cursor, SyntaxKind::BY, src)?;
+        clause.pg_extend_kw(cursor.node());
+
+        cursor.goto_next_sibling();
+        // cursor -> comment?
+        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+
+        // cursor -> expr_list
+        let exprs: Vec<AlignedExpr> = self.visit_expr_list(cursor, src)?;
+
+        // expr_list (Vec<AlignedExpr>) を Body::SepLines に変換し Clause に追加する
+        let mut separated_lines = SeparatedLines::new();
+        for expr in exprs {
+            separated_lines.add_expr(expr, None, vec![]);
+        }
+        clause.set_body(Body::SepLines(separated_lines));
+
+        cursor.goto_parent();
+        pg_ensure_kind(cursor, SyntaxKind::opt_partition_clause, src)?;
+
+        Ok(clause)
     }
 }
