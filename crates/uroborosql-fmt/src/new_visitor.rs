@@ -206,23 +206,6 @@ macro_rules! pg_ensure_kind {
     };
 }
 
-fn pg_ensure_kind<'a>(
-    cursor: &'a postgresql_cst_parser::tree_sitter::TreeCursor<'a>,
-    kind: postgresql_cst_parser::syntax_kind::SyntaxKind,
-    src: &'a str,
-) -> Result<&'a postgresql_cst_parser::tree_sitter::TreeCursor<'a>, UroboroSQLFmtError> {
-    if cursor.node().kind() != kind {
-        Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-            "pg_ensure_kind(): excepted node is {}, but actual {}\n{}",
-            kind,
-            cursor.node().kind(),
-            pg_error_annotation_from_cursor(cursor, src)
-        )))
-    } else {
-        Ok(cursor)
-    }
-}
-
 fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
     let loc = lhs.loc();
 
@@ -247,19 +230,6 @@ macro_rules! pg_create_clause {
         pg_ensure_kind!($cursor, $keyword_pattern, $cursor.input);
         crate::new_visitor::Clause::from_pg_node($cursor.node())
     }};
-}
-
-fn pg_create_clause(
-    cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
-    _keyword: SyntaxKind,
-) -> Result<Clause, UroboroSQLFmtError> {
-    // pg_ensure_kind(cursor, SyntaxKind::select_clause, src)?;
-
-    // TODO: 複数の語からなるキーワードについて検討
-    // とりあえず一つの語からなるキーワードをカバー
-    let clause = Clause::from_pg_node(cursor.node());
-
-    Ok(clause)
 }
 
 /// cursorからエラー注釈を作成する関数
