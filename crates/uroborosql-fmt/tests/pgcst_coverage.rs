@@ -29,9 +29,9 @@ impl Default for TestReportConfig {
         Self {
             show_summary: true,
             show_by_category: true,
-            show_supported_cases: true,
+            show_supported_cases: false,
             show_skipped_cases: false,
-            show_failed_cases: false,
+            show_failed_cases: true,
             show_error_annotations: false,
         }
     }
@@ -318,7 +318,6 @@ fn test_with_coverage() {
     let config = TestReportConfig::default();
 
     // let mut config = TestReportConfig::default();
-    // config.show_failed_cases = true; // 失敗したケースを表示
     // config.show_error_annotations = true; // アノテーションを表示
 
     print_coverage_report(&results, &config);
