@@ -23,6 +23,8 @@ impl Visitor {
         // - func_name '('  (ALL|DISTINCT|VARIADIC)? func_arg_list sort_clause? ')'
         // - func_name '(' func_arg_list ',' VARIADIC func_arg_expr sort_clause? ')'
 
+        let parent_loc = cursor.node().range();
+
         cursor.goto_first_child();
         // cursor -> func_name
         pg_ensure_kind!(cursor, SyntaxKind::func_name, src);
@@ -40,13 +42,6 @@ impl Visitor {
             args.set_order_by(sort_clause);
             cursor.goto_next_sibling();
         }
-
-        // 関数呼び出しの位置は親ノード (func_application) にあたる
-        let parent_loc = cursor
-            .node()
-            .parent()
-            .expect("visit_func_application(): parent is None")
-            .range();
 
         let func_call = FunctionCall::new(
             func_name,
