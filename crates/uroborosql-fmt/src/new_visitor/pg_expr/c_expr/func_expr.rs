@@ -6,8 +6,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{AlignedExpr, Body, Clause, Expr, SeparatedLines},
     error::UroboroSQLFmtError,
-    new_visitor::pg_error_annotation_from_cursor,
-    pg_create_clause, pg_ensure_kind,
+    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
     util::convert_keyword_case,
 };
 

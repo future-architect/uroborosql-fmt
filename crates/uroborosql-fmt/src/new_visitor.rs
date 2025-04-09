@@ -182,29 +182,30 @@ impl Visitor {
     }
 }
 
-#[macro_export]
 macro_rules! pg_ensure_kind {
     ($cursor:expr, expr: $keyword_expr:expr, $src:expr) => {{
         if $cursor.node().kind() != $keyword_expr {
-            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+            return Err($crate::UroboroSQLFmtError::UnexpectedSyntax(format!(
                 "pg_ensure_kind!(): excepted node is {}, but actual {}\n{}",
                 $keyword_expr,
                 $cursor.node().kind(),
-                crate::new_visitor::pg_error_annotation_from_cursor($cursor, $src)
+                $crate::new_visitor::pg_error_annotation_from_cursor($cursor, $src)
             )));
         }
     }};
     ($cursor:expr, $keyword_pattern:pat, $src:expr) => {
         if !matches!($cursor.node().kind(), $keyword_pattern) {
-            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+            return Err($crate::UroboroSQLFmtError::UnexpectedSyntax(format!(
                 "pg_ensure_kind!(): excepted node is {}, but actual {}\n{}",
                 stringify!($keyword_pattern),
                 $cursor.node().kind(),
-                crate::new_visitor::pg_error_annotation_from_cursor($cursor, $src)
+                $crate::new_visitor::pg_error_annotation_from_cursor($cursor, $src)
             )));
         }
     };
 }
+
+pub(crate) use pg_ensure_kind;
 
 fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
     let loc = lhs.loc();
@@ -220,7 +221,6 @@ fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
     }
 }
 
-#[macro_export]
 macro_rules! pg_create_clause {
     ($cursor:expr, expr: $keyword_expr:expr) => {{
         pg_ensure_kind!($cursor, expr: $keyword_expr, $cursor.input);
@@ -231,6 +231,8 @@ macro_rules! pg_create_clause {
         crate::new_visitor::Clause::from_pg_node($cursor.node())
     }};
 }
+
+pub(crate) use pg_create_clause;
 
 /// cursorからエラー注釈を作成する関数
 /// 以下の形のエラー注釈を生成

@@ -3,8 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{AlignedExpr, Body, Clause, Comment, Expr, Location, PrimaryExpr, SeparatedLines},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_error_annotation_from_cursor, COMMA},
-    pg_create_clause, pg_ensure_kind,
+    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
     util::convert_keyword_case,
     NewVisitor as Visitor,
 };

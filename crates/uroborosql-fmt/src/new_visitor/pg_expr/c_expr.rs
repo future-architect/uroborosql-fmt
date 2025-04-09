@@ -10,7 +10,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Comment, Expr, ParenExpr},
     error::UroboroSQLFmtError,
-    pg_ensure_kind,
+    new_visitor::pg_ensure_kind,
 };
 
 use super::{pg_error_annotation_from_cursor, Visitor};

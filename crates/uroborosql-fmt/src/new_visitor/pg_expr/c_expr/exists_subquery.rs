@@ -3,8 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{ExistsSubquery, Expr, Location},
     error::UroboroSQLFmtError,
-    new_visitor::pg_error_annotation_from_cursor,
-    pg_ensure_kind,
+    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
     util::convert_keyword_case,
 };
 

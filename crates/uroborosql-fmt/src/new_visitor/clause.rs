@@ -14,7 +14,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::{Expr, PrimaryExpr},
     error::UroboroSQLFmtError,
-    pg_ensure_kind,
+    new_visitor::pg_ensure_kind,
     util::convert_identifier_case,
     NewVisitor as Visitor,
 };

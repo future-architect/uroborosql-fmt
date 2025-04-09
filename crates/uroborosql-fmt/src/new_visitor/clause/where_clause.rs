@@ -1,7 +1,9 @@
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
 
 use crate::{
-    cst::*, error::UroboroSQLFmtError, new_visitor::Visitor, pg_create_clause, pg_ensure_kind,
+    cst::*,
+    error::UroboroSQLFmtError,
+    new_visitor::{pg_create_clause, pg_ensure_kind, Visitor},
 };
 
 impl Visitor {

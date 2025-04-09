@@ -6,8 +6,7 @@ use crate::{
         PrimaryExprKind,
     },
     error::UroboroSQLFmtError,
-    new_visitor::pg_error_annotation_from_cursor,
-    pg_ensure_kind,
+    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
     util::convert_keyword_case,
 };
 

@@ -3,8 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Comment, Expr, Location, ParenExpr, SubExpr},
     error::UroboroSQLFmtError,
-    new_visitor::pg_error_annotation_from_cursor,
-    pg_ensure_kind, CONFIG,
+    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    CONFIG,
 };
 
 use super::Visitor;

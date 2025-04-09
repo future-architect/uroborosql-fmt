@@ -3,7 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause},
     error::UroboroSQLFmtError,
-    pg_create_clause, pg_ensure_kind, NewVisitor as Visitor,
+    new_visitor::{pg_create_clause, pg_ensure_kind},
+    NewVisitor as Visitor,
 };
 
 impl Visitor {

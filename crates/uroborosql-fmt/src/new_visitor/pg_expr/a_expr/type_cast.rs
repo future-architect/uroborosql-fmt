@@ -4,7 +4,7 @@ use crate::{
         PrimaryExprKind,
     },
     error::UroboroSQLFmtError,
-    pg_ensure_kind,
+    new_visitor::pg_ensure_kind,
     util::convert_keyword_case,
     CONFIG,
 };

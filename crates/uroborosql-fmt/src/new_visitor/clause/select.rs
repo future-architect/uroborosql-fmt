@@ -3,8 +3,10 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
-    new_visitor::{create_alias_from_expr, pg_error_annotation_from_cursor, Visitor, COMMA},
-    pg_create_clause, pg_ensure_kind,
+    new_visitor::{
+        create_alias_from_expr, pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor,
+        Visitor, COMMA,
+    },
     util::convert_keyword_case,
     CONFIG,
 };

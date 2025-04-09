@@ -3,8 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause, Comment, SeparatedLines},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_error_annotation_from_cursor, COMMA},
-    pg_ensure_kind, NewVisitor as Visitor,
+    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
+    NewVisitor as Visitor,
 };
 
 // for_locking_clause

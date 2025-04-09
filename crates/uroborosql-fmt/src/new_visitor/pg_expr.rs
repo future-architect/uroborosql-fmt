@@ -7,7 +7,7 @@ use postgresql_cst_parser::tree_sitter::TreeCursor;
 use crate::{
     cst::{AlignedExpr, ColumnList, Comment, Expr, Location},
     error::UroboroSQLFmtError,
-    pg_ensure_kind,
+    new_visitor::pg_ensure_kind,
 };
 
 use super::{pg_error_annotation_from_cursor, Visitor};

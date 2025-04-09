@@ -5,8 +5,7 @@ use crate::{
         AlignedExpr, AsteriskExpr, Comment, Expr, FunctionCall, FunctionCallArgs, FunctionCallKind,
     },
     error::UroboroSQLFmtError,
-    new_visitor::pg_error_annotation_from_cursor,
-    pg_create_clause, pg_ensure_kind,
+    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
     util::convert_keyword_case,
 };
 
