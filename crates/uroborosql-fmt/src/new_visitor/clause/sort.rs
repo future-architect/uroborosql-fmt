@@ -30,7 +30,7 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> ORDER
-        let mut clause = pg_create_clause(cursor, SyntaxKind::ORDER)?;
+        let mut clause = pg_create_clause!(cursor, SyntaxKind::ORDER);
         cursor.goto_next_sibling();
 
         // curosr -> BY
@@ -42,7 +42,7 @@ impl Visitor {
         clause.set_body(Body::SepLines(sortby_list));
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::sort_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::sort_clause, src);
 
         Ok(clause)
     }
@@ -96,7 +96,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::sortby_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::sortby_list, src);
 
         Ok(sep_lines)
     }
@@ -171,7 +171,7 @@ impl Visitor {
             order_option_loc.push(Location::from(cursor.node().range()));
 
             cursor.goto_parent();
-            pg_ensure_kind(cursor, SyntaxKind::opt_nulls_order, src)?;
+            pg_ensure_kind!(cursor, SyntaxKind::opt_nulls_order, src);
         }
 
         // 要素をスペース区切りで PrimaryExpr に変換し、 AlignedExpr の右辺に追加
@@ -184,7 +184,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::sortby, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::sortby, src);
 
         Ok(aligned_expr)
     }

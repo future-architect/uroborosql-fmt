@@ -61,7 +61,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::for_locking_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::for_locking_clause, src);
 
         Ok(clauses)
     }
@@ -86,7 +86,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::for_locking_items, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::for_locking_items, src);
 
         Ok(clauses)
     }
@@ -128,7 +128,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::for_locking_item, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::for_locking_item, src);
         Ok(())
     }
 
@@ -151,7 +151,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::for_locking_strength, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::for_locking_strength, src);
 
         Ok(clause)
     }
@@ -179,7 +179,7 @@ impl Visitor {
         clause.set_body(table_name_list);
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::locked_rels_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::locked_rels_list, src);
 
         Ok(())
     }
@@ -245,7 +245,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::qualified_name_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::qualified_name_list, src);
 
         Ok(Body::SepLines(separated_lines))
     }
@@ -268,7 +268,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::opt_nowait_or_skip, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::opt_nowait_or_skip, src);
 
         Ok(clause)
     }

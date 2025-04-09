@@ -19,7 +19,10 @@ impl Visitor {
         cursor.goto_first_child();
 
         // cursor -> RANGE | ROWS | GROUPS
-        let mut clause = pg_create_clause(cursor, SyntaxKind::RANGE)?; // TODO: keyword は 要らない
+        let mut clause = pg_create_clause!(
+            cursor,
+            SyntaxKind::RANGE | SyntaxKind::ROWS | SyntaxKind::GROUPS
+        );
 
         // frame 句の各要素を Expr の Vec として持つ
         let mut exprs: Vec<Expr> = vec![];
@@ -42,7 +45,7 @@ impl Visitor {
         clause.set_body(Body::to_single_line(Expr::ExprSeq(Box::new(expr_seq))));
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::opt_frame_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::opt_frame_clause, src);
 
         Ok(clause)
     }
@@ -86,7 +89,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::frame_extent, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::frame_extent, src);
 
         Ok(exprs)
     }
@@ -134,7 +137,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::frame_bound, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::frame_bound, src);
 
         Ok(exprs)
     }
@@ -182,7 +185,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::opt_window_exclusion_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::opt_window_exclusion_clause, src);
 
         Ok(exprs)
     }

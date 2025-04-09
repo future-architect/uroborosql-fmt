@@ -32,7 +32,7 @@ impl Visitor {
         );
 
         // cursor -> EXISTS
-        pg_ensure_kind(cursor, SyntaxKind::EXISTS, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::EXISTS, src);
 
         let exists_keyword = convert_keyword_case(cursor.node().text());
 
@@ -53,7 +53,7 @@ impl Visitor {
 
         let exists_subquery = ExistsSubquery::new(&exists_keyword, select_subexpr, exists_loc);
 
-        pg_ensure_kind(cursor, SyntaxKind::select_with_parens, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::select_with_parens, src);
 
         Ok(exists_subquery)
     }

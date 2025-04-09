@@ -88,7 +88,7 @@ impl Visitor {
 
         cursor.goto_parent();
 
-        pg_ensure_kind(cursor, SyntaxKind::func_expr, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::func_expr, src);
 
         Ok(Expr::FunctionCall(Box::new(func)))
     }
@@ -102,14 +102,14 @@ impl Visitor {
         // - FILTER '(' WHERE a_expr ')'
 
         cursor.goto_first_child();
-        pg_ensure_kind(cursor, SyntaxKind::FILTER, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::FILTER, src);
         let filter_keyword = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
-        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         cursor.goto_next_sibling();
-        let mut where_clause = pg_create_clause(cursor, SyntaxKind::WHERE)?;
+        let mut where_clause = pg_create_clause!(cursor, SyntaxKind::WHERE);
 
         cursor.goto_next_sibling();
         // cursor -> comment?
@@ -125,11 +125,11 @@ impl Visitor {
 
         cursor.goto_next_sibling();
         // cursor -> ')'
-        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         cursor.goto_parent();
         // cursor -> filter_clause
-        pg_ensure_kind(cursor, SyntaxKind::filter_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::filter_clause, src);
 
         Ok((filter_keyword, where_clause))
     }
@@ -145,7 +145,7 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> OVER
-        pg_ensure_kind(cursor, SyntaxKind::OVER, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::OVER, src);
         let over_keyword = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
@@ -168,7 +168,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::over_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::over_clause, src);
 
         Ok((over_keyword, clauses))
     }
@@ -182,7 +182,7 @@ impl Visitor {
         // - '(' opt_existing_window_name? opt_partition_clause? sort_clause? opt_frame_clause? ')'
 
         cursor.goto_first_child();
-        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         cursor.goto_next_sibling();
 
@@ -223,10 +223,10 @@ impl Visitor {
         }
 
         // cursor -> ')'
-        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::window_specification, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::window_specification, src);
 
         Ok(clauses)
     }
@@ -241,11 +241,11 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> PARTITION
-        let mut clause = pg_create_clause(cursor, SyntaxKind::PARTITION)?;
+        let mut clause = pg_create_clause!(cursor, SyntaxKind::PARTITION);
 
         cursor.goto_next_sibling();
         // cursor -> BY
-        pg_ensure_kind(cursor, SyntaxKind::BY, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::BY, src);
         clause.pg_extend_kw(cursor.node());
 
         cursor.goto_next_sibling();
@@ -263,7 +263,7 @@ impl Visitor {
         clause.set_body(Body::SepLines(separated_lines));
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::opt_partition_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::opt_partition_clause, src);
 
         Ok(clause)
     }

@@ -30,12 +30,12 @@ impl Visitor {
         //        └ 呼出時  └ 呼出後
 
         // cursor -> TYPECAST (`::`)
-        pg_ensure_kind(cursor, SyntaxKind::TYPECAST, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::TYPECAST, src);
 
         cursor.goto_next_sibling();
         // cursor -> Typename
         let type_name = self.visit_typename(cursor, src)?;
-        pg_ensure_kind(cursor, SyntaxKind::Typename, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::Typename, src);
 
         // 親の a_expr が、 Type cast 全体の式にあたる
         let loc = cursor.node().parent().unwrap().range().into();
@@ -72,7 +72,7 @@ impl Visitor {
         // - SETOF? SimpleTypename opt_array_bounds
         // - SETOF? SimpleTypename ARRAY ('[' Iconst ']')?
 
-        pg_ensure_kind(cursor, SyntaxKind::Typename, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::Typename, src);
         // とりあえずはシンプルなキーワードのみの型名を想定
         let typename = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Keyword)?;
         Ok(typename)

@@ -47,7 +47,7 @@ impl Visitor {
         let statement = self.visit_select_stmt_inner(cursor, src)?;
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::SelectStmt, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::SelectStmt, src);
 
         Ok(statement)
     }
@@ -78,7 +78,7 @@ impl Visitor {
 
         // cursor -> SELECT keyword
         // select_clause を消去したので、select_clause の中身が並ぶ
-        pg_ensure_kind(cursor, SyntaxKind::SELECT, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::SELECT, src);
 
         // select句を追加する
         statement.add_clause(self.visit_select_clause(cursor, src)?);

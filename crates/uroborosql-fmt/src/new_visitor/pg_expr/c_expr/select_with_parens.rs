@@ -47,7 +47,7 @@ impl Visitor {
                 // SelectStmt の子要素にあたるノード群が並ぶ
                 // 呼出し後、cursor は ')' を指す
                 let mut select_stmt = self.visit_select_stmt_inner(cursor, src)?;
-                pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+                pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
 
                 // select 文の前にコメントがあった場合、コメントを追加
                 comment_buf
@@ -98,10 +98,10 @@ impl Visitor {
         };
 
         // cursor -> ')'
-        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::select_with_parens, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::select_with_parens, src);
 
         Ok(expr)
     }

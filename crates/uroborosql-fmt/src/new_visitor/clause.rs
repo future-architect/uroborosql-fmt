@@ -14,11 +14,12 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::{Expr, PrimaryExpr},
     error::UroboroSQLFmtError,
+    new_visitor::pg_ensure_kind,
     util::convert_identifier_case,
     NewVisitor as Visitor,
 };
 
-use super::{pg_ensure_kind, pg_error_annotation_from_cursor};
+use super::pg_error_annotation_from_cursor;
 
 impl Visitor {
     pub(crate) fn visit_qualified_name(
@@ -31,13 +32,13 @@ impl Visitor {
         // - ColId indirection
 
         cursor.goto_first_child();
-        pg_ensure_kind(cursor, SyntaxKind::ColId, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::ColId, src);
 
         let mut qualified_name_text = cursor.node().text().to_string();
 
         if cursor.goto_next_sibling() {
             // indirection が存在する場合
-            pg_ensure_kind(cursor, SyntaxKind::indirection, src)?;
+            pg_ensure_kind!(cursor, SyntaxKind::indirection, src);
 
             let indirection_text = cursor.node().text().to_string();
 
@@ -62,7 +63,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> qualified_name
-        pg_ensure_kind(cursor, SyntaxKind::qualified_name, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::qualified_name, src);
 
         let primary = PrimaryExpr::new(
             convert_identifier_case(&qualified_name_text),

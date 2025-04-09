@@ -18,7 +18,7 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        let mut clause = pg_create_clause(cursor, SyntaxKind::HAVING)?;
+        let mut clause = pg_create_clause!(cursor, SyntaxKind::HAVING);
         cursor.goto_next_sibling();
         self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
@@ -27,7 +27,7 @@ impl Visitor {
         clause.set_body(body);
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::having_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::having_clause, src);
 
         Ok(clause)
     }

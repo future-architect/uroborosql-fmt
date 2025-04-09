@@ -20,15 +20,15 @@ impl Visitor {
 
         // cursor -> "FROM"
         cursor.goto_first_child();
-        pg_ensure_kind(cursor, SyntaxKind::FROM, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::FROM, src);
 
-        let mut clause = pg_create_clause(cursor, SyntaxKind::FROM)?;
+        let mut clause = pg_create_clause!(cursor, SyntaxKind::FROM);
         cursor.goto_next_sibling();
 
         self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> from_list
-        pg_ensure_kind(cursor, SyntaxKind::from_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::from_list, src);
 
         let from_list = self.visit_from_list(cursor, src)?;
 
@@ -36,7 +36,7 @@ impl Visitor {
 
         // cursor -> from_clause
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::from_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::from_clause, src);
 
         Ok(clause)
     }
@@ -53,7 +53,7 @@ impl Visitor {
         // from_listは必ず table_ref を子供に持つ
         // cursor -> table_ref
         cursor.goto_first_child();
-        pg_ensure_kind(cursor, SyntaxKind::table_ref, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
         let mut sep_lines = SeparatedLines::new();
 
@@ -107,7 +107,7 @@ impl Visitor {
 
         // cursor -> from_list
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::from_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::from_list, src);
 
         Ok(Body::SepLines(sep_lines))
     }
@@ -167,7 +167,7 @@ impl Visitor {
                     }
 
                     cursor.goto_parent();
-                    pg_ensure_kind(cursor, SyntaxKind::opt_alias_clause, src)?;
+                    pg_ensure_kind!(cursor, SyntaxKind::opt_alias_clause, src);
                     cursor.goto_next_sibling();
                 }
 
@@ -182,7 +182,7 @@ impl Visitor {
 
                 cursor.goto_parent();
                 // cursor -> table_ref
-                pg_ensure_kind(cursor, SyntaxKind::table_ref, src)?;
+                pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
                 Ok(aligned)
             }
@@ -233,12 +233,12 @@ impl Visitor {
                     }
 
                     cursor.goto_parent();
-                    pg_ensure_kind(cursor, SyntaxKind::opt_alias_clause, src)?;
+                    pg_ensure_kind!(cursor, SyntaxKind::opt_alias_clause, src);
                 }
 
                 cursor.goto_parent();
                 // cursor -> table_ref
-                pg_ensure_kind(cursor, SyntaxKind::table_ref, src)?;
+                pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
                 Ok(aligned)
             }
@@ -328,7 +328,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::relation_expr, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::relation_expr, src);
 
         Ok(expr)
     }
@@ -344,7 +344,7 @@ impl Visitor {
         // - [AS] ColId ['(' name_list ')']
 
         // cursor -> alias_clause
-        pg_ensure_kind(cursor, SyntaxKind::alias_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::alias_clause, src);
 
         cursor.goto_first_child();
         // cursor -> AS?
@@ -371,7 +371,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::alias_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::alias_clause, src);
 
         Ok((as_keyword, col_id.into()))
     }

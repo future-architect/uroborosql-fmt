@@ -29,7 +29,7 @@ impl Visitor {
         //        └ not_keyword
 
         // cursor -> LIKE
-        pg_ensure_kind(cursor, SyntaxKind::LIKE, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::LIKE, src);
 
         // op_text: NOT LIKE or LIKE
         let op_text = if let Some(not_keyword) = not_keyword {

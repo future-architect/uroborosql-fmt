@@ -74,7 +74,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::AexprConst, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::AexprConst, src);
 
         Ok(expr)
     }

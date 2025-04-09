@@ -60,7 +60,7 @@ impl Visitor {
         self.visit_select_limit_value(cursor, src, &mut limit_clause)?;
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::limit_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::limit_clause, src);
 
         Ok(limit_clause)
     }
@@ -100,7 +100,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::select_limit_value, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::select_limit_value, src);
 
         Ok(())
     }
