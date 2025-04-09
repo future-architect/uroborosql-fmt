@@ -3,7 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Comment, CondExpr, Location},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::pg_error_annotation_from_cursor,
+    pg_create_clause, pg_ensure_kind,
     util::convert_keyword_case,
 };
 
@@ -95,13 +96,13 @@ impl Visitor {
         }
 
         // cursor -> END_P
-        pg_ensure_kind(cursor, SyntaxKind::END_P, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::END_P, src);
         let end_keyword = convert_keyword_case(cursor.node().text());
         cond_expr.set_end_keyword(&end_keyword);
 
         cursor.goto_parent();
         // cursor -> case_expr
-        pg_ensure_kind(cursor, SyntaxKind::case_expr, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::case_expr, src);
 
         Ok(cond_expr)
     }
@@ -117,7 +118,7 @@ impl Visitor {
         // フラット化されている: https://github.com/future-architect/postgresql-cst-parser/pull/12
 
         // cursor -> when_clause_list
-        pg_ensure_kind(cursor, SyntaxKind::when_clause_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::when_clause_list, src);
 
         cursor.goto_first_child();
         // cursor -> when_clause
@@ -130,7 +131,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> when_clause_list
-        pg_ensure_kind(cursor, SyntaxKind::when_clause_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::when_clause_list, src);
 
         Ok(())
     }
@@ -169,7 +170,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> case_arg
-        pg_ensure_kind(cursor, SyntaxKind::case_arg, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::case_arg, src);
 
         Ok(())
     }
@@ -186,12 +187,12 @@ impl Visitor {
         // - WHEN a_expr THEN a_expr
 
         // cursor -> when_clause
-        pg_ensure_kind(cursor, SyntaxKind::when_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::when_clause, src);
 
         cursor.goto_first_child();
         // cursor -> WHEN
 
-        let mut when_clause = pg_create_clause(cursor, SyntaxKind::when_clause)?;
+        let mut when_clause = pg_create_clause!(cursor, SyntaxKind::when_clause);
         cursor.goto_next_sibling();
         // cursor -> Comment?
         self.pg_consume_comments_in_clause(cursor, &mut when_clause)?;
@@ -205,7 +206,7 @@ impl Visitor {
         self.pg_consume_comments_in_clause(cursor, &mut when_clause)?;
 
         // cursor -> THEN
-        let mut then_clause = pg_create_clause(cursor, SyntaxKind::THEN)?;
+        let mut then_clause = pg_create_clause!(cursor, SyntaxKind::THEN);
         cursor.goto_next_sibling();
         // cursor -> Comment?
         self.pg_consume_comments_in_clause(cursor, &mut then_clause)?;
@@ -218,7 +219,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> when_clause
-        pg_ensure_kind(cursor, SyntaxKind::when_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::when_clause, src);
 
         Ok(())
     }
@@ -234,12 +235,12 @@ impl Visitor {
         // - ELSE a_expr
 
         // cursor -> case_default
-        pg_ensure_kind(cursor, SyntaxKind::case_default, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::case_default, src);
 
         cursor.goto_first_child();
         // cursor -> ELSE
 
-        let mut else_clause = pg_create_clause(cursor, SyntaxKind::ELSE)?;
+        let mut else_clause = pg_create_clause!(cursor, SyntaxKind::ELSE);
         cursor.goto_next_sibling();
         // cursor -> Comment?
         self.pg_consume_comments_in_clause(cursor, &mut else_clause)?;
@@ -252,7 +253,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> case_default
-        pg_ensure_kind(cursor, SyntaxKind::case_default, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::case_default, src);
 
         Ok(())
     }

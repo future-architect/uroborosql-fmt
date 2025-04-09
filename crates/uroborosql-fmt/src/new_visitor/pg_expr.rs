@@ -7,9 +7,10 @@ use postgresql_cst_parser::tree_sitter::TreeCursor;
 use crate::{
     cst::{AlignedExpr, ColumnList, Comment, Expr, Location},
     error::UroboroSQLFmtError,
+    pg_ensure_kind,
 };
 
-use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
+use super::{pg_error_annotation_from_cursor, Visitor};
 
 impl Visitor {
     /// a_expr または b_expr を走査する
@@ -63,7 +64,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> a_expr or b_expr (parent)
-        pg_ensure_kind(cursor, expr_kind, src)?;
+        pg_ensure_kind!(cursor, expr: expr_kind, src);
 
         Ok(expr)
     }
@@ -75,7 +76,7 @@ impl Visitor {
         src: &str,
     ) -> Result<Vec<AlignedExpr>, UroboroSQLFmtError> {
         // cursor -> expr_list
-        pg_ensure_kind(cursor, SyntaxKind::expr_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::expr_list, src);
 
         cursor.goto_first_child();
         // cursor -> a_expr
@@ -110,7 +111,7 @@ impl Visitor {
                     }
 
                     // cursor -> a_expr
-                    pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
+                    pg_ensure_kind!(cursor, SyntaxKind::a_expr, src);
                     let mut expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
                     // コメントがバインドパラメータならば式に付与
@@ -167,7 +168,7 @@ impl Visitor {
         src: &str,
     ) -> Result<ColumnList, UroboroSQLFmtError> {
         // cursor -> '('
-        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
         let mut loc = Location::from(cursor.node().range());
 
         cursor.goto_next_sibling();
@@ -183,7 +184,7 @@ impl Visitor {
         }
 
         // cursor -> expr_list
-        pg_ensure_kind(cursor, SyntaxKind::expr_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::expr_list, src);
         let mut exprs = self.visit_expr_list(cursor, src)?;
 
         // start_comments のうち最後のものは、 expr_list の最初の要素のバインドパラメータの可能性がある
@@ -223,7 +224,7 @@ impl Visitor {
         }
 
         // cursor -> ')'
-        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
         // Location が括弧全体を指すよう更新
         loc.append(Location::from(cursor.node().range()));
 

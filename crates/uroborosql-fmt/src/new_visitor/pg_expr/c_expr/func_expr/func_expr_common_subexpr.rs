@@ -6,7 +6,8 @@ use crate::{
         PrimaryExprKind,
     },
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::pg_error_annotation_from_cursor,
+    pg_ensure_kind,
     util::convert_keyword_case,
 };
 
@@ -78,7 +79,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::func_expr_common_subexpr, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::func_expr_common_subexpr, src);
 
         Ok(func)
     }
@@ -93,31 +94,31 @@ impl Visitor {
         // CAST '(' a_expr AS typename ')'
 
         // cursor -> CAST
-        pg_ensure_kind(cursor, SyntaxKind::CAST, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::CAST, src);
         let cast_keyword = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
         // cursor -> '('
-        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         cursor.goto_next_sibling();
         // cursor -> a_expr
-        pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::a_expr, src);
         let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         cursor.goto_next_sibling();
         // cursor -> AS
-        pg_ensure_kind(cursor, SyntaxKind::AS, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::AS, src);
         let as_keyword = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
         // cursor -> Typename
-        pg_ensure_kind(cursor, SyntaxKind::Typename, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::Typename, src);
         let type_name = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Keyword)?;
 
         cursor.goto_next_sibling();
         // cursor -> ')'
-        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         // 最後の要素
         assert!(!cursor.goto_next_sibling());

@@ -3,7 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{ExistsSubquery, Expr, Location},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::pg_error_annotation_from_cursor,
+    pg_ensure_kind,
     util::convert_keyword_case,
 };
 
@@ -32,7 +33,7 @@ impl Visitor {
         );
 
         // cursor -> EXISTS
-        pg_ensure_kind(cursor, SyntaxKind::EXISTS, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::EXISTS, src);
 
         let exists_keyword = convert_keyword_case(cursor.node().text());
 
@@ -53,7 +54,7 @@ impl Visitor {
 
         let exists_subquery = ExistsSubquery::new(&exists_keyword, select_subexpr, exists_loc);
 
-        pg_ensure_kind(cursor, SyntaxKind::select_with_parens, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::select_with_parens, src);
 
         Ok(exists_subquery)
     }

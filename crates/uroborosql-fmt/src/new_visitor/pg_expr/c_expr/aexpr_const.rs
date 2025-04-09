@@ -3,7 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Expr, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::pg_error_annotation_from_cursor,
+    pg_ensure_kind,
 };
 
 use super::Visitor;
@@ -74,7 +75,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::AexprConst, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::AexprConst, src);
 
         Ok(expr)
     }

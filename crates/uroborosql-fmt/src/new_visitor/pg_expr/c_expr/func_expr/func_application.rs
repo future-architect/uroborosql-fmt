@@ -5,7 +5,8 @@ use crate::{
         AlignedExpr, AsteriskExpr, Comment, Expr, FunctionCall, FunctionCallArgs, FunctionCallKind,
     },
     error::UroboroSQLFmtError,
-    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::pg_error_annotation_from_cursor,
+    pg_create_clause, pg_ensure_kind,
     util::convert_keyword_case,
 };
 
@@ -25,12 +26,12 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> func_name
-        pg_ensure_kind(cursor, SyntaxKind::func_name, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::func_name, src);
         let func_name = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
         // cursor -> '('
-        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         let args = self.handle_function_call_args(cursor, src)?;
 
@@ -49,11 +50,11 @@ impl Visitor {
         }
 
         // cursor -> ')'
-        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
         cursor.goto_parent();
 
         // cursor -> func_application
-        pg_ensure_kind(cursor, SyntaxKind::func_application, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::func_application, src);
 
         Ok(func_call)
     }
@@ -78,7 +79,7 @@ impl Visitor {
 
         let mut function_call_args = FunctionCallArgs::new(vec![], cursor.node().range().into());
 
-        pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         cursor.goto_next_sibling();
 
@@ -90,7 +91,7 @@ impl Visitor {
         // ALL | DISTINCT | VARIADIC ?
         match cursor.node().kind() {
             SyntaxKind::ALL | SyntaxKind::DISTINCT | SyntaxKind::VARIADIC => {
-                let all_distinct_clause = pg_create_clause(cursor, cursor.node().kind())?;
+                let all_distinct_clause = pg_create_clause!(cursor, expr: cursor.node().kind());
                 function_call_args.set_all_distinct(all_distinct_clause);
 
                 cursor.goto_next_sibling();
@@ -184,7 +185,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::func_arg_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::func_arg_list, src);
 
         Ok(())
     }
@@ -222,7 +223,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::func_arg_expr, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::func_arg_expr, src);
 
         Ok(arg)
     }

@@ -3,7 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause, Comment, Expr, PrimaryExpr, PrimaryExprKind, SingleLine},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::pg_error_annotation_from_cursor,
+    pg_ensure_kind,
 };
 
 use super::Visitor;
@@ -60,7 +61,7 @@ impl Visitor {
         self.visit_select_limit_value(cursor, src, &mut limit_clause)?;
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::limit_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::limit_clause, src);
 
         Ok(limit_clause)
     }
@@ -100,7 +101,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::select_limit_value, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::select_limit_value, src);
 
         Ok(())
     }

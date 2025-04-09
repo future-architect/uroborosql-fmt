@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{AlignedExpr, Comment, Expr, ExprSeq, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
-    new_visitor::pg_ensure_kind,
+    pg_ensure_kind,
 };
 
 use super::Visitor;
@@ -29,7 +29,7 @@ impl Visitor {
         //        └ not_keyword
 
         // cursor -> LIKE
-        pg_ensure_kind(cursor, SyntaxKind::LIKE, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::LIKE, src);
 
         // op_text: NOT LIKE or LIKE
         let op_text = if let Some(not_keyword) = not_keyword {

@@ -3,8 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause, Comment, Expr, SeparatedLines},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
-    NewVisitor as Visitor,
+    new_visitor::{pg_error_annotation_from_cursor, COMMA},
+    pg_create_clause, pg_ensure_kind, NewVisitor as Visitor,
 };
 
 // group_clause
@@ -34,7 +34,7 @@ impl Visitor {
         cursor.goto_first_child();
 
         // cursor -> GROUP_P
-        let mut clause = pg_create_clause(cursor, SyntaxKind::GROUP_P)?;
+        let mut clause = pg_create_clause!(cursor, SyntaxKind::GROUP_P);
         cursor.goto_next_sibling();
 
         // cursor -> BY
@@ -54,7 +54,7 @@ impl Visitor {
         clause.set_body(Body::SepLines(group_by_list));
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::group_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::group_clause, src);
 
         Ok(clause)
     }
@@ -98,7 +98,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::group_by_list, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::group_by_list, src);
 
         Ok(sep_lines)
     }
@@ -137,7 +137,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::group_by_item, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::group_by_item, src);
 
         Ok(expr)
     }

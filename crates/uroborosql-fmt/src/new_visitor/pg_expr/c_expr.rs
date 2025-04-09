@@ -10,9 +10,10 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Comment, Expr, ParenExpr},
     error::UroboroSQLFmtError,
+    pg_ensure_kind,
 };
 
-use super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
+use super::{pg_error_annotation_from_cursor, Visitor};
 
 /*
  * c_expr の構造
@@ -54,7 +55,7 @@ impl Visitor {
                 // '(' a_expr ')' opt_indirection
 
                 // cursor -> '('
-                pg_ensure_kind(cursor, SyntaxKind::LParen, src)?;
+                pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
 
                 cursor.goto_next_sibling();
                 // cursor -> comments?
@@ -67,7 +68,7 @@ impl Visitor {
                 }
 
                 // cursor -> expr
-                pg_ensure_kind(cursor, SyntaxKind::a_expr, src)?;
+                pg_ensure_kind!(cursor, SyntaxKind::a_expr, src);
                 let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
                 // TODO: remove_redundant_nest
 
@@ -82,7 +83,7 @@ impl Visitor {
                 }
 
                 // cursor -> ")"
-                pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+                pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
 
                 // 親(c_expr) の location を設定
                 // 親が無いことはありえないので、parent() の返り値が None の場合は panic する
@@ -149,7 +150,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::c_expr, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::c_expr, src);
 
         Ok(expr)
     }

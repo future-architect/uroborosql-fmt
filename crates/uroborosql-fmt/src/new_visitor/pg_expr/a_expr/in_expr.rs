@@ -3,10 +3,11 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{AlignedExpr, Comment, Expr},
     error::UroboroSQLFmtError,
+    pg_ensure_kind,
     util::convert_keyword_case,
 };
 
-use super::super::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor};
+use super::super::{pg_error_annotation_from_cursor, Visitor};
 
 impl Visitor {
     /// 左辺の式とオプションのNOTキーワードを受け取り、IN述語にあたるノード群を走査する
@@ -29,7 +30,7 @@ impl Visitor {
         //        └ not_keyword
 
         // cursor -> IN_P
-        pg_ensure_kind(cursor, SyntaxKind::IN_P, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::IN_P, src);
 
         // op_text: NOT IN or IN
         let op_text = if let Some(not_keyword) = not_keyword {
@@ -109,7 +110,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> in_expr
-        pg_ensure_kind(cursor, SyntaxKind::in_expr, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::in_expr, src);
 
         Ok(expr)
     }

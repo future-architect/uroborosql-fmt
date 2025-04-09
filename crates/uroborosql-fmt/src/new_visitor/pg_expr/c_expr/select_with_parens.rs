@@ -3,8 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Comment, Expr, Location, ParenExpr, SubExpr},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
-    CONFIG,
+    new_visitor::pg_error_annotation_from_cursor,
+    pg_ensure_kind, CONFIG,
 };
 
 use super::Visitor;
@@ -47,7 +47,7 @@ impl Visitor {
                 // SelectStmt の子要素にあたるノード群が並ぶ
                 // 呼出し後、cursor は ')' を指す
                 let mut select_stmt = self.visit_select_stmt_inner(cursor, src)?;
-                pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+                pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
 
                 // select 文の前にコメントがあった場合、コメントを追加
                 comment_buf
@@ -98,10 +98,10 @@ impl Visitor {
         };
 
         // cursor -> ')'
-        pg_ensure_kind(cursor, SyntaxKind::RParen, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::select_with_parens, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::select_with_parens, src);
 
         Ok(expr)
     }

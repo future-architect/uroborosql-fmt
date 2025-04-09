@@ -3,7 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause, SingleLine},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::pg_error_annotation_from_cursor,
+    pg_ensure_kind,
 };
 
 use super::Visitor;
@@ -26,7 +27,7 @@ impl Visitor {
         // - OFFSET select_fetch_first_value row_or_rows
 
         cursor.goto_first_child();
-        pg_ensure_kind(cursor, SyntaxKind::OFFSET, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::OFFSET, src);
 
         let mut offset_clause = Clause::from_pg_node(cursor.node());
 
@@ -44,7 +45,7 @@ impl Visitor {
                 let body = Body::SingleLine(Box::new(SingleLine::new(expr)));
 
                 cursor.goto_parent();
-                pg_ensure_kind(cursor, SyntaxKind::select_offset_value, src)?;
+                pg_ensure_kind!(cursor, SyntaxKind::select_offset_value, src);
 
                 offset_clause.set_body(body);
             }
@@ -64,7 +65,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::offset_clause, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::offset_clause, src);
 
         Ok(offset_clause)
     }

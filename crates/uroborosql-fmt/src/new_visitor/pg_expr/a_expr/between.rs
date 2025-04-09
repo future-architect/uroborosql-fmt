@@ -3,7 +3,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{AlignedExpr, Comment, Expr},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::pg_error_annotation_from_cursor,
+    pg_ensure_kind,
     util::convert_keyword_case,
 };
 
@@ -33,7 +34,7 @@ impl Visitor {
         }
 
         // cursor -> BETWEEN
-        pg_ensure_kind(cursor, SyntaxKind::BETWEEN, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::BETWEEN, src);
         let between_keyword = cursor.node().text();
         operator += &convert_keyword_case(between_keyword);
         cursor.goto_next_sibling();
@@ -67,7 +68,7 @@ impl Visitor {
         };
 
         // cursor -> AND
-        pg_ensure_kind(cursor, SyntaxKind::AND, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::AND, src);
         let and_keyword = cursor.node().text();
         cursor.goto_next_sibling();
 

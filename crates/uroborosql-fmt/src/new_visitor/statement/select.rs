@@ -3,7 +3,8 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
+    new_visitor::{pg_error_annotation_from_cursor, Visitor},
+    pg_ensure_kind,
 };
 
 impl Visitor {
@@ -47,7 +48,7 @@ impl Visitor {
         let statement = self.visit_select_stmt_inner(cursor, src)?;
 
         cursor.goto_parent();
-        pg_ensure_kind(cursor, SyntaxKind::SelectStmt, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::SelectStmt, src);
 
         Ok(statement)
     }
@@ -78,7 +79,7 @@ impl Visitor {
 
         // cursor -> SELECT keyword
         // select_clause を消去したので、select_clause の中身が並ぶ
-        pg_ensure_kind(cursor, SyntaxKind::SELECT, src)?;
+        pg_ensure_kind!(cursor, SyntaxKind::SELECT, src);
 
         // select句を追加する
         statement.add_clause(self.visit_select_clause(cursor, src)?);
