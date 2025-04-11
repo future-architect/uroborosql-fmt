@@ -8,6 +8,7 @@ mod offset;
 mod select;
 mod sort;
 mod where_clause;
+mod with;
 
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
 

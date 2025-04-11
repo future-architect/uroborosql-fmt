@@ -62,18 +62,13 @@ impl Visitor {
 
         // cursor -> with_clause?
         if cursor.node().kind() == SyntaxKind::with_clause {
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_select_stmt(): with_clause is not implemented\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
-            )));
+            let mut with_clause = self.visit_with_clause(cursor, src)?;
+            cursor.goto_next_sibling();
 
-            // // with句を追加する
-            // let mut with_clause = self.visit_with_clause(cursor, src)?;
-            // cursor.goto_next_sibling();
-            // // with句の後に続くコメントを消費する
-            // self.consume_comment_in_clause(cursor, src, &mut with_clause)?;
+            // with句の後に続くコメントを消費する
+            self.pg_consume_comments_in_clause(cursor, &mut with_clause)?;
 
-            // statement.add_clause(with_clause);
+            statement.add_clause(with_clause);
         }
 
         // cursor -> SELECT keyword
