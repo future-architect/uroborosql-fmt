@@ -18,7 +18,7 @@ with
 select
 	*
 from
-	t
+	time
 ;
 -- name_list
 with

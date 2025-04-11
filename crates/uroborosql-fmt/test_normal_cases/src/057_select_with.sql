@@ -2,7 +2,7 @@
 WITH t AS (SELECT 1) SELECT * FROM t;
 
 -- special name
-WITH time AS (SELECT 1) SELECT * FROM t;
+WITH time AS (SELECT 1) SELECT * FROM time;
 
 -- name_list
 WITH t1(a, b) AS (SELECT 1, 2) SELECT * FROM t1;
