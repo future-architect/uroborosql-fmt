@@ -13,11 +13,8 @@ mod with;
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
 
 use crate::{
-    cst::{Expr, PrimaryExpr},
-    error::UroboroSQLFmtError,
-    new_visitor::pg_ensure_kind,
-    util::convert_identifier_case,
-    NewVisitor as Visitor,
+    cst::PrimaryExpr, error::UroboroSQLFmtError, new_visitor::pg_ensure_kind,
+    util::convert_identifier_case, NewVisitor as Visitor,
 };
 
 use super::pg_error_annotation_from_cursor;
@@ -27,7 +24,7 @@ impl Visitor {
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
-    ) -> Result<Expr, UroboroSQLFmtError> {
+    ) -> Result<PrimaryExpr, UroboroSQLFmtError> {
         // qualified_name
         // - ColId
         // - ColId indirection
@@ -71,6 +68,6 @@ impl Visitor {
             cursor.node().range().into(),
         );
 
-        Ok(primary.into())
+        Ok(primary)
     }
 }

@@ -128,7 +128,7 @@ impl Visitor {
                     )));
                 }
                 SyntaxKind::from_clause => {
-                    let from_clause = self.pg_visit_from_clause(cursor, src)?;
+                    let from_clause = self.visit_from_clause(cursor, src)?;
                     statement.add_clause(from_clause);
                 }
                 SyntaxKind::where_clause => {

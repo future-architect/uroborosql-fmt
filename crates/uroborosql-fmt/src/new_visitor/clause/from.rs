@@ -1,7 +1,7 @@
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
 
 use crate::{
-    cst::*,
+    cst::{joined_table::JoinedTable, *},
     error::UroboroSQLFmtError,
     new_visitor::{
         pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA,
@@ -11,7 +11,7 @@ use crate::{
 };
 
 impl Visitor {
-    pub(crate) fn pg_visit_from_clause(
+    pub(crate) fn visit_from_clause(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
@@ -41,7 +41,6 @@ impl Visitor {
         Ok(clause)
     }
 
-    /// postgresql-cst-parser の from_list を Body::SeparatedLines に変換する
     /// 呼出し後、cursor は from_list を指している
     pub(crate) fn visit_from_list(
         &mut self,
@@ -55,10 +54,10 @@ impl Visitor {
         cursor.goto_first_child();
         pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
-        let mut sep_lines = SeparatedLines::new();
+        let mut from_body = SeparatedLines::new();
 
         let table_ref = self.visit_table_ref(cursor, src)?;
-        sep_lines.add_expr(table_ref, None, vec![]);
+        from_body.add_expr(table_ref, None, vec![]);
 
         while cursor.goto_next_sibling() {
             // cursor -> "," または table_ref
@@ -66,11 +65,11 @@ impl Visitor {
                 SyntaxKind::Comma => {}
                 SyntaxKind::table_ref => {
                     let table_ref = self.visit_table_ref(cursor, src)?;
-                    sep_lines.add_expr(table_ref, Some(COMMA.to_string()), vec![]);
+                    from_body.add_expr(table_ref, Some(COMMA.to_string()), vec![]);
                 }
                 SyntaxKind::SQL_COMMENT => {
                     let comment = Comment::pg_new(cursor.node());
-                    sep_lines.add_comment_to_child(comment)?;
+                    from_body.add_comment_to_child(comment)?;
                 }
                 SyntaxKind::C_COMMENT => {
                     let comment_node = cursor.node();
@@ -92,7 +91,7 @@ impl Visitor {
                             pg_error_annotation_from_cursor(cursor, src)
                         )));
                     } else {
-                        sep_lines.add_comment_to_child(comment)?;
+                        from_body.add_comment_to_child(comment)?;
                     }
                 }
                 _ => {
@@ -109,7 +108,7 @@ impl Visitor {
         cursor.goto_parent();
         pg_ensure_kind!(cursor, SyntaxKind::from_list, src);
 
-        Ok(Body::SepLines(sep_lines))
+        Ok(Body::SepLines(from_body))
     }
 
     /// postgresql-cst-parser の table_ref を Body::SeparatedLines に変換する
@@ -139,10 +138,8 @@ impl Visitor {
                 // テーブル参照
                 // relation_expr [opt_alias_clause] [tablesample_clause]
 
-                // AlignedExpr での左辺にあたる式
-                let lhs_expr = self.visit_relation_expr(cursor, src)?;
-
-                let mut aligned = AlignedExpr::new(lhs_expr);
+                let table_name = self.visit_relation_expr(cursor, src)?;
+                let mut table_ref = table_name.to_aligned();
 
                 cursor.goto_next_sibling();
 
@@ -157,13 +154,13 @@ impl Visitor {
                     if let Some(as_keyword) = as_keyword {
                         // AS があり、かつ AS を除去する設定が有効ならば AS を除去する
                         if CONFIG.read().unwrap().remove_table_as_keyword {
-                            aligned.add_rhs(None, col_id);
+                            table_ref.add_rhs(None, col_id);
                         } else {
-                            aligned.add_rhs(Some(convert_keyword_case(&as_keyword)), col_id);
+                            table_ref.add_rhs(Some(convert_keyword_case(&as_keyword)), col_id);
                         }
                     } else {
                         // ASが無い場合は補完しない
-                        aligned.add_rhs(None, col_id);
+                        table_ref.add_rhs(None, col_id);
                     }
 
                     cursor.goto_parent();
@@ -184,13 +181,14 @@ impl Visitor {
                 // cursor -> table_ref
                 pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
-                Ok(aligned)
+                Ok(table_ref)
             }
             SyntaxKind::select_with_parens => {
                 // サブクエリ
                 // select_with_parens opt_alias_clause
 
-                let mut aligned = AlignedExpr::new(self.visit_select_with_parens(cursor, src)?);
+                let sub_query = self.visit_select_with_parens(cursor, src)?;
+                let mut table_ref = sub_query.to_aligned();
 
                 cursor.goto_next_sibling();
 
@@ -201,8 +199,8 @@ impl Visitor {
 
                     // 行末以外のコメント（次行以降のコメント）は未定義
                     // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
-                    if !comment.is_block_comment() && comment.loc().is_same_line(&aligned.loc()) {
-                        aligned.set_lhs_trailing_comment(comment)?;
+                    if !comment.is_block_comment() && comment.loc().is_same_line(&table_ref.loc()) {
+                        table_ref.set_lhs_trailing_comment(comment)?;
                     } else {
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "visit_table_ref(): unexpected comment\n{}",
@@ -223,13 +221,13 @@ impl Visitor {
                     if let Some(as_keyword) = as_keyword {
                         // AS があり、かつ AS を除去する設定が有効ならば AS を除去する
                         if CONFIG.read().unwrap().remove_table_as_keyword {
-                            aligned.add_rhs(None, col_id);
+                            table_ref.add_rhs(None, col_id);
                         } else {
-                            aligned.add_rhs(Some(convert_keyword_case(&as_keyword)), col_id);
+                            table_ref.add_rhs(Some(convert_keyword_case(&as_keyword)), col_id);
                         }
                     } else {
                         // ASが無い場合は補完しない
-                        aligned.add_rhs(None, col_id);
+                        table_ref.add_rhs(None, col_id);
                     }
 
                     cursor.goto_parent();
@@ -240,25 +238,61 @@ impl Visitor {
                 // cursor -> table_ref
                 pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
-                Ok(aligned)
+                Ok(table_ref)
             }
             SyntaxKind::joined_table => {
                 // テーブル結合
-                // joined_table
-                // - users INNER JOIN orders ON users.id = orders.user_id
-                Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_table_ref(): joined_table node appeared. Table joins are not implemented yet.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
+                let joined_table = self.visit_joined_table(cursor, src)?;
+
+                cursor.goto_parent();
+                pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
+
+                Ok(joined_table.to_aligned())
             }
             SyntaxKind::LParen => {
                 // 括弧付き結合
                 // '(' joined_table ')' alias_clause
-                // - (users JOIN orders ON users.id = orders.user_id) AS uo
-                Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_table_ref(): parenthesized join node appeared. Parenthesized joins are not implemented yet.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
+
+                cursor.goto_next_sibling();
+
+                let joined_table = self.visit_joined_table(cursor, src)?;
+                // ParenExpr を作成
+                let parenthesized_joined_table =
+                    ParenExpr::new(joined_table, Location::from(cursor.node().range()));
+
+                let mut paren = Expr::ParenExpr(Box::new(parenthesized_joined_table));
+
+                cursor.goto_next_sibling();
+                // cursor -> comment?
+                while cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    paren.add_comment_to_child(comment)?;
+                    cursor.goto_next_sibling();
+                }
+
+                pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+
+                let mut aligned = paren.to_aligned();
+
+                cursor.goto_next_sibling();
+                pg_ensure_kind!(cursor, SyntaxKind::alias_clause, src);
+                let (as_keyword, col_id) = self.visit_alias_clause(cursor, src)?;
+
+                // as の補完はしない。as が存在し、 remove_table_as_keyword が有効ならば AS を除去
+                if let Some(as_keyword) = as_keyword {
+                    if CONFIG.read().unwrap().remove_table_as_keyword {
+                        aligned.add_rhs(None, col_id);
+                    } else {
+                        aligned.add_rhs(Some(convert_keyword_case(&as_keyword)), col_id);
+                    }
+                } else {
+                    aligned.add_rhs(None, col_id);
+                }
+
+                cursor.goto_parent();
+                pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
+
+                Ok(aligned)
             }
             SyntaxKind::func_table => {
                 // テーブル関数呼び出し
@@ -330,7 +364,7 @@ impl Visitor {
         cursor.goto_parent();
         pg_ensure_kind!(cursor, SyntaxKind::relation_expr, src);
 
-        Ok(expr)
+        Ok(expr.into())
     }
 
     /// alias_clause を visit し、 as キーワード (Option) と Expr を返す
@@ -374,5 +408,246 @@ impl Visitor {
         pg_ensure_kind!(cursor, SyntaxKind::alias_clause, src);
 
         Ok((as_keyword, col_id.into()))
+    }
+
+    fn visit_joined_table(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // joined_table
+        // - '(' joined_table ')'
+        // - table_ref NATURAL join_type? JOIN table_ref
+        // - table_ref CROSS JOIN table_ref
+        // - table_ref join_type JOIN table_ref join_qual
+        // - table_ref JOIN table_ref join_qual
+        //
+        // join_qual
+        // - ON a_expr
+        // - USING '(' name_list ')' opt_alias_clause_for_join_using
+
+        let loc = Location::from(cursor.node().range());
+
+        cursor.goto_first_child();
+
+        match cursor.node().kind() {
+            SyntaxKind::LParen => {
+                // '(' joined_table ')'
+                pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+
+                cursor.goto_next_sibling();
+                let mut start_comments = vec![];
+                while cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    start_comments.push(comment);
+                    cursor.goto_next_sibling();
+                }
+
+                let joined_table = self.visit_joined_table(cursor, src)?;
+
+                cursor.goto_next_sibling();
+
+                let mut end_comments = vec![];
+                while cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    end_comments.push(comment);
+                    cursor.goto_next_sibling();
+                }
+
+                pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+
+                cursor.goto_parent();
+
+                let mut paren_expr = ParenExpr::new(joined_table, loc);
+
+                // コメントを追加
+                for comment in start_comments {
+                    paren_expr.add_start_comment(comment);
+                }
+                for comment in end_comments {
+                    paren_expr.add_end_comment(comment);
+                }
+
+                Ok(Expr::ParenExpr(Box::new(paren_expr)))
+            }
+            SyntaxKind::table_ref => {
+                // table_ref NATURAL join_type? JOIN table_ref
+                // table_ref CROSS JOIN table_ref
+                // table_ref join_type JOIN table_ref join_qual
+                // table_ref JOIN table_ref join_qual
+
+                let mut left = self.visit_table_ref(cursor, src)?;
+
+                cursor.goto_next_sibling();
+
+                // cursor -> comment?
+                if cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    // 行末コメントであれば左辺に追加
+                    if !comment.is_block_comment() && comment.loc().is_same_line(&left.loc()) {
+                        left.set_trailing_comment(comment)?;
+                    } else {
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_joined_table(): unexpected comment\n{}",
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                    cursor.goto_next_sibling();
+                }
+
+                let mut keywords = vec![];
+
+                // cursor -> (CROSS | NATURAL)?
+                if matches!(
+                    cursor.node().kind(),
+                    SyntaxKind::CROSS | SyntaxKind::NATURAL
+                ) {
+                    keywords.push(convert_keyword_case(cursor.node().text()));
+                    cursor.goto_next_sibling();
+                }
+
+                // cursor -> join_type?
+                if cursor.node().kind() == SyntaxKind::join_type {
+                    // join_type
+                    // - (FULL | LEFT | RIGHT) OUTER?
+                    // - INNER
+
+                    let join_type_texts = self.join_type(cursor, src)?;
+
+                    keywords.extend(join_type_texts);
+                    cursor.goto_next_sibling();
+                }
+
+                // cursor -> JOIN
+                pg_ensure_kind!(cursor, SyntaxKind::JOIN, src);
+                keywords.push(convert_keyword_case(cursor.node().text()));
+
+                cursor.goto_next_sibling();
+
+                // cursor -> table_ref
+                let mut right = self.visit_table_ref(cursor, src)?;
+
+                cursor.goto_next_sibling();
+
+                if cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    right.set_trailing_comment(comment)?;
+                    cursor.goto_next_sibling();
+                }
+
+                let mut joined_table = JoinedTable::new(loc, left, keywords.join(" "), right);
+
+                // cursor -> join_qual
+                if cursor.node().kind() == SyntaxKind::join_qual {
+                    let join_qualifier: Clause = self.visit_join_qual(cursor, src)?;
+
+                    joined_table.set_qualifier(join_qualifier);
+                }
+
+                cursor.goto_parent();
+                pg_ensure_kind!(cursor, SyntaxKind::joined_table, src);
+
+                Ok(Expr::from(joined_table))
+            }
+            _ => Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                "visit_joined_table(): unexpected node kind\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            ))),
+        }
+    }
+
+    fn visit_join_qual(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        // join_qual
+        // - ON a_expr
+        // - USING '(' name_list ')' opt_alias_clause_for_join_using
+
+        cursor.goto_first_child();
+
+        match cursor.node().kind() {
+            SyntaxKind::ON => {
+                // ON a_expr
+
+                let mut on_clause = pg_create_clause!(cursor, SyntaxKind::ON);
+
+                cursor.goto_next_sibling();
+                // cursor -> comment?
+                while cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    on_clause.add_comment_to_child(comment)?;
+                    cursor.goto_next_sibling();
+                }
+
+                // cursor -> a_expr
+                let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
+
+                let body = Body::from(expr);
+                on_clause.set_body(body);
+
+                cursor.goto_parent();
+                pg_ensure_kind!(cursor, SyntaxKind::join_qual, src);
+
+                Ok(on_clause)
+            }
+            SyntaxKind::USING => {
+                // USING '(' name_list ')' opt_alias_clause_for_join_using
+                Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_join_qual(): USING node appeared. USING is not implemented yet.\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            _ => Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                "visit_join_qual(): unexpected node kind\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            ))),
+        }
+    }
+
+    fn join_type(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        src: &str,
+    ) -> Result<Vec<String>, UroboroSQLFmtError> {
+        // join_type
+        // - (FULL | LEFT | RIGHT) opt_outer?
+        // - INNER_P
+
+        cursor.goto_first_child();
+
+        let keywords = match cursor.node().kind() {
+            SyntaxKind::FULL | SyntaxKind::LEFT | SyntaxKind::RIGHT => {
+                let mut keywords = vec![];
+
+                keywords.push(convert_keyword_case(cursor.node().text()));
+
+                // cursor -> opt_outer?
+                if cursor.goto_next_sibling() && cursor.node().kind() == SyntaxKind::opt_outer {
+                    keywords.push(convert_keyword_case(cursor.node().text()));
+                    cursor.goto_next_sibling();
+                } else if CONFIG.read().unwrap().complement_outer_keyword {
+                    // OUTER キーワードが省略されていて、補完する設定が有効ならば補完する
+                    keywords.push(convert_keyword_case("OUTER"));
+                }
+
+                keywords
+            }
+            SyntaxKind::INNER_P => {
+                vec![convert_keyword_case(cursor.node().text())]
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_join_type(): unexpected node kind\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::join_type, src);
+
+        Ok(keywords)
     }
 }
