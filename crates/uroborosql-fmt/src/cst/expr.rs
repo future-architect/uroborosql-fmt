@@ -5,11 +5,14 @@ pub(crate) mod cond;
 pub(crate) mod conflict_target;
 pub(crate) mod expr_seq;
 pub(crate) mod function;
+pub(crate) mod joined_table;
 pub(crate) mod paren;
 pub(crate) mod primary;
 pub(crate) mod subquery;
 pub(crate) mod type_cast;
 pub(crate) mod unary;
+
+use joined_table::JoinedTable;
 
 use crate::{error::UroboroSQLFmtError, util::to_tab_num};
 
@@ -53,6 +56,8 @@ pub(crate) enum Expr {
     ExprSeq(Box<ExprSeq>),
     /// `::`を用いたキャスト
     TypeCast(Box<TypeCast>),
+    /// テーブル結合
+    JoinedTable(Box<JoinedTable>),
 }
 
 impl Expr {
@@ -71,6 +76,7 @@ impl Expr {
             Expr::FunctionCall(func_call) => func_call.loc(),
             Expr::ExprSeq(n_expr) => n_expr.loc(),
             Expr::TypeCast(type_cast) => type_cast.loc(),
+            Expr::JoinedTable(joined_table) => joined_table.loc(),
         }
     }
 
@@ -93,6 +99,7 @@ impl Expr {
             Expr::FunctionCall(func_call) => func_call.render(depth),
             Expr::ExprSeq(n_expr) => n_expr.render(depth),
             Expr::TypeCast(type_cast) => type_cast.render(depth),
+            Expr::JoinedTable(joined_table) => joined_table.render(depth),
         }
     }
 
@@ -129,6 +136,7 @@ impl Expr {
             Expr::Boolean(_) => unimplemented!(),
             Expr::ExprSeq(n_expr) => n_expr.last_line_len_from_left(acc),
             Expr::TypeCast(type_cast) => type_cast.last_line_len_from_left(acc),
+            Expr::JoinedTable(_) => unimplemented!(),
         }
     }
 
@@ -167,6 +175,9 @@ impl Expr {
                     "add_comment_to_child(): unimplemented for conditional_expr\nexpr: {cond:?}"
                 )));
             }
+            Expr::JoinedTable(joined_table) => {
+                joined_table.add_comment_to_child(comment)?;
+            }
             _ => {
                 // todo
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
@@ -204,6 +215,7 @@ impl Expr {
             Expr::ColumnList(col_list) => col_list.is_multi_line(),
             Expr::ExprSeq(n_expr) => n_expr.is_multi_line(),
             Expr::TypeCast(type_cast) => type_cast.is_multi_line(),
+            Expr::JoinedTable(joined_table) => joined_table.is_multi_line(),
         }
     }
 
@@ -223,7 +235,8 @@ impl Expr {
             | Expr::ColumnList(_)
             | Expr::FunctionCall(_)
             | Expr::ExprSeq(_)
-            | Expr::TypeCast(_) => false,
+            | Expr::TypeCast(_)
+            | Expr::JoinedTable(_) => false,
         }
     }
 
