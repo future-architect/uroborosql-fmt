@@ -1,7 +1,10 @@
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
 
 use crate::{
-    cst::{joined_table::JoinedTable, *},
+    cst::{
+        joined_table::{JoinedTable, Qualifier},
+        *,
+    },
     error::UroboroSQLFmtError,
     new_visitor::{
         pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA,
@@ -552,7 +555,7 @@ impl Visitor {
 
                 // cursor -> join_qual
                 if cursor.node().kind() == SyntaxKind::join_qual {
-                    let join_qualifier: Clause = self.visit_join_qual(cursor, src)?;
+                    let join_qualifier = self.visit_join_qual(cursor, src)?;
 
                     joined_table.set_qualifier(join_qualifier);
                 }
@@ -573,7 +576,7 @@ impl Visitor {
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
-    ) -> Result<Clause, UroboroSQLFmtError> {
+    ) -> Result<Qualifier, UroboroSQLFmtError> {
         // join_qual
         // - ON a_expr
         // - USING '(' name_list ')' opt_alias_clause_for_join_using
@@ -584,21 +587,23 @@ impl Visitor {
             SyntaxKind::ON => {
                 // ON a_expr
 
-                let mut on_clause = pg_create_clause!(cursor, SyntaxKind::ON);
+                pg_ensure_kind!(cursor, SyntaxKind::ON, src);
+                let on_keyword = convert_keyword_case(cursor.node().text());
 
                 cursor.goto_next_sibling();
                 // cursor -> comment?
+                let mut comments_after_keyword = vec![];
                 while cursor.node().is_comment() {
                     let comment = Comment::pg_new(cursor.node());
-                    on_clause.add_comment_to_child(comment)?;
+                    comments_after_keyword.push(comment);
                     cursor.goto_next_sibling();
                 }
 
                 // cursor -> a_expr
                 let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
-                let body = Body::from(expr);
-                on_clause.set_body(body);
+                let on_clause =
+                    Qualifier::new(on_keyword, comments_after_keyword, expr.to_aligned());
 
                 cursor.goto_parent();
                 pg_ensure_kind!(cursor, SyntaxKind::join_qual, src);

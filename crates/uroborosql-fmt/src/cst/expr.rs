@@ -136,7 +136,7 @@ impl Expr {
             Expr::Boolean(_) => unimplemented!(),
             Expr::ExprSeq(n_expr) => n_expr.last_line_len_from_left(acc),
             Expr::TypeCast(type_cast) => type_cast.last_line_len_from_left(acc),
-            Expr::JoinedTable(_) => unimplemented!(),
+            Expr::JoinedTable(joined_table) => joined_table.last_line_len_from_left(acc),
         }
     }
 
