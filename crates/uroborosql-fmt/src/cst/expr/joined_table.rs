@@ -11,7 +11,6 @@ pub struct Qualifier {
     keyword: String,
     comments_after_keyword: Vec<Comment>,
     condition: AlignedExpr,
-    comments_after_condition: Vec<Comment>,
 }
 
 impl Qualifier {
@@ -24,7 +23,6 @@ impl Qualifier {
             keyword,
             comments_after_keyword,
             condition,
-            comments_after_condition: vec![],
         }
     }
 
@@ -35,7 +33,9 @@ impl Qualifier {
         if !comment.is_block_comment() && comment.loc().is_same_line(&self.condition.loc()) {
             self.condition.set_trailing_comment(comment)?;
         } else {
-            self.comments_after_condition.push(comment);
+            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                "add_comment_to_child(): this comment is not trailing comment\nexpr: {self:?}comment: {comment:?}\n"
+            )));
         }
 
         Ok(())
@@ -59,10 +59,6 @@ impl Qualifier {
 
         add_indent(&mut result, depth);
         result.push_str(&self.condition.render(depth)?);
-
-        for comment in &self.comments_after_condition {
-            result.push_str(&comment.render(depth)?);
-        }
 
         Ok(result)
     }
