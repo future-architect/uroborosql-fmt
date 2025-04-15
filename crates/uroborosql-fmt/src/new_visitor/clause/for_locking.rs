@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{Body, Clause, Comment, SeparatedLines},
+    cst::{Body, Clause, Comment, Expr, SeparatedLines},
     error::UroboroSQLFmtError,
     new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
     NewVisitor as Visitor,
@@ -196,7 +196,7 @@ impl Visitor {
 
         let mut separated_lines = SeparatedLines::new();
 
-        let first_element = self.visit_qualified_name(cursor, src)?;
+        let first_element: Expr = self.visit_qualified_name(cursor, src)?.into();
         separated_lines.add_expr(first_element.to_aligned(), None, vec![]);
 
         while cursor.goto_next_sibling() {
@@ -219,7 +219,7 @@ impl Visitor {
                     {
                         cursor.goto_next_sibling();
 
-                        let mut element = self.visit_qualified_name(cursor, src)?;
+                        let mut element: Expr = self.visit_qualified_name(cursor, src)?.into();
                         element.set_head_comment(comment);
 
                         separated_lines.add_expr(
@@ -232,7 +232,7 @@ impl Visitor {
                     }
                 }
                 SyntaxKind::qualified_name => {
-                    let element = self.visit_qualified_name(cursor, src)?;
+                    let element: Expr = self.visit_qualified_name(cursor, src)?.into();
                     separated_lines.add_expr(element.to_aligned(), Some(COMMA.to_string()), vec![]);
                 }
                 _ => {
