@@ -152,12 +152,6 @@ impl JoinedTable {
 
         if let Some(qualifier) = &self.qualifier {
             result.push('\n');
-
-            // result.push_str(&qualifier.render(depth - 1)?);
-
-            // // Clause の末尾には改行が含まれるが、JoinedTable の末尾では改行しないようにするため除外する
-            // let last_char = result.pop();
-            // assert_eq!(last_char, Some('\n'));
             result.push_str(&qualifier.render(depth)?);
         }
 

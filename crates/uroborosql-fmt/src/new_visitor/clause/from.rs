@@ -602,13 +602,13 @@ impl Visitor {
                 // cursor -> a_expr
                 let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
-                let on_clause =
+                let qualifier =
                     Qualifier::new(on_keyword, comments_after_keyword, expr.to_aligned());
 
                 cursor.goto_parent();
                 pg_ensure_kind!(cursor, SyntaxKind::join_qual, src);
 
-                Ok(on_clause)
+                Ok(qualifier)
             }
             SyntaxKind::USING => {
                 // USING '(' name_list ')' opt_alias_clause_for_join_using
