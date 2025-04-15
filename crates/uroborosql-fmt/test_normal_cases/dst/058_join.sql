@@ -6,7 +6,6 @@ inner join
 	t2
 on
 	t1.num	=	t2.num
-
 ;
 select
 	*
@@ -16,7 +15,6 @@ left outer join
 	t2
 on
 	t1.num	=	t2.num
-
 ;
 select
 	*
@@ -26,7 +24,6 @@ right outer join
 	t2
 on
 	t1.num	=	t2.num
-
 ;
 select
 	*
@@ -36,7 +33,6 @@ full outer join
 	t2
 on
 	t1.num	=	t2.num
-
 ;
 select
 	*
@@ -46,12 +42,10 @@ inner join
 	t2
 on
 	t1.num	=	t2.num
-
 inner join
 	t3
 on
 	t2.num	=	t3.num
-
 ;
 select
 	*
@@ -61,7 +55,6 @@ left outer join
 	t2
 on
 	t1.num	=	t2.num
-
 ;
 select
 	*
@@ -71,7 +64,6 @@ right outer join
 	t2
 on
 	t1.num	=	t2.num
-
 ;
 select
 	*
@@ -81,7 +73,6 @@ full outer join
 	t2
 on
 	t1.num	=	t2.num
-
 ;
 select
 	*
