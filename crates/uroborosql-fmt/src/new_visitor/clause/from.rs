@@ -523,6 +523,13 @@ impl Visitor {
                 keywords.push(convert_keyword_case(cursor.node().text()));
 
                 cursor.goto_next_sibling();
+                // cursor -> comment?
+                let mut comments_after_join_keyword = vec![];
+                while cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    comments_after_join_keyword.push(comment);
+                    cursor.goto_next_sibling();
+                }
 
                 // cursor -> table_ref
                 let mut right = self.visit_table_ref(cursor, src)?;
@@ -535,7 +542,13 @@ impl Visitor {
                     cursor.goto_next_sibling();
                 }
 
-                let mut joined_table = JoinedTable::new(loc, left, keywords.join(" "), right);
+                let mut joined_table = JoinedTable::new(
+                    loc,
+                    left,
+                    keywords.join(" "),
+                    comments_after_join_keyword,
+                    right,
+                );
 
                 // cursor -> join_qual
                 if cursor.node().kind() == SyntaxKind::join_qual {

@@ -36,3 +36,19 @@ from
 
 -- old cross join
 select * from t1, t2, t3;
+
+-- after join keyword comment
+select
+	*
+from
+	(
+		select
+			*
+		from
+			t1
+		cross join
+		-- comment 1
+		-- comment 2
+			t2
+	)	a
+;

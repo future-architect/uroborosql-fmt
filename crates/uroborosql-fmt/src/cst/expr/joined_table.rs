@@ -11,13 +11,12 @@ pub(crate) struct JoinedTable {
     loc: Location,
     left: AlignedExpr,
     join_keyword: String,
+    comments_after_join_keyword: Vec<Comment>,
     right: AlignedExpr,
 
     // ON, USING
     qualifier: Option<Clause>,
-
-    // 行末コメント
-    trailing_comments: Vec<Comment>,
+    end_comments: Vec<Comment>,
 }
 
 impl JoinedTable {
@@ -25,15 +24,17 @@ impl JoinedTable {
         loc: Location,
         left: AlignedExpr,
         join_keyword: String,
+        comments_after_join_keyword: Vec<Comment>,
         right: AlignedExpr,
     ) -> Self {
         Self {
             loc,
             left,
             join_keyword,
+            comments_after_join_keyword,
             right,
             qualifier: None,
-            trailing_comments: vec![],
+            end_comments: vec![],
         }
     }
 
@@ -53,12 +54,12 @@ impl JoinedTable {
         &mut self,
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
+        // qualifier があればその下に追加する
         if let Some(qualifier) = &mut self.qualifier {
             qualifier.add_comment_to_child(comment)?;
         } else {
-            self.trailing_comments.push(comment);
+            self.end_comments.push(comment);
         }
-
         Ok(())
     }
 
@@ -74,6 +75,11 @@ impl JoinedTable {
         result.push_str(&self.join_keyword);
         result.push('\n');
 
+        for comment in &self.comments_after_join_keyword {
+            result.push_str(&comment.render(depth - 1)?);
+            result.push('\n');
+        }
+
         // right
         add_indent(&mut result, depth);
         result.push_str(&self.right.render(depth)?);
@@ -82,6 +88,15 @@ impl JoinedTable {
             result.push('\n');
 
             result.push_str(&qualifier.render(depth - 1)?);
+
+            // Clause の末尾には改行が含まれるが、JoinedTable の末尾では改行しないようにするため除外する
+            let last_char = result.pop();
+            assert_eq!(last_char, Some('\n'));
+        }
+
+        for comment in &self.end_comments {
+            result.push('\n');
+            result.push_str(&comment.render(depth)?);
         }
 
         Ok(result)
