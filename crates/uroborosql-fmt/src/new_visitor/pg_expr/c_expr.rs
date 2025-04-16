@@ -11,6 +11,7 @@ use crate::{
     cst::{Comment, Expr, ParenExpr},
     error::UroboroSQLFmtError,
     new_visitor::pg_ensure_kind,
+    CONFIG,
 };
 
 use super::{pg_error_annotation_from_cursor, Visitor};
@@ -69,13 +70,28 @@ impl Visitor {
 
                 // cursor -> expr
                 pg_ensure_kind!(cursor, SyntaxKind::a_expr, src);
-                let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
-                // TODO: remove_redundant_nest
+                let mut expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
                 cursor.goto_next_sibling();
 
-                // cursor -> comments?
                 let mut end_comment_buf = vec![];
+
+                // cursor -> comment?
+                // 式の行末コメントならば式に付与し、そうでなければ閉じ括弧の前のコメントとして保持する
+                if cursor.node().kind() == SyntaxKind::SQL_COMMENT {
+                    let comment = Comment::pg_new(cursor.node());
+
+                    if comment.loc().is_same_line(&expr.loc()) {
+                        expr.add_comment_to_child(comment)?;
+                    } else {
+                        end_comment_buf.push(comment);
+                    }
+
+                    cursor.goto_next_sibling();
+                }
+
+                // cursor -> comments?
+                // 閉じ括弧の前のコメントを処理する
                 while cursor.node().is_comment() {
                     let comment = Comment::pg_new(cursor.node());
                     end_comment_buf.push(comment);
@@ -87,13 +103,23 @@ impl Visitor {
 
                 // 親(c_expr) の location を設定
                 // 親が無いことはありえないので、parent() の返り値が None の場合は panic する
-                let parent = cursor
+                let parent_loc = cursor
                     .node()
                     .parent()
-                    .expect("visit_c_expr(): parent is None");
+                    .expect("visit_c_expr(): parent is None")
+                    .range()
+                    .into();
 
-                // 親の location を設定
-                let mut paren_expr = ParenExpr::new(expr, parent.range().into());
+                let mut paren_expr = match expr {
+                    Expr::ParenExpr(mut paren_expr)
+                        if CONFIG.read().unwrap().remove_redundant_nest =>
+                    {
+                        // remove_redundant_nestオプションが有効のとき、ParenExprをネストさせない
+                        paren_expr.set_loc(parent_loc);
+                        *paren_expr
+                    }
+                    _ => ParenExpr::new(expr, parent_loc),
+                };
 
                 // 開きかっこと式の間にあるコメントを追加
                 for comment in start_comment_buf {
