@@ -74,8 +74,24 @@ impl Visitor {
 
                 cursor.goto_next_sibling();
 
-                // cursor -> comments?
                 let mut end_comment_buf = vec![];
+
+                // cursor -> comment?
+                // 式の行末コメントならば式に付与し、そうでなければ閉じ括弧の前のコメントとして保持する
+                if cursor.node().kind() == SyntaxKind::SQL_COMMENT {
+                    let comment = Comment::pg_new(cursor.node());
+
+                    if comment.loc().is_same_line(&expr.loc()) {
+                        expr.add_comment_to_child(comment)?;
+                    } else {
+                        end_comment_buf.push(comment);
+                    }
+
+                    cursor.goto_next_sibling();
+                }
+
+                // cursor -> comments?
+                // 閉じ括弧の前のコメントを処理する
                 while cursor.node().is_comment() {
                     let comment = Comment::pg_new(cursor.node());
                     end_comment_buf.push(comment);
