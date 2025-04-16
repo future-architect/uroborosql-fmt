@@ -48,24 +48,27 @@ impl Visitor {
         cursor.goto_next_sibling();
 
         // cursor -> Comment?
-        // この位置のコメントは単純CASE式の条件部分に対するバインドパラメータのみを考慮する
-        let head_comment = if cursor.node().is_comment() {
-            let comment_node = cursor.node();
-            cursor.goto_next_sibling();
-
-            Some(Comment::pg_new(comment_node))
-        } else {
-            None
-        };
-
-        // cursor -> case_arg?
-        if cursor.node().kind() == SyntaxKind::case_arg {
-            self.visit_case_arg(cursor, src, &mut cond_expr, head_comment)?;
-
+        // 最後のコメントは単純 CASE 式の条件部分に対するバインドパラメータの可能性があるので追加せず保持しておく
+        let mut comments_after_case_keyword = Vec::new();
+        while cursor.node().is_comment() {
+            comments_after_case_keyword.push(Comment::pg_new(cursor.node()));
             cursor.goto_next_sibling();
         }
 
+        // cursor -> case_arg?
+        if cursor.node().kind() == SyntaxKind::case_arg {
+            self.visit_case_arg(cursor, src, &mut cond_expr, comments_after_case_keyword)?;
+
+            cursor.goto_next_sibling();
+        } else {
+            // case_arg がない場合、CASE キーワード後のコメントを追加する
+            for comment in comments_after_case_keyword {
+                cond_expr.set_trailing_comment(comment)?;
+            }
+        }
+
         // cursor -> Comment?
+        // case_arg がある場合、その後のコメントを処理
         while cursor.node().is_comment() {
             cond_expr.set_trailing_comment(Comment::pg_new(cursor.node()))?;
             cursor.goto_next_sibling();
@@ -126,7 +129,7 @@ impl Visitor {
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
                 SyntaxKind::when_clause => {
-            self.visit_when_clause(cursor, src, cond_expr)?;
+                    self.visit_when_clause(cursor, src, cond_expr)?;
                 }
                 SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
                     cond_expr.set_trailing_comment(Comment::pg_new(cursor.node()))?;
@@ -148,13 +151,13 @@ impl Visitor {
     }
 
     /// 引数に CondExpr を受け取り、case_arg を走査して expr を設定する
-    /// 直前のコメントがあれば受け取る。バインドパラメータであれば式として処理する
+    /// 直前のコメントがあれば受け取り、それがバインドパラメータであれば式として処理する
     fn visit_case_arg(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
         cond_expr: &mut CondExpr,
-        head_comment: Option<Comment>,
+        comments_after_case_keyword: Vec<Comment>,
     ) -> Result<(), UroboroSQLFmtError> {
         // 単純CASE式
         cursor.goto_first_child();
@@ -162,22 +165,24 @@ impl Visitor {
         // cursor -> a_expr
         let mut expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
-        // コメントノードがバインドパラメータであるかを判定する
-        // バインドパラメータならば式として処理し、そうでなければエラー
-        // ここで、単純CASE式の条件以外の部分では、バインドパラメータを持つ式は現れないことを想定している
-        if let Some(comment) = head_comment {
-            if comment.is_block_comment() && comment.loc().is_next_to(&expr.loc()) {
-                expr.set_head_comment(comment);
-                cond_expr.set_expr(expr);
-            } else {
-                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "case_expr: Unexpected comment\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
+        // 最後のコメントは単純CASE式の条件部分に対するバインドパラメータの可能性がある
+        // バインドパラメータであれば式に付与し、それ以外のコメントは CondExpr に追加する
+        if let Some((last, rest)) = comments_after_case_keyword.split_last() {
+            // 最後以外のコメントは CondExpr に追加
+            for comment in rest {
+                cond_expr.set_trailing_comment(comment.clone())?;
             }
-        } else {
-            cond_expr.set_expr(expr);
+
+            // 最後のコメントが式に対するバインドパラメータならば式に付与し、
+            // そうでなければ CondExpr に追加する
+            if last.is_block_comment() && last.loc().is_next_to(&expr.loc()) {
+                expr.set_head_comment(last.clone());
+            } else {
+                cond_expr.set_trailing_comment(last.clone())?;
+            }
         }
+
+        cond_expr.set_expr(expr);
 
         cursor.goto_parent();
         // cursor -> case_arg
