@@ -124,8 +124,20 @@ impl Visitor {
         self.visit_when_clause(cursor, src, cond_expr)?;
 
         while cursor.goto_next_sibling() {
-            // cursor -> when_clause
+            match cursor.node().kind() {
+                SyntaxKind::when_clause => {
             self.visit_when_clause(cursor, src, cond_expr)?;
+                }
+                SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
+                    cond_expr.set_trailing_comment(Comment::pg_new(cursor.node()))?;
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "case_expr: Unexpected syntax\n{}",
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                }
+            }
         }
 
         cursor.goto_parent();
