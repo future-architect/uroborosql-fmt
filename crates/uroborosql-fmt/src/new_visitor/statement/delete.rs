@@ -34,15 +34,27 @@ impl Visitor {
         // cursor -> opt_with_clause?
 
         if cursor.node().kind() == SyntaxKind::opt_with_clause {
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_delete_stmt(): opt_with_clause is not implemented.\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
-            )));
+            // opt_with_clause
+            // - with_clause
 
-            // let with_clause = self.visit_with_clause(cursor, src)?;
-            // statement.add_clause(with_clause);
-            // self.pg_consume_comments_in_clause(cursor, src, &mut with_clause)?;
-            // statement.add_clause(with_clause);
+            cursor.goto_first_child();
+            pg_ensure_kind!(cursor, SyntaxKind::with_clause, src);
+
+            let with_clause = self.visit_with_clause(cursor, src)?;
+
+            statement.add_clause(with_clause);
+
+            cursor.goto_parent();
+            pg_ensure_kind!(cursor, SyntaxKind::opt_with_clause, src);
+
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> comments?
+        while cursor.node().is_comment() {
+            let comment = Comment::pg_new(cursor.node());
+            statement.add_comment_to_child(comment)?;
+            cursor.goto_next_sibling();
         }
 
         // cursor -> DELETE_P
