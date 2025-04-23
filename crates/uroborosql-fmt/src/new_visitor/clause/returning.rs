@@ -8,7 +8,7 @@ use crate::{
 };
 
 // returning_clause
-// - RETURNING returning_with_clause? target_list
+// - RETURNING target_list
 //
 // returning_with_clause
 // - WITH ( returning_options )
@@ -31,7 +31,7 @@ impl Visitor {
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
         // returning_clause
-        // - RETURNING returning_with_clause? target_list
+        // - RETURNING target_list
 
         cursor.goto_first_child();
 
@@ -39,19 +39,8 @@ impl Visitor {
 
         cursor.goto_next_sibling();
 
-        // FIXME: returning_with_clause が SyntaxKind のメンバとして存在しない
-        //
-        // cursor -> returning_with_clause?
-        // if cursor.node().kind() == SyntaxKind::returning_with_clause {
-        //     return Err(UroboroSQLFmtError::Unimplemented(
-        //         format!(
-        //             "visit_returning_clause(): returning_with_clause is not implemented\n{}",
-        //             pg_error_annotation_from_cursor(cursor, src)
-        //         )
-        //     ));
-        // }
-
         // cursor -> target_list
+        pg_ensure_kind!(cursor, SyntaxKind::target_list, src);
         let body = self.visit_target_list(cursor, src)?;
         clause.set_body(body);
 
