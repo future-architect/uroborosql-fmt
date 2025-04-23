@@ -19,23 +19,6 @@ use crate::{
 //
 // using_clause
 // - USING from_list
-//
-// returning_clause
-// - RETURNING returning_with_clause target_list
-//
-// returning_with_clause
-// - WITH ( returning_options )
-//
-// returning_options
-// - NEEDS_FLATTEN
-// - returning_option (, returning_option )*
-//
-// returning_option
-// - returning_option_kind AS ColId
-//
-// returning_option_kind
-// - OLD
-// - NEW
 
 impl Visitor {
     pub(crate) fn visit_delete_stmt(
@@ -94,10 +77,8 @@ impl Visitor {
                     statement.add_clause(where_or_current_clause);
                 }
                 SyntaxKind::returning_clause => {
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_delete_stmt(): returning_clause is not implemented.\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
+                    let returning_clause = self.visit_returning_clause(cursor, src)?;
+                    statement.add_clause(returning_clause);
                 }
                 SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
                     let comment = Comment::pg_new(cursor.node());
