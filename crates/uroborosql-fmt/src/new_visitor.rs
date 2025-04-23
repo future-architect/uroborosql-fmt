@@ -87,14 +87,11 @@ impl Visitor {
                         // InsertStmt => self.visit_insert_stmt(cursor, src)?,
                         _ => {
                             return Err(UroboroSQLFmtError::Unimplemented(
-                                // TODO: error_annotation_from_cursorの移植
-                                "visit_source(): Unimplemented statement\n".to_string()
-
-                                // format!(
-                                // "visit_source(): Unimplemented statement\n",
-                                // error_annotation_from_cursor(cursor, src)
+                                format!(
+                                    "visit_source(): Unimplemented statement\n{}",
+                                    pg_error_annotation_from_cursor(cursor, src)
                             )
-                        );
+                            ));
                         }
                     };
 
