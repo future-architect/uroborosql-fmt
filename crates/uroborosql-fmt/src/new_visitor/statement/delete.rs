@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{Body, Comment, Expr, PrimaryExpr, PrimaryExprKind, SeparatedLines, Statement},
+    cst::{Body, Clause, Comment, Expr, PrimaryExpr, PrimaryExprKind, SeparatedLines, Statement},
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
     util::convert_keyword_case,
@@ -85,10 +85,8 @@ impl Visitor {
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
                 SyntaxKind::using_clause => {
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_delete_stmt(): using_clause is not implemented.\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
+                    let using_clause = self.visit_using_clause(cursor, src)?;
+                    statement.add_clause(using_clause);
                 }
                 SyntaxKind::where_or_current_clause => {
                     let where_or_current_clause =
@@ -119,6 +117,29 @@ impl Visitor {
         pg_ensure_kind!(cursor, SyntaxKind::DeleteStmt, src);
 
         Ok(statement)
+    }
+
+    fn visit_using_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        // using_clause
+        // - USING from_list
+
+        cursor.goto_first_child();
+
+        let mut clause = pg_create_clause!(cursor, SyntaxKind::USING);
+        cursor.goto_next_sibling();
+
+        let body = self.visit_from_list(cursor, src)?;
+        clause.set_body(body);
+
+        cursor.goto_parent();
+        // cursor -> using_clause
+        pg_ensure_kind!(cursor, SyntaxKind::using_clause, src);
+
+        Ok(clause)
     }
 
     fn visit_relation_expr_opt_alias(
