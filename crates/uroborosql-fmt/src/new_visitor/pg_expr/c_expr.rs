@@ -3,6 +3,7 @@ mod case_expr;
 mod columnref;
 mod exists_subquery;
 mod func_expr;
+mod implicit_row;
 mod select_with_parens;
 
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
@@ -156,10 +157,8 @@ impl Visitor {
                 )))
             }
             SyntaxKind::implicit_row => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_c_expr(): implicit_row is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
+                let implicit_row = self.visit_implicit_row(cursor, src)?;
+                Expr::ColumnList(Box::new(implicit_row))
             }
             SyntaxKind::GROUPING => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
