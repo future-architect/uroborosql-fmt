@@ -1,9 +1,10 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{AlignedExpr, Body, ColumnList, Comment, Expr, SeparatedLines, Statement},
+    cst::{AlignedExpr, Body, Comment, Expr, Location, PrimaryExpr, SeparatedLines, Statement},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
+    util::convert_keyword_case,
     NewVisitor as Visitor,
 };
 
@@ -12,7 +13,6 @@ use crate::{
 //
 // opt_with_clause:
 // - with_clause
-//
 
 impl Visitor {
     pub(crate) fn visit_update_stmt(
@@ -61,6 +61,8 @@ impl Visitor {
         let body = self.visit_relation_expr_opt_alias(cursor, src)?;
         update_clause.set_body(body);
         statement.add_clause(update_clause);
+
+        cursor.goto_next_sibling();
 
         // cursor -> comments?
         while cursor.node().is_comment() {
@@ -120,7 +122,7 @@ impl Visitor {
     }
 
     fn visit_set_clause_list(
-        &self,
+        &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Body, UroboroSQLFmtError> {
@@ -129,9 +131,9 @@ impl Visitor {
         // flattened: https://github.com/future-architect/postgresql-cst-parser/pull/21
 
         cursor.goto_first_child();
-        pg_ensure_kind!(cursor, SyntaxKind::set_clause_list, src);
-
         let mut sep_lines = SeparatedLines::new();
+
+        pg_ensure_kind!(cursor, SyntaxKind::set_clause, src);
         let set_clause = self.visit_set_clause(cursor, src)?;
         sep_lines.add_expr(set_clause, None, vec![]);
 
@@ -139,7 +141,7 @@ impl Visitor {
             match cursor.node().kind() {
                 SyntaxKind::set_clause => {
                     let set_clause = self.visit_set_clause(cursor, src)?;
-                    sep_lines.add_expr(set_clause, None, vec![]);
+                    sep_lines.add_expr(set_clause, Some(COMMA.to_string()), vec![]);
                 }
                 SyntaxKind::Comma => {
                     continue;
@@ -165,40 +167,66 @@ impl Visitor {
     }
 
     fn visit_set_clause(
-        &self,
+        &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<AlignedExpr, UroboroSQLFmtError> {
         // set_clause:
         // - set_target '=' a_expr
         // - '(' set_target_list ')' '=' a_expr
-        //
 
-        unimplemented!()
+        cursor.goto_first_child();
+
+        // lhs: set_target | '(' set_target_list ')'
+        let lhs = match cursor.node().kind() {
+            SyntaxKind::set_target => self.visit_set_target(cursor, src)?,
+            SyntaxKind::LParen => {
+                unimplemented!("construct ColumnList")
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_set_clause(): unexpected syntax\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        let mut aligned = AlignedExpr::new(lhs);
+
+        cursor.goto_next_sibling();
+        pg_ensure_kind!(cursor, SyntaxKind::Equals, src);
+
+        cursor.goto_next_sibling();
+        let rhs = self.visit_a_expr_or_b_expr(cursor, src)?;
+
+        aligned.add_rhs(Some("=".to_string()), rhs);
+
+        cursor.goto_parent();
+        // cursor -> set_clause
+        pg_ensure_kind!(cursor, SyntaxKind::set_clause, src);
+
+        Ok(aligned)
     }
 
     fn visit_set_target(
         &self,
         cursor: &mut TreeCursor,
-        src: &str,
+        _src: &str,
     ) -> Result<Expr, UroboroSQLFmtError> {
         // set_target:
         // - ColId opt_indirection
 
-        unimplemented!()
-    }
+        let location = Location::from(cursor.node().range());
 
-    // '(' set_target_list ')' をフォーマットする
-    // parenthesized_set_target_list というノードは存在しない
-    fn visit_parenthesized_set_target_list(
-        &self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<ColumnList, UroboroSQLFmtError> {
-        // parenthesized_set_target_list:
-        // - '(' set_target_list ')'
+        let whitespace_removed_text = cursor
+            .node()
+            .text()
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>();
+        let expr = PrimaryExpr::new(convert_keyword_case(&whitespace_removed_text), location);
 
-        unimplemented!()
+        Ok(Expr::Primary(Box::new(expr)))
     }
 
     fn visit_set_target_list(
