@@ -1,7 +1,10 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{AlignedExpr, Body, Comment, Expr, Location, PrimaryExpr, SeparatedLines, Statement},
+    cst::{
+        AlignedExpr, Body, ColumnList, Comment, Expr, Location, PrimaryExpr, SeparatedLines,
+        Statement,
+    },
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
     util::convert_keyword_case,
@@ -181,7 +184,10 @@ impl Visitor {
         let lhs = match cursor.node().kind() {
             SyntaxKind::set_target => self.visit_set_target(cursor, src)?,
             SyntaxKind::LParen => {
-                unimplemented!("construct ColumnList")
+                let column_list = self.handle_parenthesized_set_target_list(cursor, src)?;
+
+                pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+                Expr::ColumnList(Box::new(column_list))
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
@@ -229,8 +235,62 @@ impl Visitor {
         Ok(Expr::Primary(Box::new(expr)))
     }
 
+    // '(' set_target_list ')' というノードの並びを処理し、 ColumnList を返す
+    // 呼出し時、 cursor は '(' を指している
+    // 呼出し後、 cursor は ')' を指している
+    fn handle_parenthesized_set_target_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ColumnList, UroboroSQLFmtError> {
+        // '(' set_target_list ')'
+
+        // cursor -> '('
+        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        // 開き括弧の位置を保持
+        let mut column_list_location = Location::from(cursor.node().range());
+
+        cursor.goto_next_sibling();
+
+        // 開き括弧と最初の式との間にあるコメントを保持
+        // 最後の要素はバインドパラメータの可能性があるので、最初の式を処理した後で付け替える
+        let mut start_comments = vec![];
+        while cursor.node().is_comment() {
+            start_comments.push(Comment::pg_new(cursor.node()));
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> set_target_list
+        let mut exprs = self.visit_set_target_list(cursor, src)?;
+
+        // start_comments の最後の要素が exprs の最初の要素のバインドパラメータであれば付与
+        if let Some(last_comment) = start_comments.last() {
+            if let Some(first_expr) = exprs.first_mut() {
+                if last_comment.is_block_comment()
+                    && last_comment.loc().is_next_to(&first_expr.loc())
+                {
+                    // バインドパラメータとして式に付与
+                    first_expr.set_head_comment(last_comment.clone());
+
+                    // start_comments からは最後の要素を削除
+                    start_comments.pop();
+                }
+            }
+        }
+
+        cursor.goto_next_sibling();
+        // cursor -> ')'
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+
+        // location を閉じ括弧の位置までに更新
+        column_list_location.append(cursor.node().range().into());
+
+        let column_list = ColumnList::new(exprs, column_list_location, start_comments);
+        Ok(column_list)
+    }
+
     fn visit_set_target_list(
-        &self,
+        &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Vec<AlignedExpr>, UroboroSQLFmtError> {
@@ -238,6 +298,87 @@ impl Visitor {
         // - set_target (',' set_target)*
         // flattened: https://github.com/future-architect/postgresql-cst-parser/pull/21
 
-        unimplemented!()
+        cursor.goto_first_child();
+        // cursor -> set_target
+
+        let mut exprs = Vec::new();
+
+        // 最初の要素
+        pg_ensure_kind!(cursor, SyntaxKind::set_target, src);
+        let expr = self.visit_set_target(cursor, src)?;
+        exprs.push(expr.to_aligned());
+
+        // 残りの要素
+        // cursor -> set_target | Comma | C_COMMENT | SQL_COMMENT
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                SyntaxKind::Comma => {}
+                SyntaxKind::set_target => {
+                    exprs.push(self.visit_set_target(cursor, src)?.to_aligned());
+                }
+                // バインドパラメータを想定
+                SyntaxKind::C_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+
+                    // 次の式へ
+                    if !cursor.goto_next_sibling() {
+                        // バインドパラメータでないブロックコメントは想定していない
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_set_target_list(): Unexpected syntax. node: {}\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+
+                    // cursor -> set_target
+                    pg_ensure_kind!(cursor, SyntaxKind::set_target, src);
+                    let mut expr = self.visit_set_target(cursor, src)?;
+
+                    // コメントがバインドパラメータならば式に付与
+                    if comment.is_block_comment() && comment.loc().is_next_to(&expr.loc()) {
+                        expr.set_head_comment(comment.clone());
+                    } else {
+                        // バインドパラメータでないブロックコメントは想定していない
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_set_target_list(): Unexpected comment\nnode_kind: {}\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+
+                    exprs.push(expr.to_aligned());
+                }
+                // 行末コメント
+                SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+
+                    // exprs は必ず1つ以上要素を持っている
+                    let last = exprs.last_mut().unwrap();
+                    if last.loc().is_same_line(&comment.loc()) {
+                        last.set_trailing_comment(comment)?;
+                    } else {
+                        // 行末コメント以外のコメントは想定していない
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_set_target_list(): Unexpected comment\nnode_kind: {}\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_set_target_list(): Unexpected syntax. node: {}\n{}",
+                        cursor.node().kind(),
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                }
+            }
+        }
+
+        cursor.goto_parent();
+        // cursor -> set_target_list
+        pg_ensure_kind!(cursor, SyntaxKind::set_target_list, src);
+
+        Ok(exprs)
     }
 }
