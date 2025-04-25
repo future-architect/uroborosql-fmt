@@ -1,1 +1,2 @@
+mod delete;
 mod select;

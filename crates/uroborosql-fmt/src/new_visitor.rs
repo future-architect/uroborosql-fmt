@@ -52,7 +52,7 @@ impl Visitor {
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
     ) -> Result<Vec<Statement>, UroboroSQLFmtError> {
-        use postgresql_cst_parser::syntax_kind::SyntaxKind::{SelectStmt, Semicolon};
+        use postgresql_cst_parser::syntax_kind::SyntaxKind::{DeleteStmt, SelectStmt, Semicolon};
 
         // source_file -> _statement*
         let mut source: Vec<Statement> = vec![];
@@ -77,24 +77,20 @@ impl Visitor {
             let kind = cursor.node().kind();
 
             match kind {
-                stmt_kind @ SelectStmt
-                //  | DeleteStmt | UpdateStmt | InsertStmt 
+                stmt_kind @ (SelectStmt| DeleteStmt) // | UpdateStmt | InsertStmt 
                 => {
                     let mut stmt = match stmt_kind {
-                        SelectStmt => self.visit_select_stmt(cursor, src)?, // とりあえず Statement を返す
-                        // DeleteStmt => self.visit_delete_stmt(cursor, src)?,
+                        SelectStmt => self.visit_select_stmt(cursor, src)?,
+                        DeleteStmt => self.visit_delete_stmt(cursor, src)?,
                         // UpdateStmt => self.visit_update_stmt(cursor, src)?,
                         // InsertStmt => self.visit_insert_stmt(cursor, src)?,
                         _ => {
                             return Err(UroboroSQLFmtError::Unimplemented(
-                                // TODO: error_annotation_from_cursorの移植
-                                "visit_source(): Unimplemented statement\n".to_string()
-
-                                // format!(
-                                // "visit_source(): Unimplemented statement\n",
-                                // error_annotation_from_cursor(cursor, src)
-                            )
-                        );
+                                format!(
+                                    "visit_source(): Unimplemented statement\n{}",
+                                    pg_error_annotation_from_cursor(cursor, src)
+                                )
+                            ));
                         }
                     };
 

@@ -230,4 +230,37 @@ impl Visitor {
 
         Ok(ColumnList::new(exprs, loc, start_comments))
     }
+
+    pub fn visit_relation_expr(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // relation_expr
+        // - qualified_name
+        // - extended_relation_expr
+
+        cursor.goto_first_child();
+
+        let expr = match cursor.node().kind() {
+            SyntaxKind::qualified_name => self.visit_qualified_name(cursor, src)?,
+            SyntaxKind::extended_relation_expr => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_relation_expr(): extended_relation_expr node appeared. Extended relation expressions are not implemented yet.\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_relation_expr(): unexpected node kind\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::relation_expr, src);
+
+        Ok(expr.into())
+    }
 }
