@@ -224,12 +224,21 @@ impl Visitor {
 
         let location = Location::from(cursor.node().range());
 
-        let whitespace_removed_text = cursor
-            .node()
-            .text()
+        // 子ノードを個別に走査せず、 set_target にあたるテキスト全体を一括で取得する
+        //
+        // `target  [  0 ]` をパースした場合:
+        // - set_target       : `target  [  0 ]` <- このノード全体のテキストを直接取得
+        //   - ColId          : `target`         <- 個別に処理しない
+        //   - opt_indirection: `[  0 ]`         <- 個別に処理しない
+        let text = cursor.node().text();
+
+        // 単純に空白を削除してフォーマット処理とする
+        // 例: `target  [  0 ]` → `target[0]`
+        let whitespace_removed_text = text
             .chars()
             .filter(|c| !c.is_whitespace())
             .collect::<String>();
+
         let expr = PrimaryExpr::new(convert_keyword_case(&whitespace_removed_text), location);
 
         Ok(Expr::Primary(Box::new(expr)))
