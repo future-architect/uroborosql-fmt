@@ -173,6 +173,10 @@ impl Clause {
                 add_single_space(&mut result);
                 result.push_str(&single_line.render(depth)?);
             }
+            Some(Body::Values(values)) => {
+                // add_single_space(&mut result);
+                result.push_str(&values.render(depth)?);
+            }
             Some(body) => {
                 let formatted_body = body.render(depth + 1)?;
                 result.push('\n');

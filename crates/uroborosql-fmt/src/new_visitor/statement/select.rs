@@ -60,6 +60,19 @@ impl Visitor {
     ) -> Result<Statement, UroboroSQLFmtError> {
         let mut statement = Statement::new();
 
+        // cursor -> values_clause?
+        if cursor.node().kind() == SyntaxKind::values_clause {
+            let values_clause = self.visit_values_clause(cursor, src)?;
+            statement.add_clause(values_clause);
+
+            // values_clause の場合は Statement 中にこれ以上の要素が現れない
+            assert!(
+                !cursor.goto_next_sibling(),
+                "unexpected node after values_clause in Statement"
+            );
+            return Ok(statement);
+        }
+
         // cursor -> with_clause?
         if cursor.node().kind() == SyntaxKind::with_clause {
             let mut with_clause = self.visit_with_clause(cursor, src)?;
@@ -71,12 +84,14 @@ impl Visitor {
             statement.add_clause(with_clause);
         }
 
-        // cursor -> SELECT keyword
-        // select_clause を消去したので、select_clause の中身が並ぶ
-        pg_ensure_kind!(cursor, SyntaxKind::SELECT, src);
+        // cursor -> SELECT keyword?
+        if cursor.node().kind() == SyntaxKind::SELECT {
+            // select_clause を消去したので、select_clause の中身が並ぶ
+            pg_ensure_kind!(cursor, SyntaxKind::SELECT, src);
 
-        // select句を追加する
-        statement.add_clause(self.visit_select_clause(cursor, src)?);
+            // select句を追加する
+            statement.add_clause(self.visit_select_clause(cursor, src)?);
+        }
 
         while cursor.goto_next_sibling() {
             // 次の兄弟へ移動

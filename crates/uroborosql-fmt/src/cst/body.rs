@@ -2,7 +2,10 @@ pub(crate) mod insert;
 pub(crate) mod select;
 pub(crate) mod separeted_lines;
 pub(crate) mod single_line;
+pub(crate) mod values;
 pub(crate) mod with;
+
+use values::ValuesBody;
 
 use crate::error::UroboroSQLFmtError;
 
@@ -24,6 +27,7 @@ pub(crate) enum Body {
     With(Box<WithBody>),
     /// Clause と Expr を単一行で描画する際の Body
     SingleLine(Box<SingleLine>),
+    Values(Box<ValuesBody>),
 }
 
 impl From<Expr> for Body {
@@ -55,6 +59,7 @@ impl Body {
             Body::With(with) => with.loc(),
             Body::SingleLine(expr_body) => Some(expr_body.loc()),
             Body::Select(select) => select.loc(),
+            Body::Values(values) => Some(values.loc()),
         }
     }
 
@@ -65,6 +70,7 @@ impl Body {
             Body::With(with) => with.render(depth),
             Body::SingleLine(single_line) => single_line.render(depth),
             Body::Select(select) => select.render(depth),
+            Body::Values(values) => values.render(depth),
         }
     }
 
@@ -78,6 +84,7 @@ impl Body {
             Body::With(with) => with.add_comment_to_child(comment)?,
             Body::SingleLine(single_line) => single_line.add_comment_to_child(comment)?,
             Body::Select(select) => select.add_comment_to_child(comment)?,
+            Body::Values(values) => values.add_comment_to_child(comment)?,
         }
 
         Ok(())
@@ -91,6 +98,7 @@ impl Body {
             Body::Insert(_) => false, // InsertBodyには必ずtable_nameが含まれる
             Body::SingleLine(_) => false,
             Body::Select(select) => select.is_empty(),
+            Body::Values(_) => false, // ValuesBodyには必ずrowが含まれる
         }
     }
 
@@ -108,6 +116,7 @@ impl Body {
             Body::With(_) => false,
             Body::SingleLine(single_line) => single_line.try_set_head_comment(comment),
             Body::Select(select) => select.try_set_head_comment(comment),
+            Body::Values(values) => values.try_set_head_comment(comment),
         }
     }
 }
