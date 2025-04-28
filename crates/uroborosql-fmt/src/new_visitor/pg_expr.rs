@@ -162,6 +162,8 @@ impl Visitor {
     }
 
     /// 括弧で囲まれた式リストを処理するメソッド
+    /// 呼出し時、cursor は '(' を指している
+    /// 呼出し後、cursor は ')' を指している
     pub(crate) fn visit_parenthesized_expr_list(
         &mut self,
         cursor: &mut TreeCursor,
