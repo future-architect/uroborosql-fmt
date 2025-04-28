@@ -29,10 +29,15 @@ impl Visitor {
 
         // cursor -> AS?
         let as_keyword = if cursor.node().kind() == SyntaxKind::AS {
-            let as_keyword = cursor.node().text().to_string();
-            cursor.goto_next_sibling();
+            if CONFIG.read().unwrap().remove_table_as_keyword {
+                // AS を除去する設定が有効ならば AS キーワードを除去する
+                None
+            } else {
+                let as_keyword = cursor.node().text().to_string();
+                cursor.goto_next_sibling();
 
-            Some(as_keyword)
+                Some(convert_keyword_case(&as_keyword))
+            }
         } else {
             None
         };
@@ -43,17 +48,7 @@ impl Visitor {
             let col_id = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Expr)?;
             let rhs = Expr::Primary(Box::new(col_id));
 
-            // AS があり、かつ AS を除去する設定が有効ならば AS を除去する
-            if let Some(as_keyword) = as_keyword {
-                if CONFIG.read().unwrap().remove_table_as_keyword {
-                    aligned.add_rhs(None, rhs);
-                } else {
-                    aligned.add_rhs(Some(convert_keyword_case(&as_keyword)), rhs);
-                }
-            } else {
-                // AS がない場合はそのまま追加
-                aligned.add_rhs(None, rhs);
-            }
+            aligned.add_rhs(as_keyword, rhs);
         };
 
         cursor.goto_parent();
