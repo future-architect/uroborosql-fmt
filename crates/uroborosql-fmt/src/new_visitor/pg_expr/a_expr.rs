@@ -12,7 +12,7 @@ mod unary;
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{Comment, Expr},
+    cst::{Comment, Expr, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
 };
 
@@ -30,9 +30,10 @@ impl Visitor {
         // cursor -> c_expr | DEFAULT | Plus | Minus | NOT | qual_Op | a_expr | UNIQUE
         match cursor.node().kind() {
             SyntaxKind::c_expr => self.visit_c_expr(cursor, src),
-            SyntaxKind::DEFAULT => Err(UroboroSQLFmtError::Unimplemented(
-                "visit_a_expr_or_b_expr(): DEFAULT is not implemented".to_string(),
-            )),
+            SyntaxKind::DEFAULT => {
+                let primary = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Keyword)?;
+                Ok(Expr::Primary(Box::new(primary)))
+            }
             // Unary Expression
             SyntaxKind::Plus | SyntaxKind::Minus | SyntaxKind::NOT | SyntaxKind::qual_Op => {
                 let unary = self.handle_unary_expr_nodes(cursor, src)?;
