@@ -123,6 +123,7 @@ impl PgInsertBody {
         }
 
         if let Some(values_or_query) = &self.query {
+            result.push(' ');
             result.push_str(&values_or_query.render(depth)?);
         }
 
