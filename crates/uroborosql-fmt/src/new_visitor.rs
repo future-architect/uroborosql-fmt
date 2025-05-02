@@ -53,7 +53,7 @@ impl Visitor {
         src: &str,
     ) -> Result<Vec<Statement>, UroboroSQLFmtError> {
         use postgresql_cst_parser::syntax_kind::SyntaxKind::{
-            DeleteStmt, SelectStmt, Semicolon, UpdateStmt,
+            DeleteStmt, InsertStmt, SelectStmt, Semicolon, UpdateStmt,
         };
 
         // source_file -> _statement*
@@ -79,20 +79,17 @@ impl Visitor {
             let kind = cursor.node().kind();
 
             match kind {
-                stmt_kind @ (SelectStmt| DeleteStmt | UpdateStmt) // | InsertStmt 
-                => {
+                stmt_kind @ (SelectStmt | DeleteStmt | UpdateStmt | InsertStmt) => {
                     let mut stmt = match stmt_kind {
                         SelectStmt => self.visit_select_stmt(cursor, src)?,
                         DeleteStmt => self.visit_delete_stmt(cursor, src)?,
                         UpdateStmt => self.visit_update_stmt(cursor, src)?,
-                        // InsertStmt => self.visit_insert_stmt(cursor, src)?,
+                        InsertStmt => self.visit_insert_stmt(cursor, src)?,
                         _ => {
-                            return Err(UroboroSQLFmtError::Unimplemented(
-                                format!(
-                                    "visit_source(): Unimplemented statement\n{}",
-                                    pg_error_annotation_from_cursor(cursor, src)
-                                )
-                            ));
+                            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                "visit_source(): Unimplemented statement\n{}",
+                                pg_error_annotation_from_cursor(cursor, src)
+                            )));
                         }
                     };
 
@@ -105,7 +102,7 @@ impl Visitor {
                     source.push(stmt);
                     above_semi = true;
                 }
-                SyntaxKind::C_COMMENT| SyntaxKind::SQL_COMMENT => {
+                SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
                     let comment = Comment::pg_new(cursor.node());
                     if !source.is_empty() && above_semi {
                         let last_stmt = source.last_mut().unwrap();

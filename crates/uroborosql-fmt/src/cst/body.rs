@@ -1,10 +1,12 @@
 pub(crate) mod insert;
+pub(crate) mod pg_insert;
 pub(crate) mod select;
 pub(crate) mod separeted_lines;
 pub(crate) mod single_line;
 pub(crate) mod values;
 pub(crate) mod with;
 
+use pg_insert::PgInsertBody;
 use values::ValuesBody;
 
 use crate::error::UroboroSQLFmtError;
@@ -23,6 +25,7 @@ use super::{Comment, Expr, Location};
 pub(crate) enum Body {
     SepLines(SeparatedLines),
     Insert(Box<InsertBody>),
+    PgInsert(Box<PgInsertBody>),
     Select(Box<SelectBody>),
     With(Box<WithBody>),
     /// Clause と Expr を単一行で描画する際の Body
@@ -56,6 +59,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.loc(),
             Body::Insert(insert) => Some(insert.loc()),
+            Body::PgInsert(pg_insert) => Some(pg_insert.loc()),
             Body::With(with) => with.loc(),
             Body::SingleLine(expr_body) => Some(expr_body.loc()),
             Body::Select(select) => select.loc(),
@@ -67,6 +71,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.render(depth),
             Body::Insert(insert) => insert.render(depth),
+            Body::PgInsert(pg_insert) => pg_insert.render(depth),
             Body::With(with) => with.render(depth),
             Body::SingleLine(single_line) => single_line.render(depth),
             Body::Select(select) => select.render(depth),
@@ -81,6 +86,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.add_comment_to_child(comment)?,
             Body::Insert(insert) => insert.add_comment_to_child(comment)?,
+            Body::PgInsert(pg_insert) => pg_insert.add_comment_to_child(comment)?,
             Body::With(with) => with.add_comment_to_child(comment)?,
             Body::SingleLine(single_line) => single_line.add_comment_to_child(comment)?,
             Body::Select(select) => select.add_comment_to_child(comment)?,
@@ -96,6 +102,7 @@ impl Body {
             Body::SepLines(sep_lines) => sep_lines.is_empty(),
             Body::With(_) => false, // WithBodyには必ずwith_contentsが含まれる
             Body::Insert(_) => false, // InsertBodyには必ずtable_nameが含まれる
+            Body::PgInsert(_) => false, // PgInsertBodyには必ずtable_nameが含まれる
             Body::SingleLine(_) => false,
             Body::Select(select) => select.is_empty(),
             Body::Values(_) => false, // ValuesBodyには必ずrowが含まれる
@@ -113,6 +120,7 @@ impl Body {
         match self {
             Body::SepLines(sep_lines) => sep_lines.try_set_head_comment(comment),
             Body::Insert(_) => false,
+            Body::PgInsert(_) => false,
             Body::With(_) => false,
             Body::SingleLine(single_line) => single_line.try_set_head_comment(comment),
             Body::Select(select) => select.try_set_head_comment(comment),
