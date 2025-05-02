@@ -60,6 +60,14 @@ impl Visitor {
     ) -> Result<Statement, UroboroSQLFmtError> {
         let mut statement = Statement::new();
 
+        // cursor -> select_with_parens?
+        if cursor.node().kind() == SyntaxKind::select_with_parens {
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_select_stmt_inner(): select_with_parens is not implemented\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            )));
+        }
+
         // cursor -> values_clause?
         if cursor.node().kind() == SyntaxKind::values_clause {
             let values_clause = self.visit_values_clause(cursor, src)?;
