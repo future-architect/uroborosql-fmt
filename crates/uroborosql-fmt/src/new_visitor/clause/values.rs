@@ -1,7 +1,7 @@
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
 
 use crate::{
-    cst::{values::ValuesBody, Body, Clause, ColumnList, Comment, Location},
+    cst::{values::ValuesBody, Body, Clause, Location},
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
     NewVisitor as Visitor,

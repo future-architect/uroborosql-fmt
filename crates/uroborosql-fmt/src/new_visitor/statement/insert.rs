@@ -3,8 +3,9 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{
         pg_insert::PgInsertBody, AlignedExpr, Body, Collate, Comment, ConflictAction,
-        ConflictTarget, ConflictTargetColumnList, ConflictTargetElement, DoNothing, Expr, Location,
-        OnConflict, OnConstraint, PrimaryExpr, SeparatedLines, SpecifyIndexColumn, Statement,
+        ConflictTarget, ConflictTargetColumnList, ConflictTargetElement, DoNothing, DoUpdate, Expr,
+        Location, OnConflict, OnConstraint, PrimaryExpr, SeparatedLines, SpecifyIndexColumn,
+        Statement,
     },
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
@@ -538,13 +539,20 @@ impl Visitor {
         match cursor.node().kind() {
             SyntaxKind::ColId => {
                 let column = convert_identifier_case(cursor.node().text());
-                let element = ConflictTargetElement::new(column);
+                let mut element = ConflictTargetElement::new(column);
 
                 cursor.goto_next_sibling();
 
                 if cursor.node().kind() == SyntaxKind::index_elem_options {
-                    let _ = self.handle_index_elem_options_nodes(cursor, src)?;
-                    // TODO
+                    let (collate, qualified_name) =
+                        self.handle_index_elem_options_nodes(cursor, src)?;
+
+                    if let Some(collate) = collate {
+                        element.set_collate(collate);
+                    }
+                    if let Some(op_class) = qualified_name {
+                        element.set_op_class(op_class);
+                    }
                 }
 
                 cursor.goto_parent();
@@ -553,22 +561,22 @@ impl Visitor {
                 Ok(element)
             }
             SyntaxKind::func_expr_windowless => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_index_elem: func_expr_windowless is not implemented \n{}",
                     pg_error_annotation_from_cursor(cursor, src)
-                )));
+                )))
             }
             SyntaxKind::LParen => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_index_elem: '(' is not implemented \n{}",
                     pg_error_annotation_from_cursor(cursor, src)
-                )));
+                )))
             }
             _ => {
-                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_index_elem: unexpected node \n{}",
                     pg_error_annotation_from_cursor(cursor, src)
-                )));
+                )))
             }
         }
     }
@@ -582,10 +590,68 @@ impl Visitor {
         // - opt_collate? opt_qualified_name? opt_asc_desc? opt_nulls_order?
         // - opt_collate? any_name reloptions opt_asc_desc? opt_nulls_order?
 
-        return Err(UroboroSQLFmtError::Unimplemented(format!(
-            "handle_index_elem_options_nodes: not implemented \n{}",
-            pg_error_annotation_from_cursor(cursor, src)
-        )));
+        // 現状は opt_collate と opt_qualified_name のみをサポート
+
+        cursor.goto_first_child();
+
+        // cursor -> opt_collate?
+        let collate = if cursor.node().kind() == SyntaxKind::opt_collate {
+            let collate = self.visit_opt_collate(cursor, src)?;
+            cursor.goto_next_sibling();
+            Some(collate)
+        } else {
+            None
+        };
+
+        // cursor -> opt_qualified_name?
+        let qualified_name = if cursor.node().kind() == SyntaxKind::opt_qualified_name {
+            let op_class = convert_keyword_case(cursor.node().text());
+            cursor.goto_next_sibling();
+            Some(op_class)
+        } else {
+            None
+        };
+
+        // opt_collate と opt_qualified_name 以外は Unimplemented Error
+        match cursor.node().kind() {
+            SyntaxKind::any_name
+            | SyntaxKind::reloptions
+            | SyntaxKind::opt_asc_desc
+            | SyntaxKind::opt_nulls_order => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "handle_index_elem_options_nodes: not implemented \n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            _ => {}
+        }
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::index_elem_options, src);
+
+        Ok((collate, qualified_name))
+    }
+
+    fn visit_opt_collate(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Collate, UroboroSQLFmtError> {
+        // opt_collate:
+        // - 'COLLATE' any_name
+
+        cursor.goto_first_child();
+        pg_ensure_kind!(cursor, SyntaxKind::COLLATE, src);
+        let collate_keyword = convert_keyword_case(cursor.node().text());
+
+        cursor.goto_next_sibling();
+        pg_ensure_kind!(cursor, SyntaxKind::any_name, src);
+        let collation = convert_identifier_case(cursor.node().text());
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::opt_collate, src);
+
+        Ok(Collate::new(collate_keyword, collation))
     }
 
     /// Conflict 句における DO 以降のノードを処理する
@@ -606,10 +672,27 @@ impl Visitor {
 
         let conflict_action = match cursor.node().kind() {
             SyntaxKind::UPDATE => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "handle_conflict_action_nodes: UPDATE is not implemented \n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
+                let update_keyword = cursor.node().text();
+
+                let do_update_keyword = (
+                    convert_keyword_case(do_keyword),
+                    convert_keyword_case(update_keyword),
+                );
+
+                cursor.goto_next_sibling();
+                pg_ensure_kind!(cursor, SyntaxKind::SET, src);
+                let set_clause = self.handle_set_clause_nodes(cursor, src)?;
+
+                cursor.goto_next_sibling();
+
+                // cursor -> where_clause?
+                let where_clause = if cursor.node().kind() == SyntaxKind::where_clause {
+                    Some(self.pg_visit_where_clause(cursor, src)?)
+                } else {
+                    None
+                };
+
+                ConflictAction::DoUpdate(DoUpdate::new(do_update_keyword, set_clause, where_clause))
             }
             SyntaxKind::NOTHING => {
                 let nothing_keyword = cursor.node().text();
