@@ -7,6 +7,7 @@ mod limit;
 mod offset;
 mod returning;
 mod select;
+mod set;
 mod sort;
 mod values;
 mod where_clause;
