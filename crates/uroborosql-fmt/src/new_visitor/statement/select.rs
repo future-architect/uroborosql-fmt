@@ -112,15 +112,6 @@ impl Visitor {
 
         // cursor -> values_clause?
         if cursor.node().kind() == SyntaxKind::values_clause {
-            // let values_clause = self.visit_values_clause(cursor, src)?;
-            // statement.add_clause(values_clause);
-
-            // // values_clause の場合は Statement 中にこれ以上の要素が現れない
-            // assert!(
-            //     !cursor.goto_next_sibling(),
-            //     "unexpected node after values_clause in Statement"
-            // );
-            // return Ok(statement);
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_select_no_parens(): values_clause is not implemented\n{}",
                 pg_error_annotation_from_cursor(cursor, src)
