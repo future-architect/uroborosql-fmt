@@ -8,6 +8,7 @@ mod offset;
 mod returning;
 mod select;
 mod sort;
+mod values;
 mod where_clause;
 mod where_or_current;
 mod with;
