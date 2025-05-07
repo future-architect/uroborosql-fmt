@@ -8,7 +8,7 @@ use crate::{
 
 /// SelectStmt を visit した結果取りうるパターンを表す型
 /// cst モジュールの構造体に格納するまでに使う中間表現
-pub enum SelectStmtOutput {
+pub(crate) enum SelectStmtOutput {
     Statement(Statement),
     /// SubExpr や ParenExpr が対応
     Expr(Expr),

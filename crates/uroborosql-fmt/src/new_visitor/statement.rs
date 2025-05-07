@@ -12,7 +12,7 @@ use crate::{
     NewVisitor as Visitor, CONFIG,
 };
 
-pub use select::SelectStmtOutput;
+pub(crate) use select::SelectStmtOutput;
 
 impl Visitor {
     pub(crate) fn visit_relation_expr_opt_alias(
