@@ -6,7 +6,10 @@ use crate::{
         PrimaryExprKind, Statement, SubExpr, WithBody,
     },
     error::UroboroSQLFmtError,
-    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::{
+        pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor,
+        statement::SelectStmtOutput,
+    },
     util::{convert_identifier_case, convert_keyword_case},
     NewVisitor as Visitor,
 };
@@ -394,7 +397,7 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        let statement = match cursor.node().kind() {
+        let statement_or_expr = match cursor.node().kind() {
             SyntaxKind::SelectStmt => self.visit_select_stmt(cursor, src)?,
             unimplemented_stmt @ (SyntaxKind::InsertStmt
             | SyntaxKind::UpdateStmt
@@ -414,9 +417,18 @@ impl Visitor {
             }
         };
 
-        cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::PreparableStmt, src);
+        // 現状は Statement を返すパターンを考慮する
+        match statement_or_expr {
+            SelectStmtOutput::Statement(statement) => {
+                cursor.goto_parent();
+                pg_ensure_kind!(cursor, SyntaxKind::PreparableStmt, src);
 
-        Ok(statement)
+                Ok(statement)
+            }
+            SelectStmtOutput::Expr(_) => Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_preparable_stmt: expr is not implemented\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            ))),
+        }
     }
 }

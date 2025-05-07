@@ -3,6 +3,7 @@ mod pg_expr;
 mod statement;
 
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
+use statement::SelectStmtOutput;
 
 pub(crate) const COMMA: &str = ",";
 
@@ -79,20 +80,30 @@ impl Visitor {
             let kind = cursor.node().kind();
 
             match kind {
-                stmt_kind @ (SelectStmt| DeleteStmt | UpdateStmt) // | InsertStmt 
-                => {
+                stmt_kind @ (SelectStmt | DeleteStmt | UpdateStmt) => {
                     let mut stmt = match stmt_kind {
-                        SelectStmt => self.visit_select_stmt(cursor, src)?,
+                        SelectStmt => {
+                            let statement_or_expr = self.visit_select_stmt(cursor, src)?;
+
+                            // 現状では、トップレベルの Select では括弧に囲まれたパターンを考慮せず Statement のパターンのみ返す
+                            match statement_or_expr {
+                                SelectStmtOutput::Statement(statement) => statement,
+                                SelectStmtOutput::Expr(_) => {
+                                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                        "visit_source(): expr is not implemented\n{}",
+                                        pg_error_annotation_from_cursor(cursor, src)
+                                    )));
+                                }
+                            }
+                        }
                         DeleteStmt => self.visit_delete_stmt(cursor, src)?,
                         UpdateStmt => self.visit_update_stmt(cursor, src)?,
                         // InsertStmt => self.visit_insert_stmt(cursor, src)?,
                         _ => {
-                            return Err(UroboroSQLFmtError::Unimplemented(
-                                format!(
-                                    "visit_source(): Unimplemented statement\n{}",
-                                    pg_error_annotation_from_cursor(cursor, src)
-                                )
-                            ));
+                            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                "visit_source(): Unimplemented statement\n{}",
+                                pg_error_annotation_from_cursor(cursor, src)
+                            )));
                         }
                     };
 
@@ -105,7 +116,7 @@ impl Visitor {
                     source.push(stmt);
                     above_semi = true;
                 }
-                SyntaxKind::C_COMMENT| SyntaxKind::SQL_COMMENT => {
+                SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
                     let comment = Comment::pg_new(cursor.node());
                     if !source.is_empty() && above_semi {
                         let last_stmt = source.last_mut().unwrap();
