@@ -129,7 +129,7 @@ impl Visitor {
 
         // cursor -> select_with_parens
         if cursor.node().kind() == SyntaxKind::select_with_parens {
-            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_select_no_parens(): select_with_parens node appeared. This node is not considered yet.\n{}",
                 pg_error_annotation_from_cursor(cursor, src)
             )));
