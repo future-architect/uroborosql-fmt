@@ -12,6 +12,8 @@ pub(crate) enum SelectStmtOutput {
     Statement(Statement),
     /// SubExpr や ParenExpr が対応
     Expr(Expr),
+    /// VALUES句のキーワードと本体
+    Values(String, Vec<ColumnList>),
 }
 
 impl Visitor {
@@ -55,10 +57,7 @@ impl Visitor {
         );
 
         let result = match cursor.node().kind() {
-            SyntaxKind::select_no_parens => {
-                let statement = self.visit_select_no_parens(cursor, src)?;
-                SelectStmtOutput::Statement(statement)
-            }
+            SyntaxKind::select_no_parens => self.visit_select_no_parens(cursor, src)?,
             SyntaxKind::select_with_parens => {
                 let expr = self.visit_select_with_parens(cursor, src)?;
                 SelectStmtOutput::Expr(expr)
@@ -82,7 +81,7 @@ impl Visitor {
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
-    ) -> Result<Statement, UroboroSQLFmtError> {
+    ) -> Result<SelectStmtOutput, UroboroSQLFmtError> {
         // select_no_parens
         //  ├ (simple_select)
         //  │  ├ SELECT opt_all_clause opt_target_list into_clause from_clause where_clause group_clause having_clause window_clause
@@ -112,10 +111,18 @@ impl Visitor {
 
         // cursor -> values_clause?
         if cursor.node().kind() == SyntaxKind::values_clause {
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_select_no_parens(): values_clause is not implemented\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
-            )));
+            let (values_keyword, rows) = self.visit_values_clause(cursor, src)?;
+
+            // values_clause の場合は Statement 中にこれ以上の要素が現れない
+            assert!(
+                !cursor.goto_next_sibling(),
+                "unexpected node after values_clause in Statement"
+            );
+
+            cursor.goto_parent();
+            pg_ensure_kind!(cursor, SyntaxKind::select_no_parens, src);
+
+            return Ok(SelectStmtOutput::Values(values_keyword, rows));
         }
 
         // cursor -> select_with_parens
@@ -250,6 +257,6 @@ impl Visitor {
         cursor.goto_parent();
         pg_ensure_kind!(cursor, SyntaxKind::select_no_parens, src);
 
-        Ok(statement)
+        Ok(SelectStmtOutput::Statement(statement))
     }
 }

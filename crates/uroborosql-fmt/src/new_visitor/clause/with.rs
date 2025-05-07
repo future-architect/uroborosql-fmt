@@ -425,8 +425,8 @@ impl Visitor {
 
                 Ok(statement)
             }
-            SelectStmtOutput::Expr(_) => Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_preparable_stmt: expr is not implemented\n{}",
+            _ => Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_preparable_stmt: VALUES clauses or expressions are not supported as PreparableStmt.\n{}",
                 pg_error_annotation_from_cursor(cursor, src)
             ))),
         }
