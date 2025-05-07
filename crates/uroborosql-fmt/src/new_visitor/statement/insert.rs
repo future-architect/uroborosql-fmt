@@ -2,8 +2,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
     cst::{
-        AlignedExpr, Body, Comment, Expr, InsertBody, Location, PrimaryExpr,
-        SeparatedLines, Statement,
+        AlignedExpr, Body, Comment, Expr, InsertBody, Location, PrimaryExpr, SeparatedLines,
+        Statement,
     },
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
@@ -250,9 +250,32 @@ impl Visitor {
 
                 cursor.goto_next_sibling();
 
+                let mut comments_before_query = Vec::new();
+                while cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    comments_before_query.push(comment);
+                    cursor.goto_next_sibling();
+                }
+
                 // cursor -> SelectStmt | OVERRIDING
                 let query = match cursor.node().kind() {
-                    SyntaxKind::SelectStmt => self.visit_select_stmt(cursor, src)?,
+                    SyntaxKind::SelectStmt => {
+                        let mut stmt_output = self.visit_select_stmt(cursor, src)?;
+
+                        // コメントを追加（Statement の場合のみ考慮）
+                        if let SelectStmtOutput::Statement(ref mut stmt) = stmt_output {
+                            for comment in comments_before_query {
+                                stmt.add_comment(comment);
+                            }
+                        } else if !comments_before_query.is_empty() {
+                            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                "visit_insert_rest: comments are not supported in this position. \n{}",
+                                pg_error_annotation_from_cursor(cursor, src)
+                            )));
+                        }
+
+                        stmt_output
+                    }
                     SyntaxKind::OVERRIDING => {
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "visit_insert_rest: OVERRIDING is not implemented \n{}",

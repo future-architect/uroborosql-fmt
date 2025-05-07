@@ -16,3 +16,18 @@ into
 	where
 		flag	=	'TRUE'
 );
+insert
+into
+	t
+(
+	id
+)
+-- comment
+-- comment2
+select
+	id	as	id
+from
+	t2
+where
+	id	=	1
+;
