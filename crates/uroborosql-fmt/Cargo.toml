@@ -23,7 +23,7 @@ tree-sitter = "~0.20.3"
 
 # git config --global core.longpaths true を管理者権限で実行しないといけない
 tree-sitter-sql = { git = "https://github.com/future-architect/tree-sitter-sql" }
-postgresql-cst-parser = { git = "https://github.com/future-architect/postgresql-cst-parser" }
+postgresql-cst-parser = { git = "https://github.com/future-architect/postgresql-cst-parser", branch = "tree-sitter--preserve-select-no-parens"}
 
 [dev-dependencies]
 console = "0.15.10"
