@@ -6,59 +6,142 @@ use crate::{
     new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
 };
 
+/// SelectStmt を visit した結果取りうるパターンを表す型
+/// cst モジュールの構造体に格納するまでに使う中間表現
+pub enum SelectStmtOutput {
+    Statement(Statement),
+    /// SubExpr や ParenExpr が対応
+    Expr(Expr),
+}
+
 impl Visitor {
-    /// SELECT文
-    /// 呼び出し後、cursorはselect_statementを指す
+    /// SelectStmt をフォーマットする
     pub(crate) fn visit_select_stmt(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
-    ) -> Result<Statement, UroboroSQLFmtError> {
-        // SELECT文の定義
+    ) -> Result<SelectStmtOutput, UroboroSQLFmtError> {
         // SelectStmt
-        // ├── SELECT [ALL | DISTINCT] (target_list)
-        // │   ├── into_clause
-        // │   ├── from_clause
-        // │   ├── where_clause
-        // │   ├── group_clause
-        // │   ├── having_clause
-        // │   └── window_clause
-        // ├── values_clause
-        // ├── TABLE relation_expr
-        // ├── (select_clause) UNION [ALL | DISTINCT] (select_clause)
-        // ├── (select_clause) INTERSECT [ALL | DISTINCT] (select_clause)
-        // ├── (select_clause) EXCEPT [ALL | DISTINCT] (select_clause)
-        // ├── (select_clause) sort_clause
-        // ├── (select_clause) sort_clause? for_locking_clause limit_clause? offset_clause?
-        // ├── (select_clause) sort_clause? limit_clause? offset_clause? opt_for_locking_clause
-        // ├── with_clause (select_clause)
-        // ├── with_clause (select_clause) sort_clause
-        // ├── with_clause (select_clause) sort_clause? for_locking_clause limit_clause? offset_clause?
-        // ├── with_clause (select_clause) sort_clause? limit_clause? offset_clause? opt_for_locking_clause
-        // └── select_with_parens
-        //     ├── '(' (select_no_parens) ')'
-        //     └── '(' select_with_parens ')'
+        // ├ select_no_parens
+        // │  ├ (simple_select)
+        // │  │  ├ SELECT opt_all_clause opt_target_list into_clause from_clause where_clause group_clause having_clause window_clause
+        // │  │  ├ SELECT distinct_clause target_list into_clause from_clause where_clause group_clause having_clause window_clause
+        // │  │  ├ values_clause
+        // │  │  ├ TABLE relation_expr
+        // │  │  ├ (select_clause) UNION set_quantifier (select_clause)
+        // │  │  ├ (select_clause) INTERSECT set_quantifier (select_clause)
+        // │  │  └ (select_clause) EXCEPT set_quantifier (select_clause)
+        // │  ├ (select_clause) sort_clause
+        // │  ├ (select_clause) (opt_sort_clause) for_locking_clause (opt_select_limit)
+        // │  ├ (select_clause) (opt_sort_clause)  (select_limit) opt_for_locking_clause
+        // │  ├ with_clause (select_clause)
+        // │  ├ with_clause (select_clause) sort_clause
+        // │  ├ with_clause (select_clause) (opt_sort_clause) for_locking_clause (select_limit)
+        // │  └ with_clause (select_clause) (opt_sort_clause) (select_limit) opt_for_locking_clause
+        // └ select_with_parens
+        //    ├ '(' select_no_parens ')'
+        //    └ '(' select_with_parens ')'
         //
-        // select_clause (clause 自体はない)
-        // - context: https://github.com/future-architect/postgresql-cst-parser/pull/2#discussion_r1897026688
+        // 括弧で囲まれているノードは PostgreSQL の文法定義上は存在するが、 postgresql-cst-parser が返す木では削除されるため登場しない
+        // 整理のためこのように表記しているが、実際には子ノードが同じレベルに展開される
+        //
 
         cursor.goto_first_child();
+        // cursor -> select_no_parens | select_with_parens
+        pg_ensure_kind!(
+            cursor,
+            SyntaxKind::select_no_parens | SyntaxKind::select_with_parens,
+            src
+        );
 
-        let statement = self.visit_select_stmt_inner(cursor, src)?;
+        let result = match cursor.node().kind() {
+            SyntaxKind::select_no_parens => {
+                let statement = self.visit_select_no_parens(cursor, src)?;
+                SelectStmtOutput::Statement(statement)
+            }
+            SyntaxKind::select_with_parens => {
+                let expr = self.visit_select_with_parens(cursor, src)?;
+                SelectStmtOutput::Expr(expr)
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_select_stmt(): {} node appeared. This node is not considered yet.\n{}",
+                    cursor.node().kind(),
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
 
         cursor.goto_parent();
         pg_ensure_kind!(cursor, SyntaxKind::SelectStmt, src);
 
-        Ok(statement)
+        Ok(result)
     }
 
-    /// SelectStmt の子要素をフォーマットする
-    pub(crate) fn visit_select_stmt_inner(
+    pub(crate) fn visit_select_no_parens(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
     ) -> Result<Statement, UroboroSQLFmtError> {
+        // select_no_parens
+        //  ├ (simple_select)
+        //  │  ├ SELECT opt_all_clause opt_target_list into_clause from_clause where_clause group_clause having_clause window_clause
+        //  │  ├ SELECT distinct_clause target_list into_clause from_clause where_clause group_clause having_clause window_clause
+        //  │  ├ values_clause
+        //  │  ├ TABLE relation_expr
+        //  │  ├ (select_clause) UNION set_quantifier (select_clause)
+        //  │  ├ (select_clause) INTERSECT set_quantifier (select_clause)
+        //  │  └ (select_clause) EXCEPT set_quantifier (select_clause)
+        //  ├ (select_clause) sort_clause
+        //  ├ (select_clause) (opt_sort_clause) for_locking_clause (opt_select_limit)
+        //  ├ (select_clause) (opt_sort_clause)  (select_limit) opt_for_locking_clause
+        //  ├ with_clause (select_clause)
+        //  ├ with_clause (select_clause) sort_clause
+        //  ├ with_clause (select_clause) (opt_sort_clause) for_locking_clause (select_limit)
+        //  └ with_clause (select_clause) (opt_sort_clause) (select_limit) opt_for_locking_clause
+
+        // (select_clause)
+        //  ├ (simple_select)
+        //  └ select_with_parens
+
         let mut statement = Statement::new();
+
+        cursor.goto_first_child();
+
+        // cursor -> values_clause | select_with_parens | TABLE | with_clause | SELECT
+
+        // cursor -> values_clause?
+        if cursor.node().kind() == SyntaxKind::values_clause {
+            // let values_clause = self.visit_values_clause(cursor, src)?;
+            // statement.add_clause(values_clause);
+
+            // // values_clause の場合は Statement 中にこれ以上の要素が現れない
+            // assert!(
+            //     !cursor.goto_next_sibling(),
+            //     "unexpected node after values_clause in Statement"
+            // );
+            // return Ok(statement);
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_select_no_parens(): values_clause is not implemented\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            )));
+        }
+
+        // cursor -> select_with_parens
+        if cursor.node().kind() == SyntaxKind::select_with_parens {
+            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                "visit_select_no_parens(): select_with_parens node appeared. This node is not considered yet.\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            )));
+        }
+
+        // cursor -> TABLE
+        if cursor.node().kind() == SyntaxKind::TABLE {
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_select_no_parens(): TABLE node appeared. This node is not considered yet.\n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            )));
+        }
 
         // cursor -> with_clause?
         if cursor.node().kind() == SyntaxKind::with_clause {
@@ -79,8 +162,6 @@ impl Visitor {
         statement.add_clause(self.visit_select_clause(cursor, src)?);
 
         while cursor.goto_next_sibling() {
-            // 次の兄弟へ移動
-            // select_statementの子供がいなくなったら終了
             match cursor.node().kind() {
                 // 現時点で考慮している構造
                 // - into_clause
@@ -165,10 +246,6 @@ impl Visitor {
                     let for_locking_clauses = self.visit_for_locking_clause(cursor, src)?;
                     statement.add_clauses(for_locking_clauses);
                 }
-                SyntaxKind::RParen => {
-                    // select_with_parens をフォーマットする場合
-                    break;
-                }
                 _ => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "visit_select_stmt(): {} node appeared. This node is not considered yet.\n{}",
@@ -178,6 +255,9 @@ impl Visitor {
                 }
             }
         }
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::select_no_parens, src);
 
         Ok(statement)
     }
