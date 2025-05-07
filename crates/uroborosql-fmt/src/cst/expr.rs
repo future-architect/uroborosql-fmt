@@ -165,7 +165,7 @@ impl Expr {
             Expr::Boolean(boolean) => {
                 boolean.add_comment_to_child(comment)?;
             }
-            Expr::Sub(sub) => sub.add_comment_to_child(comment),
+            Expr::Sub(sub) => sub.add_comment_to_child(comment)?,
             Expr::ParenExpr(paren_expr) => {
                 paren_expr.add_comment_to_child(comment)?;
             }
