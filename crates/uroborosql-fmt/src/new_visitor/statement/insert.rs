@@ -2,8 +2,8 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
     cst::{
-        AlignedExpr, Body, Comment, Expr, InsertBody, Location, PrimaryExpr, SeparatedLines,
-        Statement,
+        AlignedExpr, Body, Comment, Expr, InsertBody, Location, PrimaryExpr, Query, SeparatedLines,
+        Statement, Values, ValuesOrQuery,
     },
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
@@ -95,25 +95,13 @@ impl Visitor {
 
         // cursor -> insert_rest?
         if cursor.node().kind() == SyntaxKind::insert_rest {
-            let (columns, query) = self.visit_insert_rest(cursor, src)?;
+            let (columns, values_or_query) = self.visit_insert_rest(cursor, src)?;
 
             if let Some(columns) = columns {
                 insert_body.set_column_name(columns);
             }
 
-            if let Some(query) = query {
-                match query {
-                    SelectStmtOutput::Statement(stmt) => {
-                        insert_body.set_query(stmt);
-                    }
-                    SelectStmtOutput::Expr(expr) => {
-                        insert_body.set_paren_query(expr);
-                    }
-                    SelectStmtOutput::Values(kw, body) => {
-                        insert_body.set_values_clause(&kw, body);
-                    }
-                }
-            }
+            insert_body.set_values_or_query(values_or_query);
 
             cursor.goto_next_sibling();
         }
@@ -198,11 +186,12 @@ impl Visitor {
     }
 
     /// カラム名指定やテーブル式を処理する
+    /// カラム名指定を Option<SeparatedLines>, テーブル式部分を ValuesOrQuery としてタプルで返す
     fn visit_insert_rest(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
-    ) -> Result<(Option<SeparatedLines>, Option<SelectStmtOutput>), UroboroSQLFmtError> {
+    ) -> Result<(Option<SeparatedLines>, ValuesOrQuery), UroboroSQLFmtError> {
         // insert_rest:
         // - SelectStmt
         // - '(' insert_column_list ')' SelectStmt
@@ -212,83 +201,55 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        // insert_column_list があるケースのみ先に処理する
-        let mut column_list_opt = None;
-        let mut comments_before_query = Vec::new();
-
+        // '(' insert_column_list ')' があるケースのみ先に処理する
         // cursor -> '(' ?
-        if cursor.node().kind() == SyntaxKind::LParen {
-            cursor.goto_next_sibling();
-            // cursor -> insert_column_list
-            let mut column_list = self.visit_insert_column_list(cursor, src)?;
+        let column_list_opt = if cursor.node().kind() == SyntaxKind::LParen {
+            let column_list = self.visit_parenthesized_insert_column_list(cursor, src)?;
             cursor.goto_next_sibling();
 
-            // カラム指定の最後のコメントを処理する
-            if cursor.node().is_comment() {
-                let comment = Comment::pg_new(cursor.node());
-                column_list.add_comment_to_child(comment)?;
-                cursor.goto_next_sibling();
-            }
-
-            // cursor -> ')'
-            pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
-
-            cursor.goto_next_sibling();
-
-            column_list_opt = Some(column_list);
-
-            while cursor.node().is_comment() {
-                let comment = Comment::pg_new(cursor.node());
-                comments_before_query.push(comment);
-                cursor.goto_next_sibling();
-            }
-        }
+            Some(column_list)
+        } else {
+            None
+        };
 
         // cursor -> SelectStmt | OVERRIDING | DEFAULT
-        let query = match cursor.node().kind() {
-            SyntaxKind::SelectStmt => {
-                let mut select_stmt_output = self.visit_select_stmt(cursor, src)?;
-
-                if let SelectStmtOutput::Statement(ref mut statement) = select_stmt_output {
-                    for comment in comments_before_query {
-                        statement.add_comment(comment);
-                    }
-                } else if !comments_before_query.is_empty() {
-                    // select 文以外のケースでコメントがある場合はエラー
-                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_insert_rest: comments are not supported in this position \n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
-                    )));
-                }
-
-                select_stmt_output
-            }
-            SyntaxKind::OVERRIDING => {
-                // OVERRIDING override_kind VALUE_P SelectStmt
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_insert_rest: OVERRIDING is not implemented \n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
-            }
-            SyntaxKind::DEFAULT => {
-                // DEFAULT VALUES
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_insert_rest: DEFAULT is not implemented \n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
-            }
-            _ => {
-                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_insert_rest: unexpected node \n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )))
-            }
-        };
+        let values_or_query = self.handle_values_or_query_nodes(cursor, src)?;
 
         cursor.goto_parent();
         pg_ensure_kind!(cursor, SyntaxKind::insert_rest, src);
 
-        Ok((column_list_opt, Some(query)))
+        Ok((column_list_opt, values_or_query))
+    }
+
+    /// 括弧で囲まれた insert_column_list を処理する
+    /// 呼出し時、 cursor は '(' を指している
+    /// 呼出し後、 cursor は ')' を指している
+    fn visit_parenthesized_insert_column_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<SeparatedLines, UroboroSQLFmtError> {
+        // '(' insert_column_list ')'
+
+        // cursor -> '('
+        cursor.goto_next_sibling();
+
+        // cursor -> insert_column_list
+        pg_ensure_kind!(cursor, SyntaxKind::insert_column_list, src);
+        let mut column_list = self.visit_insert_column_list(cursor, src)?;
+        cursor.goto_next_sibling();
+
+        // カラム指定の最後のコメントを処理する
+        if cursor.node().is_comment() {
+            let comment = Comment::pg_new(cursor.node());
+            column_list.add_comment_to_child(comment)?;
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> ')'
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+
+        Ok(column_list)
     }
 
     fn visit_insert_column_list(
@@ -351,5 +312,96 @@ impl Visitor {
         let aligned = Expr::Primary(Box::new(primary)).to_aligned();
 
         Ok(aligned)
+    }
+
+    /// テーブル式や OVERRIDING, DEFAULT 等のノード を ValuesOrQuery に変換する
+    /// 呼出し後、 cursor は同階層の最後のノードを指している
+    fn handle_values_or_query_nodes(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ValuesOrQuery, UroboroSQLFmtError> {
+        // - SelectStmt
+        // - OVERRIDING override_kind VALUE_P SelectStmt
+        // - DEFAULT VALUES
+
+        // cursor -> comments?
+        let mut comments_before_query = Vec::new();
+        while cursor.node().is_comment() {
+            let comment = Comment::pg_new(cursor.node());
+            comments_before_query.push(comment);
+            cursor.goto_next_sibling();
+        }
+
+        let values_or_query = match cursor.node().kind() {
+            SyntaxKind::SelectStmt => {
+                let select_stmt_output = self.visit_select_stmt(cursor, src)?;
+
+                // SelectStmtOutput を ValuesOrQuery に変換する
+                match select_stmt_output {
+                    SelectStmtOutput::Values(kw, body) => {
+                        // values の前にコメントがある場合はエラー
+                        if !comments_before_query.is_empty() {
+                            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                                "visit_insert_rest: comments are not supported in this position \n{}",
+                                pg_error_annotation_from_cursor(cursor, src)
+                            )));
+                        }
+
+                        let values = Values::new(&kw, body);
+                        ValuesOrQuery::Values(values)
+                    }
+                    SelectStmtOutput::Statement(mut statement) => {
+                        for comment in comments_before_query {
+                            statement.add_comment(comment);
+                        }
+
+                        let normal_query = Query::Normal(statement);
+                        ValuesOrQuery::Query(normal_query)
+                    }
+                    SelectStmtOutput::Expr(expr) => {
+                        // 括弧の前にコメントがある場合はエラー
+                        if !comments_before_query.is_empty() {
+                            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                                "visit_insert_rest: comments are not supported in this position \n{}",
+                                pg_error_annotation_from_cursor(cursor, src)
+                            )));
+                        }
+
+                        let paren_query = Query::Paren(expr);
+                        ValuesOrQuery::Query(paren_query)
+                    }
+                }
+            }
+            SyntaxKind::OVERRIDING => {
+                // OVERRIDING override_kind VALUE_P SelectStmt
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_insert_rest: OVERRIDING is not implemented \n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            SyntaxKind::DEFAULT => {
+                // DEFAULT VALUES
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_insert_rest: DEFAULT is not implemented \n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_insert_rest: unexpected node \n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )))
+            }
+        };
+
+        // ノードが残っていないことを確認
+        assert!(
+            !cursor.goto_next_sibling(),
+            "visit_insert_rest: unexpected node \n{}",
+            pg_error_annotation_from_cursor(cursor, src)
+        );
+
+        Ok(values_or_query)
     }
 }

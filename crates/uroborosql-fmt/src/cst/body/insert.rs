@@ -228,7 +228,7 @@ pub(crate) struct Values {
 }
 
 impl Values {
-    fn new(kw: &str, rows: Vec<ColumnList>) -> Values {
+    pub(crate) fn new(kw: &str, rows: Vec<ColumnList>) -> Values {
         Values {
             kw: kw.to_string(),
             rows,
@@ -354,6 +354,11 @@ impl InsertBody {
     /// 括弧付きSELECTをセットする
     pub(crate) fn set_paren_query(&mut self, query: Expr) {
         self.values_or_query = Some(ValuesOrQuery::Query(Query::Paren(query)))
+    }
+
+    /// 直接 ValuesOrQuery をセットする
+    pub(crate) fn set_values_or_query(&mut self, values_or_query: ValuesOrQuery) {
+        self.values_or_query = Some(values_or_query);
     }
 
     pub(crate) fn set_on_conflict(&mut self, on_conflict: OnConflict) {
