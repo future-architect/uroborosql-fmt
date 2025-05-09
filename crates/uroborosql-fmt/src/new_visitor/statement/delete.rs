@@ -30,18 +30,8 @@ impl Visitor {
         // cursor -> opt_with_clause?
 
         if cursor.node().kind() == SyntaxKind::opt_with_clause {
-            // opt_with_clause
-            // - with_clause
-
-            cursor.goto_first_child();
-            pg_ensure_kind!(cursor, SyntaxKind::with_clause, src);
-
-            let with_clause = self.visit_with_clause(cursor, src)?;
-
+            let with_clause = self.visit_opt_with_clause(cursor, src)?;
             statement.add_clause(with_clause);
-
-            cursor.goto_parent();
-            pg_ensure_kind!(cursor, SyntaxKind::opt_with_clause, src);
 
             cursor.goto_next_sibling();
         }
