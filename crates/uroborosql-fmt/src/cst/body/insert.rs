@@ -239,7 +239,6 @@ impl Values {
         let mut result = String::new();
 
         // VALUES句
-        result.push(' ');
         result.push_str(&self.kw);
 
         // 要素が一つか二つ以上かでフォーマット方針が異なる
@@ -461,6 +460,11 @@ impl InsertBody {
             result.push_str(&sep_lines.render(depth)?);
             add_indent(&mut result, depth - 1);
             result.push(')');
+
+            // ValuesOrQuery が Values なら、 ')' の後にスペース(' ')を追加する
+            if let Some(ValuesOrQuery::Values(_)) = &self.values_or_query {
+                result.push(' ');
+            }
         }
 
         if let Some(values_or_query) = &self.values_or_query {
