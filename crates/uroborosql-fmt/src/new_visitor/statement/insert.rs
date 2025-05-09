@@ -2,7 +2,9 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
     cst::{
-        AlignedExpr, Body, Comment, Expr, InsertBody, Location, PrimaryExpr, Query, SeparatedLines,
+        AlignedExpr, Body, Collate, Comment, ConflictAction, ConflictTarget,
+        ConflictTargetColumnList, ConflictTargetElement, DoNothing, DoUpdate, Expr, InsertBody,
+        Location, OnConflict, OnConstraint, PrimaryExpr, Query, SeparatedLines, SpecifyIndexColumn,
         Statement, Values, ValuesOrQuery,
     },
     error::UroboroSQLFmtError,
@@ -108,15 +110,10 @@ impl Visitor {
 
         // cursor -> opt_on_conflict?
         if cursor.node().kind() == SyntaxKind::opt_on_conflict {
-            // let on_conflict = self.visit_on_conflict(cursor, src)?;
-            // insert_body.set_on_conflict(on_conflict);
+            let on_conflict = self.visit_on_conflict(cursor, src)?;
+            insert_body.set_on_conflict(on_conflict);
 
-            // cursor.goto_next_sibling();
-
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_insert_stmt(): opt_on_conflict is not implemented\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
-            )));
+            cursor.goto_next_sibling();
         }
 
         into_keyword_clause.set_body(Body::Insert(Box::new(insert_body)));
@@ -403,5 +400,378 @@ impl Visitor {
         );
 
         Ok(values_or_query)
+    }
+
+    fn visit_on_conflict(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<OnConflict, UroboroSQLFmtError> {
+        // opt_on_conflict:
+        // - ON CONFLICT opt_conf_expr? DO UPDATE SET set_clause_list where_clause
+        // - ON CONFLICT opt_conf_expr? DO NOTHING
+
+        cursor.goto_first_child();
+
+        // cursor -> ON
+        pg_ensure_kind!(cursor, SyntaxKind::ON, src);
+        let on_keyword = convert_keyword_case(cursor.node().text());
+
+        cursor.goto_next_sibling();
+        // cursor -> CONFLICT
+        pg_ensure_kind!(cursor, SyntaxKind::CONFLICT, src);
+        let conflict_keyword = convert_keyword_case(cursor.node().text());
+
+        let on_conflict_keyword = (on_keyword, conflict_keyword);
+
+        cursor.goto_next_sibling();
+
+        // cursor -> opt_conf_expr?
+        let conflict_target = if cursor.node().kind() == SyntaxKind::opt_conf_expr {
+            let conflict_target = self.opt_conf_expr(cursor, src)?;
+
+            cursor.goto_next_sibling();
+
+            Some(conflict_target)
+        } else {
+            None
+        };
+
+        // cursor -> DO
+        let conflict_action = self.handle_conflict_action_nodes(cursor, src)?;
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::opt_on_conflict, src);
+
+        Ok(OnConflict::new(
+            on_conflict_keyword,
+            conflict_target,
+            conflict_action,
+        ))
+    }
+
+    fn opt_conf_expr(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ConflictTarget, UroboroSQLFmtError> {
+        // opt_conf_expr:
+        // - '(' index_params ')' where_clause?
+        // - ON CONSTRAINT name
+
+        cursor.goto_first_child();
+
+        let conflict_target = match cursor.node().kind() {
+            SyntaxKind::LParen => {
+                // - '(' index_params ')' where_clause?
+
+                // cursor -> index_params
+                let index_params = self.handle_parenthesized_index_params(cursor, src)?;
+                let mut specify_index_column = SpecifyIndexColumn::new(index_params);
+
+                cursor.goto_next_sibling();
+                // cursor -> where_clause?
+                if cursor.node().kind() == SyntaxKind::where_clause {
+                    let where_clause = self.pg_visit_where_clause(cursor, src)?;
+                    specify_index_column.set_where_clause(where_clause);
+                };
+
+                ConflictTarget::SpecifyIndexColumn(specify_index_column)
+            }
+            SyntaxKind::ON => {
+                // - ON CONSTRAINT name
+
+                // cursor -> ON
+                let on_keyword = cursor.node().text();
+
+                cursor.goto_next_sibling();
+                // cursor -> CONSTRAINT
+                pg_ensure_kind!(cursor, SyntaxKind::CONSTRAINT, src);
+                let constraint_keyword = cursor.node().text();
+
+                cursor.goto_next_sibling();
+                // cursor -> name
+                pg_ensure_kind!(cursor, SyntaxKind::name, src);
+
+                let constraint_name = cursor.node().text();
+
+                ConflictTarget::OnConstraint(OnConstraint::new(
+                    (
+                        convert_keyword_case(on_keyword),
+                        convert_keyword_case(constraint_keyword),
+                    ),
+                    constraint_name.to_string(),
+                ))
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_opt_conf_expr: unexpected node \n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::opt_conf_expr, src);
+
+        Ok(conflict_target)
+    }
+
+    /// 括弧で囲まれた index_params を `ConflictTargetColumnList` に変換する
+    /// 呼出し時、 cursor は '(' を指している
+    /// 呼出し後、 cursor は ')' を指している
+    fn handle_parenthesized_index_params(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ConflictTargetColumnList, UroboroSQLFmtError> {
+        // '(' index_params ')'
+        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        let mut loc = Location::from(cursor.node().range());
+
+        cursor.goto_next_sibling();
+        pg_ensure_kind!(cursor, SyntaxKind::index_params, src);
+
+        let elements = self.visit_index_params(cursor, src)?;
+
+        cursor.goto_next_sibling();
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        // 閉じ括弧の位置まで Location を更新
+        loc.append(Location::from(cursor.node().range()));
+
+        Ok(ConflictTargetColumnList::new(elements, loc))
+    }
+
+    /// index_params をフォーマットする
+    /// index_params はインデックス定義において汎用的に利用される構文だが、
+    /// 現状は ON CONFLICT における カラムリスト指定にしか使用していないため `Vec<ConflictTargetElement>` を返す
+    fn visit_index_params(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Vec<ConflictTargetElement>, UroboroSQLFmtError> {
+        // index_params:
+        // - index_elem (',' index_elem)*
+
+        cursor.goto_first_child();
+
+        let first = self.visit_index_elem(cursor, src)?;
+        let mut elements = vec![first];
+
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                SyntaxKind::Comma => {}
+                SyntaxKind::index_elem => {
+                    let index_elem = self.visit_index_elem(cursor, src)?;
+                    elements.push(index_elem);
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_index_params: unexpected node \n{}",
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                }
+            }
+        }
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::index_params, src);
+
+        Ok(elements)
+    }
+
+    /// index_elem はインデックス定義において汎用的に利用される構文だが、
+    /// 現状は ON CONFLICT における カラムリスト指定にしか使用していないため ConflictTargetElement を返す
+    fn visit_index_elem(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ConflictTargetElement, UroboroSQLFmtError> {
+        // index_elem:
+        // - ColId index_elem_options
+        // - func_expr_windowless index_elem_options
+        // - '(' a_expr ')' index_elem_options
+
+        cursor.goto_first_child();
+
+        match cursor.node().kind() {
+            SyntaxKind::ColId => {
+                let column = convert_identifier_case(cursor.node().text());
+                let mut element = ConflictTargetElement::new(column);
+
+                cursor.goto_next_sibling();
+
+                if cursor.node().kind() == SyntaxKind::index_elem_options {
+                    let (collate, qualified_name) = self.visit_index_elem_options(cursor, src)?;
+
+                    if let Some(collate) = collate {
+                        element.set_collate(collate);
+                    }
+                    if let Some(op_class) = qualified_name {
+                        element.set_op_class(op_class);
+                    }
+                }
+
+                cursor.goto_parent();
+                pg_ensure_kind!(cursor, SyntaxKind::index_elem, src);
+
+                Ok(element)
+            }
+            SyntaxKind::func_expr_windowless => Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_index_elem: func_expr_windowless is not implemented \n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            ))),
+            SyntaxKind::LParen => Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_index_elem: '(' is not implemented \n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            ))),
+            _ => Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                "visit_index_elem: unexpected node \n{}",
+                pg_error_annotation_from_cursor(cursor, src)
+            ))),
+        }
+    }
+
+    /// index_elem_options を走査して、 opt_collate と opt_qualified_name に対応する `Option<Collate>` と `Option<String>` のタプルを返す
+    /// 現状は opt_collate と opt_qualified_name のみをサポートしている
+    fn visit_index_elem_options(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<(Option<Collate>, Option<String>), UroboroSQLFmtError> {
+        // index_elem_options:
+        // - opt_collate? opt_qualified_name? opt_asc_desc? opt_nulls_order?
+        // - opt_collate? any_name reloptions opt_asc_desc? opt_nulls_order?
+
+        // 現状は opt_collate と opt_qualified_name のみをサポート
+
+        cursor.goto_first_child();
+
+        // cursor -> opt_collate?
+        let collate = if cursor.node().kind() == SyntaxKind::opt_collate {
+            let collate = self.visit_opt_collate(cursor, src)?;
+            cursor.goto_next_sibling();
+            Some(collate)
+        } else {
+            None
+        };
+
+        // cursor -> opt_qualified_name?
+        let qualified_name = if cursor.node().kind() == SyntaxKind::opt_qualified_name {
+            let op_class = convert_keyword_case(cursor.node().text());
+            cursor.goto_next_sibling();
+            Some(op_class)
+        } else {
+            None
+        };
+
+        // opt_collate と opt_qualified_name 以外は Unimplemented
+        match cursor.node().kind() {
+            SyntaxKind::any_name
+            | SyntaxKind::reloptions
+            | SyntaxKind::opt_asc_desc
+            | SyntaxKind::opt_nulls_order => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "handle_index_elem_options_nodes: not implemented \n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            _ => {}
+        }
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::index_elem_options, src);
+
+        Ok((collate, qualified_name))
+    }
+
+    fn visit_opt_collate(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Collate, UroboroSQLFmtError> {
+        // opt_collate:
+        // - 'COLLATE' any_name
+
+        cursor.goto_first_child();
+        pg_ensure_kind!(cursor, SyntaxKind::COLLATE, src);
+        let collate_keyword = convert_keyword_case(cursor.node().text());
+
+        cursor.goto_next_sibling();
+        pg_ensure_kind!(cursor, SyntaxKind::any_name, src);
+        let collation = convert_identifier_case(cursor.node().text());
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::opt_collate, src);
+
+        Ok(Collate::new(collate_keyword, collation))
+    }
+
+    /// Conflict 句における DO 以降のノードを処理する
+    /// 呼出し時、 cursor は DO を指していること
+    /// 呼出し後、 cursor は NOTHING または where_clause を指している
+    fn handle_conflict_action_nodes(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ConflictAction, UroboroSQLFmtError> {
+        // DO UPDATE SET set_clause_list where_clause
+        // DO NOTHING
+
+        pg_ensure_kind!(cursor, SyntaxKind::DO, src);
+        let do_keyword = cursor.node().text();
+
+        cursor.goto_next_sibling();
+
+        let conflict_action = match cursor.node().kind() {
+            SyntaxKind::UPDATE => {
+                let update_keyword = cursor.node().text();
+
+                let do_update_keyword = (
+                    convert_keyword_case(do_keyword),
+                    convert_keyword_case(update_keyword),
+                );
+
+                cursor.goto_next_sibling();
+                pg_ensure_kind!(cursor, SyntaxKind::SET, src);
+                let set_clause = self.handle_set_clause_nodes(cursor, src)?;
+
+                cursor.goto_next_sibling();
+
+                // cursor -> where_clause?
+                let where_clause = if cursor.node().kind() == SyntaxKind::where_clause {
+                    Some(self.pg_visit_where_clause(cursor, src)?)
+                } else {
+                    None
+                };
+
+                ConflictAction::DoUpdate(DoUpdate::new(do_update_keyword, set_clause, where_clause))
+            }
+            SyntaxKind::NOTHING => {
+                let nothing_keyword = cursor.node().text();
+
+                let do_nothing_keyword = (
+                    convert_keyword_case(do_keyword),
+                    convert_keyword_case(nothing_keyword),
+                );
+
+                ConflictAction::DoNothing(DoNothing::new(do_nothing_keyword))
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "handle_conflict_action_nodes: unexpected node \n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        // ノードが残っていないことを確認
+        assert!(
+            !cursor.goto_next_sibling(),
+            "handle_conflict_action_nodes: unexpected node \n{}",
+            pg_error_annotation_from_cursor(cursor, src)
+        );
+
+        Ok(conflict_action)
     }
 }
