@@ -3,7 +3,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::{Comment, Expr, Location, ParenExpr, SubExpr},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, statement::SelectStmtOutput},
     CONFIG,
 };
 
@@ -44,7 +44,20 @@ impl Visitor {
         );
         let mut expr = match cursor.node().kind() {
             SyntaxKind::select_no_parens => {
-                let statement = self.visit_select_no_parens(cursor, src)?;
+                let select_stmt_output = self.visit_select_no_parens(cursor, src)?;
+
+                // Statement のパターンのみに対応
+                let statement = match select_stmt_output {
+                    SelectStmtOutput::Statement(statement) => statement,
+                    _ => {
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_select_with_parens(): {} node appeared. This node is not considered yet.\n{}",
+                            cursor.node().kind(),
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                };
+
                 let mut sub_expr = SubExpr::new(statement, loc);
 
                 // 開きかっことSELECT文の間にあるコメントを追加

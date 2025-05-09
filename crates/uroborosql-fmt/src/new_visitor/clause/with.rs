@@ -51,6 +51,25 @@ use crate::{
 // - CYCLE name_list SET ColLabel opt_equal_to DEFAULT ColLabel opt_using_path
 
 impl Visitor {
+    pub(crate) fn visit_opt_with_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        // opt_with_clause
+        // - with_clause
+
+        cursor.goto_first_child();
+        pg_ensure_kind!(cursor, SyntaxKind::with_clause, src);
+
+        let with_clause = self.visit_with_clause(cursor, src)?;
+
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::opt_with_clause, src);
+
+        Ok(with_clause)
+    }
+
     pub(crate) fn visit_with_clause(
         &mut self,
         cursor: &mut TreeCursor,
@@ -425,8 +444,8 @@ impl Visitor {
 
                 Ok(statement)
             }
-            SelectStmtOutput::Expr(_) => Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_preparable_stmt: expr is not implemented\n{}",
+            _ => Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_preparable_stmt: VALUES clauses or expressions are not supported as PreparableStmt.\n{}",
                 pg_error_annotation_from_cursor(cursor, src)
             ))),
         }

@@ -228,7 +228,7 @@ pub(crate) struct Values {
 }
 
 impl Values {
-    fn new(kw: &str, rows: Vec<ColumnList>) -> Values {
+    pub(crate) fn new(kw: &str, rows: Vec<ColumnList>) -> Values {
         Values {
             kw: kw.to_string(),
             rows,
@@ -239,7 +239,6 @@ impl Values {
         let mut result = String::new();
 
         // VALUES句
-        result.push(' ');
         result.push_str(&self.kw);
 
         // 要素が一つか二つ以上かでフォーマット方針が異なる
@@ -356,6 +355,11 @@ impl InsertBody {
         self.values_or_query = Some(ValuesOrQuery::Query(Query::Paren(query)))
     }
 
+    /// 直接 ValuesOrQuery をセットする
+    pub(crate) fn set_values_or_query(&mut self, values_or_query: ValuesOrQuery) {
+        self.values_or_query = Some(values_or_query);
+    }
+
     pub(crate) fn set_on_conflict(&mut self, on_conflict: OnConflict) {
         self.on_conflict = Some(on_conflict);
     }
@@ -456,6 +460,11 @@ impl InsertBody {
             result.push_str(&sep_lines.render(depth)?);
             add_indent(&mut result, depth - 1);
             result.push(')');
+
+            // ValuesOrQuery が Values なら、 ')' の後にスペース(' ')を追加する
+            if let Some(ValuesOrQuery::Values(_)) = &self.values_or_query {
+                result.push(' ');
+            }
         }
 
         if let Some(values_or_query) = &self.values_or_query {

@@ -54,7 +54,7 @@ impl Visitor {
         src: &str,
     ) -> Result<Vec<Statement>, UroboroSQLFmtError> {
         use postgresql_cst_parser::syntax_kind::SyntaxKind::{
-            DeleteStmt, SelectStmt, Semicolon, UpdateStmt,
+            DeleteStmt, InsertStmt, SelectStmt, Semicolon, UpdateStmt,
         };
 
         // source_file -> _statement*
@@ -80,12 +80,12 @@ impl Visitor {
             let kind = cursor.node().kind();
 
             match kind {
-                stmt_kind @ (SelectStmt | DeleteStmt | UpdateStmt) => {
+                stmt_kind @ (SelectStmt | DeleteStmt | UpdateStmt | InsertStmt) => {
                     let mut stmt = match stmt_kind {
                         SelectStmt => {
                             let statement_or_expr = self.visit_select_stmt(cursor, src)?;
 
-                            // 現状では、トップレベルの Select では括弧に囲まれたパターンを考慮せず Statement のパターンのみ返す
+                            // 現状では、トップレベルの Select では括弧に囲まれたパターンやValuesのケースを考慮せず Statement のパターンのみ返す
                             match statement_or_expr {
                                 SelectStmtOutput::Statement(statement) => statement,
                                 SelectStmtOutput::Expr(_) => {
@@ -94,11 +94,17 @@ impl Visitor {
                                         pg_error_annotation_from_cursor(cursor, src)
                                     )));
                                 }
+                                SelectStmtOutput::Values(_, _) => {
+                                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                        "visit_source(): VALUES clauses are not implemented\n{}",
+                                        pg_error_annotation_from_cursor(cursor, src)
+                                    )));
+                                }
                             }
                         }
                         DeleteStmt => self.visit_delete_stmt(cursor, src)?,
                         UpdateStmt => self.visit_update_stmt(cursor, src)?,
-                        // InsertStmt => self.visit_insert_stmt(cursor, src)?,
+                        InsertStmt => self.visit_insert_stmt(cursor, src)?,
                         _ => {
                             return Err(UroboroSQLFmtError::Unimplemented(format!(
                                 "visit_source(): Unimplemented statement\n{}",
