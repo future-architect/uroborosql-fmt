@@ -108,6 +108,13 @@ impl Visitor {
             cursor.goto_next_sibling();
         }
 
+        // cursor -> comment?
+        if cursor.node().is_comment() {
+            let comment = Comment::pg_new(cursor.node());
+            insert_body.add_comment_to_child(comment)?;
+            cursor.goto_next_sibling();
+        }
+
         // cursor -> opt_on_conflict?
         if cursor.node().kind() == SyntaxKind::opt_on_conflict {
             let on_conflict = self.visit_on_conflict(cursor, src)?;

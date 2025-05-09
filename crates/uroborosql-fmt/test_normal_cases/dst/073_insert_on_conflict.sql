@@ -77,3 +77,22 @@ do
 	where
 		d.zipcode	!=	'21201'
 ;
+-- comment after query
+insert
+into
+	distributors
+(
+	did
+,	dname
+)
+select
+	id	as	id
+from
+	tbl2
+where
+	id	=	1	-- trailing comment
+on
+	conflict
+do
+	nothing
+;
