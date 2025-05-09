@@ -204,7 +204,7 @@ impl Visitor {
         // '(' insert_column_list ')' があるケースのみ先に処理する
         // cursor -> '(' ?
         let column_list_opt = if cursor.node().kind() == SyntaxKind::LParen {
-            let column_list = self.visit_parenthesized_insert_column_list(cursor, src)?;
+            let column_list = self.handle_parenthesized_insert_column_list(cursor, src)?;
             cursor.goto_next_sibling();
 
             Some(column_list)
@@ -224,7 +224,7 @@ impl Visitor {
     /// 括弧で囲まれた insert_column_list を処理する
     /// 呼出し時、 cursor は '(' を指している
     /// 呼出し後、 cursor は ')' を指している
-    fn visit_parenthesized_insert_column_list(
+    fn handle_parenthesized_insert_column_list(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
