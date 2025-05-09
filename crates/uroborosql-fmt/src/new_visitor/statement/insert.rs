@@ -679,7 +679,7 @@ impl Visitor {
             | SyntaxKind::opt_asc_desc
             | SyntaxKind::opt_nulls_order => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "handle_index_elem_options_nodes: not implemented \n{}",
+                    "visit_index_elem_options: not implemented \n{}",
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
