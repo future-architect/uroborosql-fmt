@@ -113,6 +113,10 @@ impl Comment {
         self.loc.clone()
     }
 
+    pub(crate) fn text(&self) -> &str {
+        &self.text
+    }
+
     /// コメントがブロックコメントであればtrueを返す
     pub(crate) fn is_block_comment(&self) -> bool {
         self.text.starts_with("/*")
