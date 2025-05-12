@@ -416,12 +416,24 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        let statement_or_expr = match cursor.node().kind() {
-            SyntaxKind::SelectStmt => self.visit_select_stmt(cursor, src)?,
-            unimplemented_stmt @ (SyntaxKind::InsertStmt
-            | SyntaxKind::UpdateStmt
-            | SyntaxKind::DeleteStmt
-            | SyntaxKind::MergeStmt) => {
+        let statement = match cursor.node().kind() {
+            SyntaxKind::SelectStmt => {
+                let statement_output = self.visit_select_stmt(cursor, src)?;
+
+                // 現状は Statement を返すパターンのみを考慮する
+                if let SelectStmtOutput::Statement(statement) = statement_output {
+                    statement
+                } else {
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                        "visit_preparable_stmt: VALUES clauses or expressions are not supported as PreparableStmt.\n{}",
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                }
+            }
+            SyntaxKind::InsertStmt => self.visit_insert_stmt(cursor, src)?,
+            SyntaxKind::UpdateStmt => self.visit_update_stmt(cursor, src)?,
+            SyntaxKind::DeleteStmt => self.visit_delete_stmt(cursor, src)?,
+            unimplemented_stmt @ SyntaxKind::MergeStmt => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_preparable_stmt: {} is not implemented\n{}",
                     unimplemented_stmt,
@@ -436,18 +448,9 @@ impl Visitor {
             }
         };
 
-        // 現状は Statement を返すパターンを考慮する
-        match statement_or_expr {
-            SelectStmtOutput::Statement(statement) => {
-                cursor.goto_parent();
-                pg_ensure_kind!(cursor, SyntaxKind::PreparableStmt, src);
+        cursor.goto_parent();
+        pg_ensure_kind!(cursor, SyntaxKind::PreparableStmt, src);
 
-                Ok(statement)
-            }
-            _ => Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_preparable_stmt: VALUES clauses or expressions are not supported as PreparableStmt.\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
-            ))),
-        }
+        Ok(statement)
     }
 }
