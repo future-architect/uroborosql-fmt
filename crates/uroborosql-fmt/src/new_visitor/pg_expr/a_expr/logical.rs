@@ -19,6 +19,7 @@ impl Visitor {
         cursor: &mut TreeCursor,
         src: &str,
         lhs: Expr,
+        comments_before_op: Vec<Comment>,
     ) -> Result<SeparatedLines, UroboroSQLFmtError> {
         // a_expr AND/OR a_expr
         // ^      ^      ^
@@ -34,11 +35,8 @@ impl Visitor {
             _ => boolean_expr.add_expr(lhs.to_aligned(), None, vec![]),
         }
 
-        // cursor -> COMMENT | op
-
-        while cursor.node().is_comment() {
-            boolean_expr.add_comment_to_child(Comment::pg_new(cursor.node()))?;
-            cursor.goto_next_sibling();
+        for comment in comments_before_op {
+            boolean_expr.add_comment_to_child(comment.clone())?;
         }
 
         let sep = convert_keyword_case(cursor.node().text());
