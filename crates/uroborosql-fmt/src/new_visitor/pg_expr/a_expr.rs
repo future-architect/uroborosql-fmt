@@ -233,7 +233,11 @@ impl Visitor {
             return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                 "handle_nodes_after_a_expr(): Unexpected comment. comment: `{}`\n{}",
                 text,
-                create_error_annotation(&location, "This comment is not consumed.", src)?
+                create_error_annotation(
+                    &location,
+                    "This comment is not supported at this location.",
+                    src
+                )?
             )));
         }
 
