@@ -52,17 +52,17 @@ impl Visitor {
                 Ok(expr)
             }
             SyntaxKind::row => Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_a_expr_or_b_expr(): {} is not implemented.\n{}",
+                "handle_a_expr_or_b_expr_inner(): {} is not implemented.\n{}",
                 cursor.node().kind(),
                 pg_error_annotation_from_cursor(cursor, src)
             ))),
             SyntaxKind::UNIQUE => Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_a_expr_or_b_expr(): {} is not implemented.\n{}",
+                "handle_a_expr_or_b_expr_inner(): {} is not implemented.\n{}",
                 cursor.node().kind(),
                 pg_error_annotation_from_cursor(cursor, src)
             ))),
             _ => Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                "visit_a_expr_or_b_expr(): Unexpected syntax. node: {}\n{}",
+                "handle_a_expr_or_b_expr_inner(): Unexpected syntax. node: {}\n{}",
                 cursor.node().kind(),
                 pg_error_annotation_from_cursor(cursor, src)
             ))),
@@ -128,7 +128,7 @@ impl Visitor {
             // 属性関連
             SyntaxKind::COLLATE | SyntaxKind::AT => {
                 Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_a_expr_or_b_expr(): {} is not implemented.\n{}",
+                    "handle_nodes_after_a_expr(): {} is not implemented.\n{}",
                     cursor.node().kind(),
                     pg_error_annotation_from_cursor(cursor, src)
                 )))
@@ -139,7 +139,7 @@ impl Visitor {
                 Ok(Expr::Aligned(Box::new(aligned)))
             }
             SyntaxKind::SIMILAR => Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_a_expr_or_b_expr(): {} is not implemented.\n{}",
+                "handle_nodes_after_a_expr(): {} is not implemented.\n{}",
                 cursor.node().kind(),
                 pg_error_annotation_from_cursor(cursor, src)
             ))),
@@ -150,7 +150,7 @@ impl Visitor {
             }
             SyntaxKind::ISNULL | SyntaxKind::NOTNULL => {
                 Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_a_expr_or_b_expr(): {} is not implemented.\n{}",
+                    "handle_nodes_after_a_expr(): {} is not implemented.\n{}",
                     cursor.node().kind(),
                     pg_error_annotation_from_cursor(cursor, src)
                 )))
@@ -204,20 +204,20 @@ impl Visitor {
                     SyntaxKind::SIMILAR => {
                         // NOT_LA SIMILAR
                         Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_a_expr_or_b_expr(): {} is not implemented.\n{}",
+                            "handle_nodes_after_a_expr(): {} is not implemented.\n{}",
                             cursor.node().kind(),
                             pg_error_annotation_from_cursor(cursor, src)
                         )))
                     }
                     _ => Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_a_expr_or_b_expr(): Unexpected syntax. node: {}\n{}",
+                        "handle_nodes_after_a_expr(): Unexpected syntax. node: {}\n{}",
                         cursor.node().kind(),
                         pg_error_annotation_from_cursor(cursor, src)
                     ))),
                 }
             }
             _ => Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                "visit_a_expr_or_b_expr(): Unexpected syntax. node: {}\n{}",
+                "handle_nodes_after_a_expr(): Unexpected syntax. node: {}\n{}",
                 cursor.node().kind(),
                 pg_error_annotation_from_cursor(cursor, src)
             ))),
