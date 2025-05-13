@@ -208,9 +208,28 @@ impl Visitor {
             }
         };
 
+        let mut aligned = AlignedExpr::new(lhs_expr.clone());
+
         // (`AS` ColLabel` | `BareColLabel`)?
-        let aligned = if cursor.goto_next_sibling() {
-            let mut aligned = AlignedExpr::new(lhs_expr);
+        if cursor.goto_next_sibling() {
+            // cursor -> comment
+            // AS の直前にコメントがある場合
+            if cursor.node().is_comment() {
+                let comment = Comment::pg_new(cursor.node());
+
+                if comment.is_block_comment() || !comment.loc().is_same_line(&lhs_expr.loc()) {
+                    // 行末以外のコメント(次以降の行のコメント)は未定義
+                    // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_target_el(): unexpected comment\n{}",
+                        pg_error_annotation_from_cursor(cursor, src)
+                    )));
+                } else {
+                    // 行末コメント
+                    aligned.set_lhs_trailing_comment(comment)?;
+                }
+                cursor.goto_next_sibling();
+            }
 
             let as_keyword = if cursor.node().kind() == SyntaxKind::AS {
                 let keyword = cursor.node().text();
@@ -231,21 +250,16 @@ impl Visitor {
             // ColLabel は as キーワードを使ったときのラベルで、BareColLabel は as キーワードを使わないときのラベル
             // ColLabel にはどんなラベルも利用でき、 BareColLabel の場合は限られたラベルしか利用できないという構文上の区別があるが、
             // フォーマッタとしては関係がないので同じように扱う
+            pg_ensure_kind!(cursor, SyntaxKind::ColLabel | SyntaxKind::BareColLabel, src);
             let rhs_expr = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Expr)?;
             aligned.add_rhs(as_keyword, rhs_expr.into());
-
-            aligned
         } else {
-            // エイリアスがない場合
-            let mut aligned = AlignedExpr::new(lhs_expr.clone());
-
+            // エイリアスを補完する設定が有効で、かつ識別子の場合はエイリアスを補完する
             if CONFIG.read().unwrap().complement_alias && is_columnref {
                 if let Some(alias_name) = create_alias_from_expr(&lhs_expr) {
                     aligned.add_rhs(Some(convert_keyword_case("AS")), alias_name);
                 }
             }
-
-            aligned
         };
 
         cursor.goto_parent();
