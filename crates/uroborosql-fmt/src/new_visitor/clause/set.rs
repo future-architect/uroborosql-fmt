@@ -6,7 +6,7 @@ use crate::{
     },
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
-    util::convert_keyword_case,
+    util::convert_identifier_case,
     NewVisitor as Visitor,
 };
 
@@ -153,7 +153,7 @@ impl Visitor {
             .filter(|c| !c.is_whitespace())
             .collect::<String>();
 
-        let expr = PrimaryExpr::new(convert_keyword_case(&whitespace_removed_text), location);
+        let expr = PrimaryExpr::new(convert_identifier_case(&whitespace_removed_text), location);
 
         Ok(Expr::Primary(Box::new(expr)))
     }
