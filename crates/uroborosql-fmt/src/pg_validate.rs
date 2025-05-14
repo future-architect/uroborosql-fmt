@@ -1,8 +1,8 @@
 use itertools::Itertools;
 use postgresql_cst_parser::{
     syntax_kind::SyntaxKind,
+    tree_sitter::parse_2way,
     tree_sitter::{Node, Tree},
-    ts_parse,
 };
 
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
 
 /// フォーマット前後でSQLに欠落が生じないかを検証する。
 pub(crate) fn validate_format_result(src: &str) -> Result<(), UroboroSQLFmtError> {
-    let src_ts_tree = ts_parse(src).unwrap();
+    let src_ts_tree = parse_2way(src).unwrap();
 
     let dbg = CONFIG.read().unwrap().debug;
 
@@ -23,7 +23,7 @@ pub(crate) fn validate_format_result(src: &str) -> Result<(), UroboroSQLFmtError
     load_never_complement_settings();
 
     let format_result = pg_format_tree(&src_ts_tree, src)?;
-    let dst_ts_tree = ts_parse(&format_result).unwrap();
+    let dst_ts_tree = parse_2way(&format_result).unwrap();
 
     let validate_result = compare_tree(&src_ts_tree, &dst_ts_tree, src, &format_result);
 
@@ -217,7 +217,7 @@ fn swap_comma_and_trailing_comment(tokens: &mut [Token]) {
 #[cfg(test)]
 mod tests {
     use super::compare_tree;
-    use postgresql_cst_parser::{syntax_kind::SyntaxKind, ts_parse};
+    use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::parse_2way as ts_parse};
 
     use crate::{
         cst::{Location, Position},

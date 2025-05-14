@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum UroboroSQLFmtError {
+    #[error("Parse error: {0}")]
+    ParseError(String),
     #[error("Illegal operation error: {0}")]
     IllegalOperation(String),
     #[error("Unexpected syntax error: {0}")]
