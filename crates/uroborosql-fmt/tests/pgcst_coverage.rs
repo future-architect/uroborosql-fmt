@@ -208,6 +208,7 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
         println!("\nFailed Cases (by error type):");
 
         // エラーの種類でグループ化して出力
+        let mut parse_errors = Vec::new();
         let mut syntax_errors = Vec::new();
         let mut validation_errors = Vec::new();
         let mut unimplemented_errors = Vec::new();
@@ -223,7 +224,9 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
                     (error_msg.clone(), None)
                 };
 
-                if error_msg.contains("Syntax error:") {
+                if error_msg.contains("Parse error:") {
+                    parse_errors.push((result.file_path.clone(), message, _annotation));
+                } else if error_msg.contains("Syntax error:") {
                     syntax_errors.push((result.file_path.clone(), message, _annotation));
                 } else if error_msg.contains("Validation error:") {
                     validation_errors.push((result.file_path.clone(), message, _annotation));
