@@ -93,6 +93,7 @@ fn try_format_with_new_parser(file_path: &str) -> Result<String, String> {
         Err(e) => {
             // エラーの種類に応じてメッセージを詳細化
             let error_detail = match e {
+                UroboroSQLFmtError::ParseError(msg) => format!("Parse error: {}", msg),
                 UroboroSQLFmtError::IllegalOperation(msg) => format!("Illegal operation: {}", msg),
                 UroboroSQLFmtError::UnexpectedSyntax(msg) => format!("Syntax error: {}", msg),
                 UroboroSQLFmtError::Unimplemented(msg) => format!("Unimplemented: {}", msg),
