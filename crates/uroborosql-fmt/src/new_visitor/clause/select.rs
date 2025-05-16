@@ -3,7 +3,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_create_clause, pg_ensure_kind, Visitor},
+    new_visitor::{pg_create_clause, pg_ensure_kind, Visitor, COMMA},
 };
 
 impl Visitor {
@@ -96,9 +96,17 @@ impl Visitor {
             _ => {}
         }
 
+        let extra_leading_comma = if cursor.node().kind() == SyntaxKind::Comma {
+            cursor.goto_next_sibling();
+
+            Some(COMMA.to_string())
+        } else {
+            None
+        };
+
         // cursor -> target_list?
         if cursor.node().kind() == SyntaxKind::target_list {
-            let target_list = self.visit_target_list(cursor, src)?;
+            let target_list = self.visit_target_list(cursor, src, extra_leading_comma)?;
             // select_clause_body 部分に target_list から生成した Body をセット
             select_body.set_select_clause_body(target_list);
 

@@ -41,7 +41,7 @@ impl Visitor {
 
         // cursor -> target_list
         pg_ensure_kind!(cursor, SyntaxKind::target_list, src);
-        let body = self.visit_target_list(cursor, src)?;
+        let body = self.visit_target_list(cursor, src, None)?;
         clause.set_body(body);
 
         cursor.goto_parent();

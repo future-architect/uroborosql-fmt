@@ -81,10 +81,13 @@ impl Visitor {
         Ok(primary)
     }
 
+    /// target_list をフォーマットする
+    /// 直前にカンマがある場合は extra_leading_comma として渡す
     pub(crate) fn visit_target_list(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
+        extra_leading_comma: Option<String>,
     ) -> Result<Body, UroboroSQLFmtError> {
         // target_list -> target_el ("," target_el)*
 
@@ -95,7 +98,7 @@ impl Visitor {
         let mut sep_lines = SeparatedLines::new();
 
         let target_el = self.visit_target_el(cursor, src)?;
-        sep_lines.add_expr(target_el, None, vec![]);
+        sep_lines.add_expr(target_el, extra_leading_comma, vec![]);
 
         while cursor.goto_next_sibling() {
             // cursor -> "," または target_el
