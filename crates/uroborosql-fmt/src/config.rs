@@ -79,6 +79,10 @@ fn default_use_pg_parser() -> bool {
     false
 }
 
+fn default_use_parser_error_recovery() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Case {
@@ -162,6 +166,10 @@ pub struct Config {
     /// パーサにpostgresql-cst-parserを使用する
     #[serde(default = "default_use_pg_parser")]
     pub(crate) use_pg_parser: bool,
+
+    /// パーサのエラー回復機能を使うかどうか
+    #[serde(default = "default_use_parser_error_recovery")]
+    pub(crate) use_parser_error_recovery: bool,
 }
 
 impl Config {
@@ -226,6 +234,7 @@ impl Default for Config {
             unify_not_equal: default_unify_not_equal(),
             indent_tab: default_indent_tab(),
             use_pg_parser: default_use_pg_parser(),
+            use_parser_error_recovery: default_use_parser_error_recovery(),
         }
     }
 }
@@ -254,6 +263,7 @@ pub(crate) fn load_never_complement_settings() {
         unify_not_equal: false,
         indent_tab: true,
         use_pg_parser: default_use_pg_parser(),
+        use_parser_error_recovery: default_use_parser_error_recovery(),
     };
 
     *CONFIG.write().unwrap() = config;

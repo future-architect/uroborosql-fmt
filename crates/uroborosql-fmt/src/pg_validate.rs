@@ -1,8 +1,7 @@
 use itertools::Itertools;
 use postgresql_cst_parser::{
     syntax_kind::SyntaxKind,
-    tree_sitter::parse_2way,
-    tree_sitter::{Node, Tree},
+    tree_sitter::{parse, parse_2way, Node, Tree},
 };
 
 use crate::{
@@ -15,15 +14,26 @@ use crate::{
 
 /// フォーマット前後でSQLに欠落が生じないかを検証する。
 pub(crate) fn validate_format_result(src: &str) -> Result<(), UroboroSQLFmtError> {
-    let src_ts_tree = parse_2way(src).unwrap();
-
     let dbg = CONFIG.read().unwrap().debug;
+
+    // load_never_complement_settings で上書きされうるので先に保持しておく
+    let use_parser_error_recovery = CONFIG.read().unwrap().use_parser_error_recovery;
+
+    let src_ts_tree = if use_parser_error_recovery {
+        parse_2way(src).unwrap()
+    } else {
+        parse(src).unwrap()
+    };
 
     // 補完を行わない設定に切り替える
     load_never_complement_settings();
 
     let format_result = pg_format_tree(&src_ts_tree, src)?;
-    let dst_ts_tree = parse_2way(&format_result).unwrap();
+    let dst_ts_tree = if use_parser_error_recovery {
+        parse_2way(&format_result).unwrap()
+    } else {
+        parse(&format_result).unwrap()
+    };
 
     let validate_result = compare_tree(&src_ts_tree, &dst_ts_tree, src, &format_result);
 
