@@ -104,6 +104,8 @@ impl Visitor {
             None
         };
 
+        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+
         // cursor -> target_list?
         if cursor.node().kind() == SyntaxKind::target_list {
             let target_list = self.visit_target_list(cursor, src, extra_leading_comma)?;
