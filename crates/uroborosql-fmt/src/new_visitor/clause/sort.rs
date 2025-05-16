@@ -34,11 +34,20 @@ impl Visitor {
         cursor.goto_next_sibling();
 
         // curosr -> BY
+        pg_ensure_kind!(cursor, SyntaxKind::BY, src);
         clause.pg_extend_kw(cursor.node());
         cursor.goto_next_sibling();
 
+        // cursor -> Comma?
+        let extra_leading_comma = if cursor.node().kind() == SyntaxKind::Comma {
+            cursor.goto_next_sibling();
+            Some(COMMA.to_string())
+        } else {
+            None
+        };
+
         // cursor -> sortby_list
-        let sortby_list = self.visit_sortby_list(cursor, src)?;
+        let sortby_list = self.visit_sortby_list(cursor, src, extra_leading_comma)?;
         clause.set_body(Body::SepLines(sortby_list));
 
         cursor.goto_parent();
@@ -51,6 +60,7 @@ impl Visitor {
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
+        extra_leading_comma: Option<String>,
     ) -> Result<SeparatedLines, UroboroSQLFmtError> {
         // sortby_list
         // - sortby ( ',' sortby )*
@@ -60,7 +70,7 @@ impl Visitor {
 
         // cursor -> sortby
         let first_element = self.visit_sortby(cursor, src)?;
-        sep_lines.add_expr(first_element, None, vec![]);
+        sep_lines.add_expr(first_element, extra_leading_comma, vec![]);
 
         let mut is_preceding_comment_area = false;
         let mut preceding_comments = vec![];
