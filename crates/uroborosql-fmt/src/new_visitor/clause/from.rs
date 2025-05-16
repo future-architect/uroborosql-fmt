@@ -30,10 +30,18 @@ impl Visitor {
 
         self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
+        // cursor -> Comma?
+        let extra_leading_comma = if cursor.node().kind() == SyntaxKind::Comma {
+            cursor.goto_next_sibling();
+            Some(COMMA.to_string())
+        } else {
+            None
+        };
+
         // cursor -> from_list
         pg_ensure_kind!(cursor, SyntaxKind::from_list, src);
 
-        let from_list = self.visit_from_list(cursor, src)?;
+        let from_list = self.visit_from_list(cursor, src, extra_leading_comma)?;
 
         clause.set_body(from_list);
 
@@ -45,10 +53,12 @@ impl Visitor {
     }
 
     /// 呼出し後、cursor は from_list を指している
+    /// 直前にカンマがある場合は extra_leading_comma として渡す
     pub(crate) fn visit_from_list(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
+        extra_leading_comma: Option<String>,
     ) -> Result<Body, UroboroSQLFmtError> {
         // from_list -> table_ref ("," table_ref)*
 
@@ -60,7 +70,7 @@ impl Visitor {
         let mut from_body = SeparatedLines::new();
 
         let table_ref = self.visit_table_ref(cursor, src)?;
-        from_body.add_expr(table_ref, None, vec![]);
+        from_body.add_expr(table_ref, extra_leading_comma, vec![]);
 
         while cursor.goto_next_sibling() {
             // cursor -> "," または table_ref
