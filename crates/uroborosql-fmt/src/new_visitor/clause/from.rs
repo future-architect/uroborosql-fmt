@@ -87,12 +87,16 @@ impl Visitor {
                         )));
                     };
 
+                    // テーブル参照における置換文字列
                     if comment.loc().is_next_to(&next_sibling.range().into()) {
-                        // テーブル参照における置換文字列
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_from_list(): table_ref node with bind parameters appeared. Table references with bind parameters are not implemented yet.\n{}",
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )));
+                        cursor.goto_next_sibling();
+                        // cursor -> table_ref
+                        pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
+                        let mut table_ref = self.visit_table_ref(cursor, src)?;
+
+                        // 置換文字列をセット
+                        table_ref.set_head_comment(comment);
+                        from_body.add_expr(table_ref, Some(COMMA.to_string()), vec![]);
                     } else {
                         from_body.add_comment_to_child(comment)?;
                     }
