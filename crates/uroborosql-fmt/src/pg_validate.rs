@@ -32,7 +32,7 @@ pub(crate) fn validate_format_result(
 fn error_annotation(src_token: &Token, dst_token: Option<&Token>, _src: &str) -> String {
     // location の形式が違うのでそのままは使えない
     // とりあえず Token の種類と値を表示する
-    
+
     // src token
     let src_token_str = format!("src_token: {:?}", src_token);
 
