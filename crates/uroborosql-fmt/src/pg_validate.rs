@@ -1,167 +1,63 @@
 use itertools::Itertools;
-use postgresql_cst_parser::{
-    syntax_kind::SyntaxKind,
-    tree_sitter::{parse, parse_2way, Node, Tree},
-};
+use postgresql_cst_parser::{lex, Token, TokenKind};
 
 use crate::{
-    config::{load_never_complement_settings, CONFIG},
-    cst::Location,
-    pg_format_tree, pg_print_cst,
-    util::create_error_annotation,
-    UroboroSQLFmtError,
+    config::load_never_complement_settings, pg_format, pg_format_two_way_sql, UroboroSQLFmtError,
 };
 
 /// フォーマット前後でSQLに欠落が生じないかを検証する。
-pub(crate) fn validate_format_result(src: &str) -> Result<(), UroboroSQLFmtError> {
-    let dbg = CONFIG.read().unwrap().debug;
-
-    // load_never_complement_settings で上書きされうるので先に保持しておく
-    let use_parser_error_recovery = CONFIG.read().unwrap().use_parser_error_recovery;
-
-    let src_ts_tree = if use_parser_error_recovery {
-        parse_2way(src).unwrap()
-    } else {
-        parse(src).unwrap()
-    };
-
+/// is_2way_sql_mode には 2way-sql モードでフォーマットするかどうかを指定する。
+pub(crate) fn validate_format_result(
+    src: &str,
+    is_2way_sql_mode: bool,
+) -> Result<(), UroboroSQLFmtError> {
     // 補完を行わない設定に切り替える
     load_never_complement_settings();
 
-    let format_result = pg_format_tree(&src_ts_tree, src)?;
-    let dst_ts_tree = if use_parser_error_recovery {
-        parse_2way(&format_result).unwrap()
+    let format_result = if is_2way_sql_mode {
+        pg_format_two_way_sql(src)?
     } else {
-        parse(&format_result).unwrap()
+        pg_format(src)?
     };
 
-    let validate_result = compare_tree(&src_ts_tree, &dst_ts_tree, src, &format_result);
-
-    if dbg && validate_result.is_err() {
-        eprintln!(
-            "\n{} validation error! {}\n",
-            "=".repeat(20),
-            "=".repeat(20)
-        );
-        eprintln!("src_ts_tree =");
-        pg_print_cst(src_ts_tree.root_node(), 0);
-        eprintln!();
-        eprintln!("dst_ts_tree =");
-        pg_print_cst(dst_ts_tree.root_node(), 0);
-        eprintln!();
-    }
-
-    validate_result
-}
-
-/// tree-sitter-sqlによって得られた二つのCSTをトークン列に変形させ、それらを比較して等価であるかを判定する。
-/// 等価であれば true を、そうでなければ false を返す。
-fn compare_tree(
-    src_ts_tree: &Tree,
-    dst_ts_tree: &Tree,
-    src: &str,
-    format_result: &str,
-) -> Result<(), UroboroSQLFmtError> {
-    let mut src_tokens: Vec<Token> = vec![];
-    construct_tokens(&src_ts_tree.root_node(), &mut src_tokens);
-
-    let mut dst_tokens: Vec<Token> = vec![];
-    construct_tokens(&dst_ts_tree.root_node(), &mut dst_tokens);
-
+    let mut src_tokens = lex(src);
     swap_comma_and_trailing_comment(&mut src_tokens);
 
-    compare_tokens(&src_tokens, &dst_tokens, format_result, src)
+    let dst_tokens = lex(&format_result);
+
+    compare_tokens(&src_tokens, &dst_tokens, src, &format_result)
 }
 
-#[derive(Debug, PartialEq)]
-struct Token {
-    kind: SyntaxKind,
-    /// すべてテキストを文字列で持つのに問題がある場合、tree_sitter::Node または tree_sitter::Range に変更
-    text: String,
-    location: Location,
-}
-
-impl Token {
-    fn new(node: &Node) -> Self {
-        let kind = node.kind();
-        let text = node.text().into();
-        let location = Location::from(node.range());
-        Token {
-            kind,
-            text,
-            location,
-        }
-    }
-
-    fn is_same_kind(&self, other: &Token) -> bool {
-        self.kind == other.kind
-    }
-
-    /// エラー注釈を作成する関数
-    /// 以下の形のエラー注釈を生成
-    ///
-    /// ```sh
-    ///   |
-    /// 1 | select * from y y y y y y y y ;
-    ///   |                   ^^^^^^^^^^^ After format: "; (kind: ;)"
-    ///   |
-    /// ```
-    fn error_annotation(&self, src: &str, dst_tok: Option<&Token>) -> String {
-        let label = if let Some(other) = dst_tok {
-            format!(r#"After format: "{} (kind: {})""#, other.text, other.kind)
-        } else {
-            "".to_string()
-        };
-
-        match create_error_annotation(&self.location, &label, src) {
-            Ok(error_annotation) => error_annotation,
-            Err(_) => "".to_string(),
-        }
-    }
-}
-
-fn construct_tokens(node: &Node, tokens: &mut Vec<Token>) {
-    if node.child_count() == 0 {
-        let token = Token::new(node);
-        tokens.push(token);
-    } else {
-        let mut cursor = node.walk();
-        if cursor.goto_first_child() {
-            loop {
-                construct_tokens(&cursor.node(), tokens);
-                if !cursor.goto_next_sibling() {
-                    break;
-                }
-            }
-        }
-    }
+fn error_annotation(src_token: &Token, dst_token: Option<&Token>, src: &str) -> String {
+    // location の形式が違うのでそのままは使えない
+    "wip".to_string()
 }
 
 fn compare_tokens(
     src_tokens: &[Token],
     dst_tokens: &[Token],
-    format_result: &str,
     src: &str,
+    format_result: &str,
 ) -> Result<(), UroboroSQLFmtError> {
     for test in src_tokens.iter().zip_longest(dst_tokens.iter()) {
         match test {
-            itertools::EitherOrBoth::Both(src_tok, dst_tok) => {
-                if src_tok.is_same_kind(dst_tok) {
-                    compare_token_text(src_tok, dst_tok, format_result, src)?
+            itertools::EitherOrBoth::Both(src_token, dst_token) => {
+                if src_token.kind == dst_token.kind {
+                    compare_token_text(src_token, dst_token, format_result, src)?
                 } else {
                     return Err(UroboroSQLFmtError::Validation {
                         format_result: format_result.to_owned(),
-                        error_msg: format!("different kind token: Errors have occurred near the following token\n{}", src_tok.error_annotation(src,  Some(dst_tok))),
+                        error_msg: format!("different kind token: Errors have occurred near the following token\n{}", error_annotation(src_token, Some(dst_token), src)),
                     });
                 }
             }
-            itertools::EitherOrBoth::Left(src_tok) => {
+            itertools::EitherOrBoth::Left(src_token) => {
                 // src.len() > dst.len() の場合
                 return Err(UroboroSQLFmtError::Validation {
                     format_result: format_result.to_owned(),
                     error_msg: format!(
                         "different kind token: Errors have occurred near the following token\n{}",
-                        src_tok.error_annotation(src, None)
+                        error_annotation(src_token, None, src)
                     ),
                 });
             }
@@ -182,26 +78,26 @@ fn compare_tokens(
 /// src_tok と dst_tok の kind は等しいことを想定している。
 /// 現状は、ヒント句が正しく変形されているかのみを検証する。
 fn compare_token_text(
-    src_tok: &Token,
-    dst_tok: &Token,
+    src_token: &Token,
+    dst_token: &Token,
     format_result: &str,
     src: &str,
 ) -> Result<(), UroboroSQLFmtError> {
-    let src_tok_text = &src_tok.text;
-    let dst_tok_text = &dst_tok.text;
-    match src_tok.kind {
-        SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT
-            if src_tok_text.starts_with("/*+") || src_tok_text.starts_with("--+") =>
+    let src_token_text = &src_token.value;
+    let dst_token_text = &dst_token.value;
+    match src_token.kind {
+        TokenKind::SQL_COMMENT | TokenKind::C_COMMENT
+            if src_token_text.starts_with("/*+") || src_token_text.starts_with("--+") =>
         {
             // ヒント句
-            if dst_tok_text.starts_with("/*+") || dst_tok_text.starts_with("--+") {
+            if dst_token_text.starts_with("/*+") || dst_token_text.starts_with("--+") {
                 Ok(())
             } else {
                 Err(UroboroSQLFmtError::Validation {
                     format_result: format_result.to_owned(),
                     error_msg: format!(
                         r#"hint must start with "/*+" or "--+".\n{}"#,
-                        src_tok.error_annotation(src, Some(dst_tok))
+                        error_annotation(src_token, Some(dst_token), src)
                     ),
                 })
             }
@@ -210,67 +106,63 @@ fn compare_token_text(
     }
 }
 
-/// トークン列に [カンマ, 行末コメント] の並びがあれば、それを入れ替える関数。
+/// [カンマ, 行末コメント] という並びのトークンを入れ替える
 fn swap_comma_and_trailing_comment(tokens: &mut [Token]) {
-    for idx in 0..(tokens.len() - 1) {
-        let fst_tok = tokens.get(idx).unwrap();
+    if tokens.len() < 2 {
+        return;
+    }
 
-        if fst_tok.kind == SyntaxKind::Comma && idx + 1 < tokens.len() {
-            let snd_tok = tokens.get(idx + 1).unwrap();
-            if snd_tok.kind == SyntaxKind::SQL_COMMENT {
-                tokens.swap(idx, idx + 1);
-            }
+    // 0..(tokens.len() - 1) でループするため i+1 は常に有効なインデックスである
+    for i in 0..(tokens.len() - 1) {
+        if tokens[i].value == "," && tokens[i + 1].value.starts_with("--") {
+            tokens.swap(i, i + 1);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::compare_tree;
-    use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::parse_2way as ts_parse};
+    use postgresql_cst_parser::lex;
 
-    use crate::{
-        cst::{Location, Position},
-        error::UroboroSQLFmtError,
-    };
+    use crate::{error::UroboroSQLFmtError, pg_validate::compare_tokens};
 
-    use super::{construct_tokens, Token};
+    use super::swap_comma_and_trailing_comment;
 
     #[test]
-    fn test_compare_tree_lack_element() {
-        let src = r"select column_name as col from table_name";
-        let dst = r"select column_name from table_name";
+    fn test_compare_tokens_lack_element() {
+        let src = r"select column_name1, column_name2 as col from table_name";
+        let dst = r"select column_name1, column_name2 as col from table_name";
 
-        let src_ts_tree = ts_parse(src).unwrap();
-        let dst_ts_tree = ts_parse(dst).unwrap();
+        let src_tokens = lex(src);
+        let dst_tokens = lex(dst);
 
-        assert!(compare_tree(&src_ts_tree, &dst_ts_tree, src, dst).is_err());
+        assert!(compare_tokens(&src_tokens, &dst_tokens, src, dst).is_err());
     }
 
     #[test]
-    fn test_compare_tree_change_order() {
+    fn test_compare_tokens_change_order() {
         let src = r"select * from tbl1,/* comment */ tbl2";
         let dst = r"select * from tbl1/* comment */, tbl2";
 
-        let src_ts_tree = ts_parse(src).unwrap();
-        let dst_ts_tree = ts_parse(dst).unwrap();
+        let src_tokens = lex(src);
+        let dst_tokens = lex(dst);
 
-        assert!(compare_tree(&src_ts_tree, &dst_ts_tree, src, dst).is_err());
+        assert!(compare_tokens(&src_tokens, &dst_tokens, src, dst).is_err());
     }
 
     #[test]
-    fn test_compare_tree_different_children() {
+    fn test_compare_tokens_different_children() {
         let src = r"select * from tbl1";
         let dst = r"select * from tbl1, tbl2";
 
-        let src_ts_tree = ts_parse(src).unwrap();
-        let dst_ts_tree = ts_parse(dst).unwrap();
+        let src_tokens = lex(src);
+        let dst_tokens = lex(dst);
 
-        assert!(compare_tree(&src_ts_tree, &dst_ts_tree, src, dst).is_err());
+        assert!(compare_tokens(&src_tokens, &dst_tokens, src, dst).is_err());
     }
 
     #[test]
-    fn test_compare_tree_success() -> Result<(), UroboroSQLFmtError> {
+    fn test_compare_tokens_success() -> Result<(), UroboroSQLFmtError> {
         let src = r"
 SELECT /*+ optimizer_features_enable('11.1.0.6') */ employee_id, last_name
 FROM    employees
@@ -287,14 +179,14 @@ ORDER BY
     employee_id
 ;";
 
-        let src_ts_tree = ts_parse(src).unwrap();
-        let dst_ts_tree = ts_parse(dst).unwrap();
+        let src_tokens = lex(src);
+        let dst_tokens = lex(dst);
 
-        compare_tree(&src_ts_tree, &dst_ts_tree, src, dst)
+        compare_tokens(&src_tokens, &dst_tokens, src, dst)
     }
 
     #[test]
-    fn test_compare_tree_broken_hint() {
+    fn test_compare_tokens_broken_hint() {
         let src = r"
 SELECT /*+ optimizer_features_enable('11.1.0.6') */ employee_id, last_name
 FROM    employees
@@ -314,90 +206,10 @@ ORDER BY
     employee_id
 ;";
 
-        let src_ts_tree = ts_parse(src).unwrap();
-        let dst_ts_tree = ts_parse(dst).unwrap();
+        let src_tokens = lex(src);
+        let dst_tokens = lex(dst);
 
-        assert!(compare_tree(&src_ts_tree, &dst_ts_tree, src, dst).is_err());
-    }
-
-    fn new_token(kind: SyntaxKind, text: impl Into<String>, location: Location) -> Token {
-        Token {
-            kind,
-            text: text.into(),
-            location,
-        }
-    }
-
-    #[test]
-    fn test_construct_tokens() {
-        let src = r"select column_name as col from table_name";
-
-        let ts_tree = ts_parse(src).unwrap();
-        let mut tokens: Vec<Token> = vec![];
-        construct_tokens(&ts_tree.root_node(), &mut tokens);
-
-        let expected_tokens = vec![
-            new_token(
-                SyntaxKind::SELECT,
-                "select",
-                Location {
-                    start_position: Position { row: 0, col: 0 },
-                    end_position: Position { row: 0, col: 6 },
-                },
-            ),
-            new_token(
-                SyntaxKind::IDENT,
-                "column_name",
-                Location {
-                    start_position: Position { row: 0, col: 7 },
-                    end_position: Position { row: 0, col: 18 },
-                },
-            ),
-            new_token(
-                SyntaxKind::AS,
-                "as",
-                Location {
-                    start_position: Position { row: 0, col: 19 },
-                    end_position: Position { row: 0, col: 21 },
-                },
-            ),
-            new_token(
-                SyntaxKind::IDENT,
-                "col",
-                Location {
-                    start_position: Position { row: 0, col: 22 },
-                    end_position: Position { row: 0, col: 25 },
-                },
-            ),
-            new_token(
-                SyntaxKind::FROM,
-                "from",
-                Location {
-                    start_position: Position { row: 0, col: 26 },
-                    end_position: Position { row: 0, col: 30 },
-                },
-            ),
-            new_token(
-                SyntaxKind::IDENT,
-                "table_name",
-                Location {
-                    start_position: Position { row: 0, col: 31 },
-                    end_position: Position { row: 0, col: 41 },
-                },
-            ),
-        ];
-
-        assert_eq!(tokens.len(), expected_tokens.len());
-
-        for (i, (actual, expected)) in tokens.iter().zip(expected_tokens.iter()).enumerate() {
-            assert_eq!(actual.kind, expected.kind, "Token {}: kind mismatch", i);
-            assert_eq!(actual.text, expected.text, "Token {}: text mismatch", i);
-            assert_eq!(
-                actual.location, expected.location,
-                "Token {}th: location mismatch",
-                i
-            );
-        }
+        assert!(compare_tokens(&src_tokens, &dst_tokens, src, dst).is_err());
     }
 
     #[test]
@@ -412,9 +224,10 @@ select
     col1 -- comment
 ,   col2";
 
-        let src_ts_tree = ts_parse(src).unwrap();
-        let dst_ts_tree = ts_parse(dst).unwrap();
+        let mut src_tokens = lex(src);
+        swap_comma_and_trailing_comment(&mut src_tokens);
+        let dst_tokens = lex(dst);
 
-        compare_tree(&src_ts_tree, &dst_ts_tree, src, dst)
+        compare_tokens(&src_tokens, &dst_tokens, src, dst)
     }
 }
