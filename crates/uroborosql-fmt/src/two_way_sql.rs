@@ -4,7 +4,7 @@ pub(crate) mod tree;
 
 use tree_sitter::Language;
 
-use crate::{config::CONFIG, error::UroboroSQLFmtError, format, re::RE};
+use crate::{config::CONFIG, error::UroboroSQLFmtError, format, pg_format, re::RE};
 
 use self::{
     dag::generate_dag,
@@ -68,6 +68,40 @@ pub(crate) fn format_two_way_sql(
             eprintln!("{}", "-".repeat(100));
         }
     }
+
+    // 各SQLをマージ
+    let res = merge_tree(formatted_tree)?;
+
+    Ok(res)
+}
+
+/// Treeの全ての葉をフォーマット
+fn pg_format_tree(tree: TreeNode) -> Result<TreeNode, UroboroSQLFmtError> {
+    match tree {
+        TreeNode::Parent(nodes) => {
+            let mut childs = vec![];
+
+            for node in nodes {
+                childs.push(pg_format_tree(node)?);
+            }
+
+            Ok(TreeNode::Parent(childs))
+        }
+        TreeNode::Leaf(src) => {
+            let res = pg_format(&src)?;
+
+            Ok(TreeNode::Leaf(res))
+        }
+    }
+}
+
+/// 2way-sqlをフォーマット（postgresql-cst-parser）
+pub(crate) fn pg_format_two_way_sql(src: &str) -> Result<String, UroboroSQLFmtError> {
+    // 2way-sqlをIF分岐によって複数SQLへ分割
+    let tree = generate_tree(src)?;
+
+    // treeの葉の全てのSQLをフォーマット
+    let formatted_tree = pg_format_tree(tree)?;
 
     // 各SQLをマージ
     let res = merge_tree(formatted_tree)?;
