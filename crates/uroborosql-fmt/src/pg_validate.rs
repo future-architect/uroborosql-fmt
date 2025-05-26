@@ -28,9 +28,21 @@ pub(crate) fn validate_format_result(
     compare_tokens(&src_tokens, &dst_tokens, src, &format_result)
 }
 
-fn error_annotation(src_token: &Token, dst_token: Option<&Token>, src: &str) -> String {
+fn error_annotation(src_token: &Token, dst_token: Option<&Token>, _src: &str) -> String {
     // location の形式が違うのでそのままは使えない
-    "wip".to_string()
+    // とりあえず Token の種類と値を表示する
+    
+    // src token
+    let src_token_str = format!("src_token: {:?}", src_token);
+
+    // dst token (if exists)
+    let dst_token_str = if let Some(dst_token) = dst_token {
+        format!("dst_token: {:?}", dst_token)
+    } else {
+        "dst_token: None".to_string()
+    };
+
+    format!("src_token: {}\ndst_token: {}", src_token_str, dst_token_str)
 }
 
 fn compare_tokens(
@@ -130,8 +142,8 @@ mod tests {
 
     #[test]
     fn test_compare_tokens_lack_element() {
-        let src = r"select column_name1, column_name2 as col from table_name";
-        let dst = r"select column_name1, column_name2 as col from table_name";
+        let src = r"select column_name from table_name";
+        let dst = r"select column_name as col from table_name";
 
         let src_tokens = lex(src);
         let dst_tokens = lex(dst);
