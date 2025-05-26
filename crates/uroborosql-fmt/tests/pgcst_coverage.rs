@@ -1,4 +1,5 @@
 mod pgcst_util;
+use itertools::Itertools;
 use pgcst_util::print_diff;
 
 #[derive(Debug)]
@@ -37,7 +38,8 @@ impl Default for TestReportConfig {
     }
 }
 
-fn collect_test_files(dir: &str) -> Vec<String> {
+/// ディレクトリを再帰的に探索して、SQLファイルパスを表す文字列のベクタを返す
+fn collect_sql_files_recursively(dir: &str) -> Vec<String> {
     use std::fs;
     let mut files = Vec::new();
 
@@ -45,7 +47,7 @@ fn collect_test_files(dir: &str) -> Vec<String> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                files.extend(collect_test_files(path.to_str().unwrap()));
+                files.extend(collect_sql_files_recursively(path.to_str().unwrap()));
             } else if path.extension().and_then(|s| s.to_str()) == Some("sql") {
                 if let Some(path_str) = path.to_str() {
                     files.push(path_str.to_string());
@@ -53,6 +55,25 @@ fn collect_test_files(dir: &str) -> Vec<String> {
             }
         }
     }
+    files
+}
+
+// ディレクトリ直下のファイルをベクタで返す
+fn collect_files(dir: &str) -> Vec<String> {
+    use std::fs;
+    let mut files = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                if let Some(path_str) = path.to_str() {
+                    files.push(path_str.to_string());
+                }
+            }
+        }
+    }
+
     files
 }
 
@@ -65,26 +86,40 @@ fn extract_category(file_path: &str) -> String {
         .to_string()
 }
 
-fn try_format_with_new_parser(file_path: &str) -> Result<String, String> {
+fn try_format_with_new_parser(
+    src_file_path: &str,
+    dst_file_path: &str,
+    config_path: Option<&str>,
+) -> Result<String, String> {
     use std::fs;
     use uroborosql_fmt::error::UroboroSQLFmtError;
 
     // 2way-sqlのケースは明示的にスキップ
-    if file_path.contains("2way_sql") {
-        return Err("2way-sql is intentionally skipped".to_string());
-    }
+    // if src_file_path.contains("2way_sql") {
+    //     return Err("2way-sql is intentionally skipped".to_string());
+    // }
 
-    let input = fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
-    let dst_path = file_path.replace("/src", "/dst");
+    let input =
+        fs::read_to_string(src_file_path).map_err(|e| format!("Failed to read file: {}", e))?;
     let expected =
-        fs::read_to_string(&dst_path).map_err(|e| format!("Failed to read dst file: {}", e))?;
+        fs::read_to_string(dst_file_path).map_err(|e| format!("Failed to read dst file: {}", e))?;
 
-    match uroborosql_fmt::format_sql(&input, None, Some("test_normal_cases/use_new_parser.json")) {
+    // let setting =
+    //     "{\"use_pg_parser\": true, \"use_parser_error_recovery\": true, \"debug\": false}";
+
+    let setting = r#"
+    {
+        "use_pg_parser": true,
+        "use_parser_error_recovery": true,
+        "debug": false
+    }"#;
+
+    match uroborosql_fmt::format_sql(&input, Some(setting), config_path) {
         Ok(formatted) => {
             if formatted.trim() == expected.trim() {
                 Ok(formatted)
             } else {
-                println!("\n❌ {}", file_path);
+                println!("\n❌ {}", src_file_path);
                 println!("Diff(expected vs. got):");
                 print_diff(expected.trim(), formatted.trim());
                 Err("Formatting result does not match".to_string())
@@ -244,6 +279,7 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
         }
 
         // エラータイプごとに出力
+        print_error_group("Parse Errors", &parse_errors, config.show_error_annotations);
         print_error_group(
             "Syntax Errors",
             &syntax_errors,
@@ -294,23 +330,78 @@ fn print_error_group(
 fn run_test_suite() -> Vec<TestResult> {
     let mut results = Vec::new();
 
-    for test_file in collect_test_files("testfiles/src") {
-        let result = match try_format_with_new_parser(&test_file) {
+    for src_file_path in collect_sql_files_recursively("testfiles/src") {
+        let dst_file_path = src_file_path.replace("/src", "/dst");
+        let result = match try_format_with_new_parser(&src_file_path, &dst_file_path, None) {
             Ok(_) => TestResult {
-                file_path: test_file,
+                file_path: src_file_path,
                 status: TestStatus::Supported,
             },
             Err(e) if e.contains("intentionally skipped") => TestResult {
-                file_path: test_file,
+                file_path: src_file_path,
                 status: TestStatus::Skipped,
             },
             Err(e) => TestResult {
-                file_path: test_file,
+                file_path: src_file_path,
                 status: TestStatus::Unsupported(e),
             },
         };
         results.push(result);
     }
+
+    results
+}
+
+fn run_config_test_suite() -> Vec<TestResult> {
+    let mut results = Vec::new();
+
+    // config_test
+    // src は一種類。 Config の数に対応してディレクトリが存在する
+    let src_files = collect_sql_files_recursively("testfiles/config_test/src");
+    let config_dir = "testfiles/config_test/configs";
+    for config_file_path in collect_files(config_dir).iter().sorted() {
+        let config_file_name = config_file_path
+            .split("/")
+            .last()
+            .expect("Failed to get config name.");
+        let config_name = config_file_name
+            .split(".")
+            .next()
+            .expect("Failed to get config name.");
+
+        let dst_dir = format!("testfiles/config_test/dst_{}", config_name);
+
+        println!("--------------------------------");
+        println!("config: {}", config_name);
+        println!("dst_dir: {}", dst_dir);
+
+        for src_file_path in src_files.iter().sorted() {
+            let filename = src_file_path
+                .split("/")
+                .last()
+                .expect("Failed to get filename.");
+            let dst_file_path = format!("{}/{}", dst_dir, filename);
+
+            let result = match try_format_with_new_parser(
+                src_file_path,
+                &dst_file_path,
+                Some(config_file_path),
+            ) {
+                Ok(_) => TestResult {
+                    file_path: src_file_path.clone(),
+                    status: TestStatus::Supported,
+                },
+                Err(e) => TestResult {
+                    file_path: src_file_path.clone(),
+                    status: TestStatus::Unsupported(e),
+                },
+            };
+            results.push(result);
+        }
+
+        println!();
+    }
+
     results
 }
 
@@ -318,6 +409,7 @@ fn run_test_suite() -> Vec<TestResult> {
 #[ignore = "Development-only test for checking parser coverage. Not part of regular test suite"]
 fn test_with_coverage() {
     let results = run_test_suite();
+    let config_results = run_config_test_suite();
 
     let config = TestReportConfig::default();
 
@@ -325,4 +417,5 @@ fn test_with_coverage() {
     // config.show_error_annotations = true; // アノテーションを表示
 
     print_coverage_report(&results, &config);
+    print_coverage_report(&config_results, &config);
 }
