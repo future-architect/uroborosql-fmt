@@ -292,6 +292,13 @@ impl SeparatedLines {
         false
     }
 
+    /// 最初の要素にセパレータを追加する
+    pub(crate) fn set_first_separator(&mut self, sep: String) {
+        if let Some(first_content) = self.contents.first_mut() {
+            first_content.sep = Some(sep);
+        }
+    }
+
     /// separatorで揃えたものを返す
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         let mut result = String::new();

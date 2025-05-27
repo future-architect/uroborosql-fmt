@@ -4,6 +4,7 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, Visitor},
+    util::convert_keyword_case,
 };
 
 impl Visitor {
@@ -19,8 +20,26 @@ impl Visitor {
         cursor.goto_next_sibling();
         self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
+        let extra_leading_boolean_operator =
+            if cursor.node().kind() == SyntaxKind::AND || cursor.node().kind() == SyntaxKind::OR {
+                let text = convert_keyword_case(cursor.node().text());
+
+                cursor.goto_next_sibling();
+                Some(text)
+            } else {
+                None
+            };
+
         // cursor -> a_expr
-        let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
+        let mut expr = self.visit_a_expr_or_b_expr(cursor, src)?;
+
+        if let Some(sep) = extra_leading_boolean_operator {
+            if let Expr::Boolean(sep_lines) = &mut expr {
+                sep_lines.set_first_separator(sep);
+            } else {
+                unreachable!("where_clause: Found extra boolean operator but expr is not Boolean.");
+            }
+        }
 
         // 結果として得られた式をBodyに変換する
         let body = Body::from(expr);

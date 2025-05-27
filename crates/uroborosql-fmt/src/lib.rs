@@ -13,7 +13,8 @@ mod pg_validate;
 use config::*;
 use error::UroboroSQLFmtError;
 use new_visitor::Visitor as NewVisitor;
-use postgresql_cst_parser::ts_parse as pg_parse;
+use postgresql_cst_parser::tree_sitter::parse as pg_parse;
+use postgresql_cst_parser::tree_sitter::parse_2way as pg_parse_2way;
 use visitor::Visitor;
 
 use tree_sitter::{Language, Node, Tree};
@@ -40,9 +41,22 @@ pub(crate) fn format_sql_with_config(
     src: &str,
     config: Config,
 ) -> Result<String, UroboroSQLFmtError> {
+    if CONFIG.read().unwrap().debug {
+        eprintln!("use_pg_parser = {}", config.use_pg_parser);
+        eprintln!(
+            "use_parser_error_recovery = {}",
+            config.use_parser_error_recovery
+        );
+    }
+
     if config.use_pg_parser {
         // postgresql-cst-parser を使用してパースする
-        let tree = pg_parse(src).expect("pg: Parse error");
+
+        let tree = if config.use_parser_error_recovery {
+            pg_parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{:?}", e)))?
+        } else {
+            pg_parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{:?}", e)))?
+        };
 
         pg_validate_format_result(src)?;
 

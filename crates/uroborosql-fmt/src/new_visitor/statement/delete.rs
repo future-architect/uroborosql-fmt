@@ -113,7 +113,7 @@ impl Visitor {
 
         self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
-        let body = self.visit_from_list(cursor, src)?;
+        let body = self.visit_from_list(cursor, src, None)?;
         clause.set_body(body);
 
         cursor.goto_parent();

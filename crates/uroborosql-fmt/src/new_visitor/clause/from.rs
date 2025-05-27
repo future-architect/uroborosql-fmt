@@ -30,10 +30,20 @@ impl Visitor {
 
         self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
+        // cursor -> Comma?
+        let extra_leading_comma = if cursor.node().kind() == SyntaxKind::Comma {
+            cursor.goto_next_sibling();
+            Some(COMMA.to_string())
+        } else {
+            None
+        };
+
+        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+
         // cursor -> from_list
         pg_ensure_kind!(cursor, SyntaxKind::from_list, src);
 
-        let from_list = self.visit_from_list(cursor, src)?;
+        let from_list = self.visit_from_list(cursor, src, extra_leading_comma)?;
 
         clause.set_body(from_list);
 
@@ -45,10 +55,12 @@ impl Visitor {
     }
 
     /// 呼出し後、cursor は from_list を指している
+    /// 直前にカンマがある場合は extra_leading_comma として渡す
     pub(crate) fn visit_from_list(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
+        extra_leading_comma: Option<String>,
     ) -> Result<Body, UroboroSQLFmtError> {
         // from_list -> table_ref ("," table_ref)*
 
@@ -60,7 +72,7 @@ impl Visitor {
         let mut from_body = SeparatedLines::new();
 
         let table_ref = self.visit_table_ref(cursor, src)?;
-        from_body.add_expr(table_ref, None, vec![]);
+        from_body.add_expr(table_ref, extra_leading_comma, vec![]);
 
         while cursor.goto_next_sibling() {
             // cursor -> "," または table_ref
@@ -87,12 +99,16 @@ impl Visitor {
                         )));
                     };
 
+                    // テーブル参照における置換文字列
                     if comment.loc().is_next_to(&next_sibling.range().into()) {
-                        // テーブル参照における置換文字列
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_from_list(): table_ref node with bind parameters appeared. Table references with bind parameters are not implemented yet.\n{}",
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )));
+                        cursor.goto_next_sibling();
+                        // cursor -> table_ref
+                        pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
+                        let mut table_ref = self.visit_table_ref(cursor, src)?;
+
+                        // 置換文字列をセット
+                        table_ref.set_head_comment(comment);
+                        from_body.add_expr(table_ref, Some(COMMA.to_string()), vec![]);
                     } else {
                         from_body.add_comment_to_child(comment)?;
                     }
