@@ -9,6 +9,7 @@ order by
 /*END*/
 	f.bar2
 ,	f.bar3
+;
 select
 	*
 from
@@ -20,6 +21,7 @@ order by
 /*END*/
 	f.bar2
 ,	f.bar3
+;
 select
 	*
 from
@@ -32,6 +34,7 @@ order by
 	-- comment
 	f.bar2
 ,	f.bar3
+;
 select
 	*
 from
@@ -45,6 +48,7 @@ order by
 	-- some
 	f.bar2
 ,	f.bar3
+;
 select
 	*
 from
@@ -62,3 +66,4 @@ from
 			f.bar2
 		,	f.bar3
 	)
+;
