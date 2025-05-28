@@ -91,11 +91,6 @@ fn try_format_with_new_parser(
     use std::fs;
     use uroborosql_fmt::error::UroboroSQLFmtError;
 
-    // 2way-sqlのケースは明示的にスキップ
-    if src_file_path.to_str().expect("can't convert to str").contains("2way_sql") {
-        return Err("2way-sql is intentionally skipped".to_string());
-    }
-
     let input =
         fs::read_to_string(src_file_path).map_err(|e| format!("Failed to read file: {}", e))?;
     let expected =
