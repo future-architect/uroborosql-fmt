@@ -103,6 +103,15 @@ pub(crate) fn pg_format_two_way_sql(src: &str) -> Result<String, UroboroSQLFmtEr
     // treeの葉の全てのSQLをフォーマット
     let formatted_tree = pg_format_tree(tree)?;
 
+    if CONFIG.read().unwrap().debug {
+        eprintln!("{}", "-".repeat(100));
+
+        for source in formatted_tree.to_vec_string() {
+            eprintln!("{source}");
+            eprintln!("{}", "-".repeat(100));
+        }
+    }
+
     // 各SQLをマージ
     let res = merge_tree(formatted_tree)?;
 
