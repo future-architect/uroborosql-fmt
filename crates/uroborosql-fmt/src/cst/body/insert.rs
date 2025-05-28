@@ -154,6 +154,7 @@ impl DoUpdate {
 }
 
 /// INSERT文におけるconflict_action
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub(crate) enum ConflictAction {
     DoNothing(DoNothing),
