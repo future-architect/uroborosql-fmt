@@ -1,6 +1,7 @@
 mod pgcst_util;
 use itertools::Itertools;
 use pgcst_util::print_diff;
+use std::path::Path;
 
 #[derive(Debug)]
 enum TestStatus {
@@ -39,7 +40,7 @@ impl Default for TestReportConfig {
 }
 
 /// ディレクトリを再帰的に探索して、SQLファイルパスを表す文字列のベクタを返す
-fn collect_sql_files_recursively(dir: &str) -> Vec<String> {
+fn collect_sql_files_recursively(dir: &Path) -> Vec<std::path::PathBuf> {
     use std::fs;
     let mut files = Vec::new();
 
@@ -47,19 +48,17 @@ fn collect_sql_files_recursively(dir: &str) -> Vec<String> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                files.extend(collect_sql_files_recursively(path.to_str().unwrap()));
+                files.extend(collect_sql_files_recursively(&path));
             } else if path.extension().and_then(|s| s.to_str()) == Some("sql") {
-                if let Some(path_str) = path.to_str() {
-                    files.push(path_str.to_string());
-                }
+                files.push(path);
             }
         }
     }
     files
 }
 
-// ディレクトリ直下のファイルをベクタで返す
-fn collect_files(dir: &str) -> Vec<String> {
+/// ディレクトリ直下のファイルをベクタで返す
+fn collect_files(dir: &Path) -> Vec<std::path::PathBuf> {
     use std::fs;
     let mut files = Vec::new();
 
@@ -67,9 +66,7 @@ fn collect_files(dir: &str) -> Vec<String> {
         for entry in entries.flatten() {
             let path = entry.path();
             if !path.is_dir() {
-                if let Some(path_str) = path.to_str() {
-                    files.push(path_str.to_string());
-                }
+                files.push(path);
             }
         }
     }
@@ -77,9 +74,9 @@ fn collect_files(dir: &str) -> Vec<String> {
     files
 }
 
-fn extract_category(file_path: &str) -> String {
-    let path = std::path::Path::new(file_path);
-    path.parent()
+fn extract_category(file_path: &Path) -> String {
+    file_path
+        .parent()
         .and_then(|p| p.file_name())
         .and_then(|name| name.to_str())
         .unwrap_or("unknown")
@@ -87,9 +84,9 @@ fn extract_category(file_path: &str) -> String {
 }
 
 fn try_format_with_new_parser(
-    src_file_path: &str,
-    dst_file_path: &str,
-    config_path: Option<&str>,
+    src_file_path: &Path,
+    dst_file_path: &Path,
+    config_path: Option<&Path>,
 ) -> Result<String, String> {
     use std::fs;
     use uroborosql_fmt::error::UroboroSQLFmtError;
@@ -104,9 +101,6 @@ fn try_format_with_new_parser(
     let expected =
         fs::read_to_string(dst_file_path).map_err(|e| format!("Failed to read dst file: {}", e))?;
 
-    // let setting =
-    //     "{\"use_pg_parser\": true, \"use_parser_error_recovery\": true, \"debug\": false}";
-
     let setting = r#"
     {
         "use_pg_parser": true,
@@ -114,12 +108,16 @@ fn try_format_with_new_parser(
         "debug": false
     }"#;
 
-    match uroborosql_fmt::format_sql(&input, Some(setting), config_path) {
+    match uroborosql_fmt::format_sql(
+        &input,
+        Some(setting),
+        config_path.map(|p| p.to_str().unwrap()),
+    ) {
         Ok(formatted) => {
             if formatted.trim() == expected.trim() {
                 Ok(formatted)
             } else {
-                println!("\n❌ {}", src_file_path);
+                println!("\n❌ {}", src_file_path.to_str().unwrap());
                 println!("Diff(expected vs. got):");
                 print_diff(expected.trim(), formatted.trim());
                 Err("Formatting result does not match".to_string())
@@ -186,7 +184,7 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
         // カテゴリ別の集計
         let mut by_category: HashMap<String, Vec<&TestResult>> = HashMap::new();
         for result in results {
-            let category = extract_category(&result.file_path);
+            let category = extract_category(Path::new(&result.file_path));
             by_category.entry(category).or_default().push(result);
         }
 
@@ -330,19 +328,31 @@ fn print_error_group(
 fn run_test_suite() -> Vec<TestResult> {
     let mut results = Vec::new();
 
-    for src_file_path in collect_sql_files_recursively("testfiles/src") {
-        let dst_file_path = src_file_path.replace("/src", "/dst");
-        let result = match try_format_with_new_parser(&src_file_path, &dst_file_path, None) {
+    for src_file_path_buf in collect_sql_files_recursively(Path::new("testfiles/src")) {
+        // src -> dst に変換する
+        let dst_file_path: std::path::PathBuf = src_file_path_buf
+            .components()
+            .scan(false, |replaced_src, component| {
+                if component.as_os_str() == "src" && !*replaced_src {
+                    *replaced_src = true;
+                    Some(std::path::Component::Normal("dst".as_ref()))
+                } else {
+                    Some(component)
+                }
+            })
+            .collect();
+
+        let result = match try_format_with_new_parser(&src_file_path_buf, &dst_file_path, None) {
             Ok(_) => TestResult {
-                file_path: src_file_path,
+                file_path: src_file_path_buf.to_str().unwrap().to_string(),
                 status: TestStatus::Supported,
             },
             Err(e) if e.contains("intentionally skipped") => TestResult {
-                file_path: src_file_path,
+                file_path: src_file_path_buf.to_str().unwrap().to_string(),
                 status: TestStatus::Skipped,
             },
             Err(e) => TestResult {
-                file_path: src_file_path,
+                file_path: src_file_path_buf.to_str().unwrap().to_string(),
                 status: TestStatus::Unsupported(e),
             },
         };
@@ -357,42 +367,42 @@ fn run_config_test_suite() -> Vec<TestResult> {
 
     // config_test
     // src は一種類。 Config の数に対応してディレクトリが存在する
-    let src_files = collect_sql_files_recursively("testfiles/config_test/src");
-    let config_dir = "testfiles/config_test/configs";
-    for config_file_path in collect_files(config_dir).iter().sorted() {
-        let config_file_name = config_file_path
-            .split("/")
-            .last()
-            .expect("Failed to get config name.");
-        let config_name = config_file_name
-            .split(".")
-            .next()
-            .expect("Failed to get config name.");
+    // `testfiles/confit_test/src/{file_stem}.sql` と `testfiles/config_test/configs/{config_name}.json` を利用した結果が `testfiles/config_test/dst_{config_name}/{file_stem}.sql` に対応する
+    let src_files = collect_sql_files_recursively(Path::new("testfiles/config_test/src"));
+    let config_dir = Path::new("testfiles/config_test/configs");
+    for config_file_path_buf in collect_files(config_dir).iter().sorted() {
+        let config_name = config_file_path_buf
+            .file_stem()
+            .expect("Failed to get config file stem.")
+            .to_str()
+            .expect("Failed to convert config file stem to str.");
 
-        let dst_dir = format!("testfiles/config_test/dst_{}", config_name);
+        let dst_dir =
+            std::path::PathBuf::from(format!("testfiles/config_test/dst_{}", config_name));
 
         println!("--------------------------------");
         println!("config: {}", config_name);
-        println!("dst_dir: {}", dst_dir);
+        println!("dst_dir: {:?}", dst_dir);
 
         for src_file_path in src_files.iter().sorted() {
             let filename = src_file_path
-                .split("/")
-                .last()
-                .expect("Failed to get filename.");
-            let dst_file_path = format!("{}/{}", dst_dir, filename);
+                .file_name()
+                .expect("Failed to get filename.")
+                .to_str()
+                .expect("Failed to convert filename to str.");
+            let dst_file_path = dst_dir.join(filename);
 
             let result = match try_format_with_new_parser(
                 src_file_path,
                 &dst_file_path,
-                Some(config_file_path),
+                Some(config_file_path_buf.as_path()),
             ) {
                 Ok(_) => TestResult {
-                    file_path: src_file_path.clone(),
+                    file_path: src_file_path.to_str().unwrap().to_string(),
                     status: TestStatus::Supported,
                 },
                 Err(e) => TestResult {
-                    file_path: src_file_path.clone(),
+                    file_path: src_file_path.to_str().unwrap().to_string(),
                     status: TestStatus::Unsupported(e),
                 },
             };
