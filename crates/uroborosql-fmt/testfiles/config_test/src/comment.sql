@@ -29,6 +29,7 @@ SELECT a,
     END -- comment
     as COL
 FROM test -- test table
+;
 select
 123456789 -- hoge
  col

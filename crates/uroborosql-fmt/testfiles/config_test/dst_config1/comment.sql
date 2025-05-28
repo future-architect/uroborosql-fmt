@@ -37,6 +37,7 @@ SELECT
 			AS	COL
 FROM
 	TEST	-- test table
+;
 SELECT
 	123456789	-- hoge
 	AS	COL
