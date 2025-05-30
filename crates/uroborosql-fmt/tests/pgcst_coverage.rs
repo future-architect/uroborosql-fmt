@@ -318,14 +318,13 @@ fn run_test_suite() -> Vec<TestResult> {
 
     for src_file_path_buf in collect_sql_files_recursively(Path::new("testfiles/src")) {
         // src -> dst に変換する
-        let dst_file_path: std::path::PathBuf = src_file_path_buf
+        let dst_file_path: PathBuf = src_file_path_buf
             .components()
-            .scan(false, |replaced_src, component| {
-                if component.as_os_str() == "src" && !*replaced_src {
-                    *replaced_src = true;
-                    Some(std::path::Component::Normal("dst".as_ref()))
+            .map(|component| {
+                if component.as_os_str() == "src" {
+                    std::path::Component::Normal("dst".as_ref())
                 } else {
-                    Some(component)
+                    component
                 }
             })
             .collect();
