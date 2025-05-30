@@ -1,7 +1,8 @@
 mod pgcst_util;
 use itertools::Itertools;
 use pgcst_util::print_diff;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 #[derive(Debug)]
 enum TestStatus {
@@ -40,25 +41,18 @@ impl Default for TestReportConfig {
 }
 
 /// ディレクトリを再帰的に探索して、SQLファイルパスを表す文字列のベクタを返す
-fn collect_sql_files_recursively(dir: &Path) -> Vec<std::path::PathBuf> {
-    use std::fs;
-    let mut files = Vec::new();
-
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                files.extend(collect_sql_files_recursively(&path));
-            } else if path.extension().and_then(|s| s.to_str()) == Some("sql") {
-                files.push(path);
-            }
-        }
-    }
-    files
+fn collect_sql_files_recursively(dir: &Path) -> Vec<PathBuf> {
+    WalkDir::new(dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("sql"))
+        .map(|e| e.path().to_path_buf())
+        .collect()
 }
 
 /// ディレクトリ直下のファイルをベクタで返す
-fn collect_files(dir: &Path) -> Vec<std::path::PathBuf> {
+fn collect_files(dir: &Path) -> Vec<PathBuf> {
     use std::fs;
     let mut files = Vec::new();
 
