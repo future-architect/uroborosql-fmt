@@ -38,6 +38,13 @@ impl Visitor {
         clause.pg_extend_kw(cursor.node());
         cursor.goto_next_sibling();
 
+        // cursor -> comment?
+        if cursor.node().is_comment() {
+            let comment = Comment::pg_new(cursor.node());
+            clause.add_comment_to_child(comment)?;
+            cursor.goto_next_sibling();
+        }
+
         // cursor -> Comma?
         let extra_leading_comma = if cursor.node().kind() == SyntaxKind::Comma {
             cursor.goto_next_sibling();
@@ -47,6 +54,7 @@ impl Visitor {
         };
 
         // cursor -> sortby_list
+        pg_ensure_kind!(cursor, SyntaxKind::sortby_list, src);
         let sortby_list = self.visit_sortby_list(cursor, src, extra_leading_comma)?;
         clause.set_body(Body::SepLines(sortby_list));
 
