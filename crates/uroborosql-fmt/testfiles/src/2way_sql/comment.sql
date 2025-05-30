@@ -5,6 +5,7 @@ order by
 ,/*END*/
     f.bar2
 ,   f.bar3
+;
 
 select * from foo f
 order by /*IF true*/
@@ -12,6 +13,7 @@ order by /*IF true*/
 /*END*/
     f.bar2
 , f.bar3
+;
 
 select 
     *
@@ -23,7 +25,7 @@ order by
 ,/*END*/ -- comment
     f.bar2
 ,   f.bar3
-
+;
 
 select 
     *
@@ -35,6 +37,7 @@ order by
 ,/*prev*//*END*//*next*/ -- some
     f.bar2
 ,   f.bar3
+;
 
 select *
 from (
@@ -49,3 +52,4 @@ from (
         f.bar2
     ,   f.bar3
 )
+;

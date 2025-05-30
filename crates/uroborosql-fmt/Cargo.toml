@@ -28,3 +28,4 @@ postgresql-cst-parser = { git = "https://github.com/future-architect/postgresql-
 [dev-dependencies]
 console = "0.15.10"
 similar = { version = "2.7.0", features = ["unicode", "inline"] }
+walkdir = "2.5.0"
