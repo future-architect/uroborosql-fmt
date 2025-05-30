@@ -127,7 +127,7 @@ fn swap_comma_and_trailing_comment(tokens: &mut [Token]) {
 
     // 0..(tokens.len() - 1) でループするため i+1 は常に有効なインデックスである
     for i in 0..(tokens.len() - 1) {
-        if tokens[i].value == "," && tokens[i + 1].value.starts_with("--") {
+        if tokens[i].value == "," && tokens[i + 1].kind == TokenKind::SQL_COMMENT {
             tokens.swap(i, i + 1);
         }
     }
