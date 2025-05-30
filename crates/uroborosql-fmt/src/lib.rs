@@ -69,7 +69,7 @@ pub(crate) fn format_sql_with_config(
             // パースできるSQLはそのままフォーマットする
             Ok(tree) => {
                 if CONFIG.read().unwrap().debug {
-                    eprintln!("mode: normal ");
+                    eprintln!("mode: normal");
                 }
 
                 pg_validate_format_result(src, false)?;
