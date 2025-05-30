@@ -13,7 +13,7 @@ enum TestStatus {
 
 #[derive(Debug)]
 struct TestResult {
-    file_path: String,
+    file_path: PathBuf,
     status: TestStatus,
 }
 
@@ -172,7 +172,7 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
         // カテゴリ別の集計
         let mut by_category: HashMap<String, Vec<&TestResult>> = HashMap::new();
         for result in results {
-            let category = extract_category(Path::new(&result.file_path));
+            let category = extract_category(&result.file_path);
             by_category.entry(category).or_default().push(result);
         }
 
@@ -212,7 +212,7 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
         println!("\nSupported Cases:");
         for result in results {
             if matches!(result.status, TestStatus::Supported) {
-                println!("✅ {}", result.file_path);
+                println!("✅ {}", result.file_path.display());
             }
         }
     }
@@ -221,7 +221,7 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
         println!("\nSkipped Cases:");
         for result in results {
             if matches!(result.status, TestStatus::Skipped) {
-                println!("  {} - intentionally skipped", result.file_path);
+                println!("  {} - intentionally skipped", result.file_path.display());
             }
         }
     }
@@ -297,13 +297,13 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
 
 fn print_error_group(
     group_name: &str,
-    errors: &[(String, String, Option<&str>)],
+    errors: &[(PathBuf, String, Option<&str>)],
     show_annotations: bool,
 ) {
     if !errors.is_empty() {
         println!("\n{}:", group_name);
         for (file, message, annotation) in errors {
-            println!("  {} - {}", file, message);
+            println!("  {} - {}", file.display(), message);
             if show_annotations {
                 if let Some(ann) = annotation {
                     println!("{}", ann);
@@ -331,15 +331,15 @@ fn run_test_suite() -> Vec<TestResult> {
 
         let result = match try_format_with_new_parser(&src_file_path_buf, &dst_file_path, None) {
             Ok(_) => TestResult {
-                file_path: src_file_path_buf.to_str().unwrap().to_string(),
+                file_path: src_file_path_buf.clone(),
                 status: TestStatus::Supported,
             },
             Err(e) if e.contains("intentionally skipped") => TestResult {
-                file_path: src_file_path_buf.to_str().unwrap().to_string(),
+                file_path: src_file_path_buf.clone(),
                 status: TestStatus::Skipped,
             },
             Err(e) => TestResult {
-                file_path: src_file_path_buf.to_str().unwrap().to_string(),
+                file_path: src_file_path_buf.clone(),
                 status: TestStatus::Unsupported(e),
             },
         };
@@ -364,8 +364,7 @@ fn run_config_test_suite() -> Vec<TestResult> {
             .to_str()
             .expect("Failed to convert config file stem to str.");
 
-        let dst_dir =
-            std::path::PathBuf::from(format!("testfiles/config_test/dst_{}", config_name));
+        let dst_dir = PathBuf::from(format!("testfiles/config_test/dst_{}", config_name));
 
         println!("config: {}", config_name);
 
@@ -383,11 +382,11 @@ fn run_config_test_suite() -> Vec<TestResult> {
                 Some(config_file_path_buf.as_path()),
             ) {
                 Ok(_) => TestResult {
-                    file_path: dst_file_path.to_str().unwrap().to_string(),
+                    file_path: dst_file_path.clone(),
                     status: TestStatus::Supported,
                 },
                 Err(e) => TestResult {
-                    file_path: dst_file_path.to_str().unwrap().to_string(),
+                    file_path: dst_file_path.clone(),
                     status: TestStatus::Unsupported(e),
                 },
             };
