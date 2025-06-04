@@ -41,9 +41,14 @@ impl Visitor {
             keyword_text,
             args,
             FunctionCallKind::BuiltIn,
-            cursor.node().parent().expect("handle_expr_list_function: cursor.node().parent() is None").range().into(),
+            cursor
+                .node()
+                .parent()
+                .expect("handle_expr_list_function: cursor.node().parent() is None")
+                .range()
+                .into(),
         );
 
         Ok(function)
     }
-} 
+}
