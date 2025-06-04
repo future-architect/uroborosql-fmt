@@ -114,7 +114,7 @@ impl Visitor {
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_func_call_args(): unexpected node kind\n{}",
+                    "handle_function_call_args(): unexpected node kind\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
@@ -138,7 +138,7 @@ impl Visitor {
                 // 通常の引数と可変長引数の組み合わせのパターン
                 // e.g. concat_ws('a', 'b', VARIADIC array['c', 'd'])
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_func_call_args(): VARIADIC after func_arg_list is not implemented\n{}",
+                    "handle_function_call_args(): VARIADIC after func_arg_list is not implemented\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
