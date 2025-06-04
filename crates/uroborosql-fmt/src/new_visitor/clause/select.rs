@@ -69,7 +69,8 @@ impl Visitor {
                     cursor.goto_next_sibling();
 
                     // 括弧と expr_list を ColumnList に格納
-                    let mut column_list = self.visit_parenthesized_expr_list(cursor, src)?;
+                    let mut column_list =
+                        ColumnList::from(self.handle_parenthesized_expr_list(cursor, src)?);
                     // 改行によるフォーマットを強制
                     column_list.set_force_multi_line(true);
 
