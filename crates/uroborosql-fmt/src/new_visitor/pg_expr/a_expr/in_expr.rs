@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{AlignedExpr, Comment, Expr},
+    cst::{AlignedExpr, ColumnList, Comment, Expr},
     error::UroboroSQLFmtError,
     new_visitor::pg_ensure_kind,
     util::convert_keyword_case,
@@ -95,7 +95,8 @@ impl Visitor {
             SyntaxKind::LParen => {
                 // Expr::ColumnList を返す
                 // '(' expr_list ')' を ColumnList に変換する
-                let column_list = self.visit_parenthesized_expr_list(cursor, src)?;
+                let column_list =
+                    ColumnList::from(self.handle_parenthesized_expr_list(cursor, src)?);
 
                 Expr::ColumnList(Box::new(column_list))
             }
