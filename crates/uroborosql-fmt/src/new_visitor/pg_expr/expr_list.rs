@@ -38,9 +38,16 @@ impl From<ParenthesizedExprList> for ColumnList {
 }
 
 /// FunctionCallArgsへの変換
-impl From<ParenthesizedExprList> for FunctionCallArgs {
-    fn from(paren_list: ParenthesizedExprList) -> Self {
-        FunctionCallArgs::new(paren_list.exprs, paren_list.location)
+impl TryFrom<ParenthesizedExprList> for FunctionCallArgs {
+    type Error = UroboroSQLFmtError;
+
+    fn try_from(paren_list: ParenthesizedExprList) -> Result<Self, Self::Error> {
+        if !paren_list.start_comments.is_empty() {
+            return Err(UroboroSQLFmtError::Unimplemented(
+                "Comments immediately after opening parenthesis in function arguments are not supported".to_string()
+            ));
+        }
+        Ok(FunctionCallArgs::new(paren_list.exprs, paren_list.location))
     }
 }
 

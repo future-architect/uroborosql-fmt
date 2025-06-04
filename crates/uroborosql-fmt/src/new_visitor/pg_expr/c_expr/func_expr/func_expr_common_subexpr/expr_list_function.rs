@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{FunctionCall, FunctionCallArgs, FunctionCallKind},
+    cst::{FunctionCall, FunctionCallKind},
     error::UroboroSQLFmtError,
     new_visitor::{pg_ensure_kind, Visitor},
     util::convert_keyword_case,
@@ -31,7 +31,7 @@ impl Visitor {
 
         let function = FunctionCall::new(
             keyword_text,
-            FunctionCallArgs::from(parenthesized_expr_list),
+            parenthesized_expr_list.try_into()?,
             FunctionCallKind::BuiltIn,
             cursor
                 .node()
