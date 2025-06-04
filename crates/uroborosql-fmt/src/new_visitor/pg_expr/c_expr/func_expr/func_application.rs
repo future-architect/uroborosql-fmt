@@ -3,6 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{
         AlignedExpr, AsteriskExpr, Comment, Expr, FunctionCall, FunctionCallArgs, FunctionCallKind,
+        Location,
     },
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
@@ -100,6 +101,16 @@ impl Visitor {
             _ => {}
         }
 
+        // cursor -> bind param?
+        let first_arg_bind_param = if cursor.node().kind() == SyntaxKind::C_COMMENT {
+            let comment = Comment::pg_new(cursor.node());
+            cursor.goto_next_sibling();
+
+            Some(comment)
+        } else {
+            None
+        };
+
         // cursor -> Star | func_arg_list
         match cursor.node().kind() {
             SyntaxKind::Star => {
@@ -110,7 +121,12 @@ impl Visitor {
                 function_call_args.add_expr(Expr::Asterisk(Box::new(asterisk_expr)).to_aligned());
             }
             SyntaxKind::func_arg_list => {
-                self.visit_func_arg_list(cursor, src, &mut function_call_args)?;
+                self.visit_func_arg_list(
+                    cursor,
+                    src,
+                    &mut function_call_args,
+                    first_arg_bind_param,
+                )?;
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
@@ -151,18 +167,33 @@ impl Visitor {
 
     /// 呼出時、cursor は func_arg_list を指している
     /// 引数に FunctionCallArgs を受け取り、ミュータブルに追加する
+    /// first_arg_bind_param には、最初の引数のバインドパラメータになりうるコメントを渡す
     fn visit_func_arg_list(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
         function_call_args: &mut FunctionCallArgs,
+        first_arg_bind_param: Option<Comment>,
     ) -> Result<(), UroboroSQLFmtError> {
         // func_arg_list
         // - func_arg_expr (',' func_arg_expr)*
 
         cursor.goto_first_child();
 
-        let first_arg = self.visit_func_arg_expr(cursor, src)?;
+        let mut first_arg = self.visit_func_arg_expr(cursor, src)?;
+
+        // 直前のコメントが最初の引数のバインドパラメータであれば追加する
+        if let Some(bind_param) = first_arg_bind_param {
+            if bind_param.is_block_comment() && bind_param.loc().is_next_to(&first_arg.loc()) {
+                first_arg.set_head_comment(bind_param);
+            } else {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_func_arg_list(): Comments are not supported at this position\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        }
+
         function_call_args.add_expr(first_arg);
 
         while cursor.goto_next_sibling() {
@@ -172,7 +203,28 @@ impl Visitor {
                     let arg = self.visit_func_arg_expr(cursor, src)?;
                     function_call_args.add_expr(arg);
                 }
-                SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
+                SyntaxKind::C_COMMENT => {
+                    // バインドパラメータを想定する
+                    let comment = Comment::pg_new(cursor.node());
+
+                    cursor.goto_next_sibling();
+                    pg_ensure_kind!(cursor, SyntaxKind::func_arg_expr, src);
+                    if comment
+                        .loc()
+                        .is_next_to(&Location::from(cursor.node().range()))
+                    {
+                        let mut arg = self.visit_func_arg_expr(cursor, src)?;
+                        arg.set_head_comment(comment);
+
+                        function_call_args.add_expr(arg);
+                    } else {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_func_arg_list(): Comments are not supported at this position\n{}",
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                }
+                SyntaxKind::SQL_COMMENT => {
                     let comment = Comment::pg_new(cursor.node());
                     function_call_args.set_trailing_comment(comment)?;
                 }
