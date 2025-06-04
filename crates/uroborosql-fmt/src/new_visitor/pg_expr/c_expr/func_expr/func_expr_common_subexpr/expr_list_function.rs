@@ -25,21 +25,13 @@ impl Visitor {
 
         cursor.goto_next_sibling();
         // cursor -> '('
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
 
-        cursor.goto_next_sibling();
-        // cursor -> expr_list
-        let expr_list = self.visit_expr_list(cursor, src)?;
-
-        cursor.goto_next_sibling();
-        // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
-
-        let args = FunctionCallArgs::new(expr_list, cursor.node().range().into());
+        // handle_parenthesized_expr_listを使用して括弧付き式リストを処理
+        let parenthesized_expr_list = self.handle_parenthesized_expr_list(cursor, src)?;
 
         let function = FunctionCall::new(
             keyword_text,
-            args,
+            FunctionCallArgs::from(parenthesized_expr_list),
             FunctionCallKind::BuiltIn,
             cursor
                 .node()
@@ -48,6 +40,8 @@ impl Visitor {
                 .range()
                 .into(),
         );
+
+        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         Ok(function)
     }

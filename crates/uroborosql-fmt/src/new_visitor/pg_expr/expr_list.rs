@@ -2,7 +2,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use postgresql_cst_parser::tree_sitter::TreeCursor;
 
 use crate::{
-    cst::{AlignedExpr, ColumnList, Comment, Location},
+    cst::{AlignedExpr, ColumnList, Comment, FunctionCallArgs, Location},
     error::UroboroSQLFmtError,
     new_visitor::pg_ensure_kind,
 };
@@ -34,6 +34,13 @@ impl From<ParenthesizedExprList> for ColumnList {
             paren_list.location,
             paren_list.start_comments,
         )
+    }
+}
+
+/// FunctionCallArgsへの変換
+impl From<ParenthesizedExprList> for FunctionCallArgs {
+    fn from(paren_list: ParenthesizedExprList) -> Self {
+        FunctionCallArgs::new(paren_list.exprs, paren_list.location)
     }
 }
 
@@ -131,6 +138,8 @@ impl Visitor {
     }
 
     /// 括弧で囲まれた式リストを処理するメソッド
+    /// 呼出し時、cursor は '(' を指している
+    /// 呼出し後、cursor は ')' を指している
     pub(crate) fn handle_parenthesized_expr_list(
         &mut self,
         cursor: &mut TreeCursor,
