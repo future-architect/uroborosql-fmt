@@ -68,9 +68,10 @@ impl Visitor {
 
         let func = match cursor.node().kind() {
             SyntaxKind::CAST => self.handle_cast_function(cursor, src)?,
-            kind @ (SyntaxKind::COALESCE | SyntaxKind::GREATEST | SyntaxKind::LEAST) => {
-                self.handle_expr_list_function(cursor, src, kind)?
-            }
+            kind @ (SyntaxKind::COALESCE
+            | SyntaxKind::GREATEST
+            | SyntaxKind::LEAST
+            | SyntaxKind::XMLCONCAT) => self.handle_expr_list_function(cursor, src, kind)?,
             _ => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_func_expr_common_subexpr(): function `{}` is not implemented\n{}",
