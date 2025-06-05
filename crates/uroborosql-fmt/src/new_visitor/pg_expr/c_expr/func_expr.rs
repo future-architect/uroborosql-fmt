@@ -6,7 +6,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{AlignedExpr, Body, Clause, Expr, SeparatedLines},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
     util::convert_keyword_case,
 };
 
@@ -257,8 +257,13 @@ impl Visitor {
 
         // expr_list (Vec<AlignedExpr>) を Body::SepLines に変換し Clause に追加する
         let mut separated_lines = SeparatedLines::new();
-        for expr in exprs {
-            separated_lines.add_expr(expr, None, vec![]);
+        if let Some((first, rest)) = exprs.split_first() {
+            // 最初の要素だけカンマ無し
+            separated_lines.add_expr(first.clone(), None, vec![]);
+
+            for expr in rest {
+                separated_lines.add_expr(expr.clone(), Some(COMMA.to_string()), vec![]);
+            }
         }
         clause.set_body(Body::SepLines(separated_lines));
 
