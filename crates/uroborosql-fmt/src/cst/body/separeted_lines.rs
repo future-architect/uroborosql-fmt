@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use crate::{
-    cst::{add_indent, AlignInfo, AlignedExpr, Comment, Location},
+    cst::{add_indent, AlignInfo, AlignedExpr, Comment, Expr, Location},
     error::UroboroSQLFmtError,
     util::{add_single_space, add_space_by_range, tab_size, to_tab_num},
 };
@@ -13,6 +13,26 @@ pub(crate) struct SepLinesContent {
     preceding_comments: Vec<Comment>,
     expr: AlignedExpr,
     following_comments: Vec<Comment>,
+}
+
+impl From<Expr> for SeparatedLines {
+    /// 一つのExprからなるBodyを生成し返す
+    fn from(expr: Expr) -> SeparatedLines {
+        if expr.is_body() {
+            // BooleanはSeparatedLinesで表現されるので、そのSeparatedLinesをBodyとして返す
+            if let Expr::Boolean(boolean) = expr {
+                *boolean
+            } else {
+                // 現状Expr::Boolean()以外にBodyとなりうるExprは存在しないので到達しない
+                unreachable!()
+            }
+        } else {
+            // Bodyでない場合、SeparatedLinesにして返す
+            let mut sep_lines = SeparatedLines::new();
+            sep_lines.add_expr(expr.to_aligned(), None, vec![]);
+            sep_lines
+        }
+    }
 }
 
 impl SepLinesContent {
