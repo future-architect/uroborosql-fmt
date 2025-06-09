@@ -1,5 +1,5 @@
 use crate::{
-    cst::{AlignedExpr, Comment, Location},
+    cst::{AlignedExpr, Comment, Location, SeparatedLines},
     error::UroboroSQLFmtError,
     util::add_indent,
 };
@@ -10,14 +10,14 @@ use super::Expr;
 pub struct Qualifier {
     keyword: String,
     comments_after_keyword: Vec<Comment>,
-    condition: AlignedExpr,
+    condition: SeparatedLines,
 }
 
 impl Qualifier {
     pub(crate) fn new(
         keyword: String,
         comments_after_keyword: Vec<Comment>,
-        condition: AlignedExpr,
+        condition: SeparatedLines,
     ) -> Self {
         Self {
             keyword,
@@ -30,19 +30,13 @@ impl Qualifier {
         &mut self,
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
-        if !comment.is_block_comment() && comment.loc().is_same_line(&self.condition.loc()) {
-            self.condition.set_trailing_comment(comment)?;
-        } else {
-            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                "add_comment_to_child(): this comment is not trailing comment\nexpr: {self:?}comment: {comment:?}\n"
-            )));
-        }
+        self.condition.add_comment_to_child(comment)?;
 
         Ok(())
     }
 
-    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
-        self.condition.last_line_len_from_left(acc)
+    pub(crate) fn last_line_len_from_left(&self, _acc: usize) -> usize {
+        unimplemented!()
     }
 
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
@@ -57,8 +51,9 @@ impl Qualifier {
             result.push('\n');
         }
 
-        add_indent(&mut result, depth);
         result.push_str(&self.condition.render(depth)?);
+        // SepLines を利用しているため末尾の改行を削除する
+        assert_eq!(result.pop(), Some('\n'));
 
         Ok(result)
     }
@@ -123,9 +118,13 @@ impl JoinedTable {
         // qualifier があればその下に追加する
         if let Some(qualifier) = &mut self.qualifier {
             qualifier.add_comment_to_child(comment)?;
+        } else if !comment.is_block_comment() && comment.loc().is_same_line(&self.right.loc()) {
+            //  右辺の末尾コメントであれば右辺に追加する
+            self.right.set_trailing_comment(comment)?;
         } else {
             self.end_comments.push(comment);
         }
+
         Ok(())
     }
 

@@ -146,10 +146,18 @@ impl AlignedExpr {
     ) -> Result<(), UroboroSQLFmtError> {
         if comment.is_block_comment() {
             // 複数行コメント
-            Err(UroboroSQLFmtError::IllegalOperation(format!(
+            return Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_trailing_comment:{comment:?} is not trailing comment!"
-            )))
+            )));
+        }
+
+        // 左辺が Expr::JoinedTableの場合、JoinedTable に trailing_comment を追加する
+        if let Expr::JoinedTable(ref mut joined_table) = &mut self.lhs {
+            assert!(self.rhs.is_none()); // 右辺は存在しない
+
+            joined_table.add_comment_to_child(comment)?;
         } else {
+            // それ以外では右辺の trailing_comment としてセットする
             let Comment { text, loc } = comment;
             // 1. 初めのハイフンを削除
             // 2. 空白、スペースなどを削除
@@ -158,8 +166,8 @@ impl AlignedExpr {
 
             self.trailing_comment = Some(trailing_comment);
             self.loc.append(loc);
-            Ok(())
         }
+        Ok(())
     }
 
     /// 左辺のtrailing_commentをセットする

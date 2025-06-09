@@ -585,8 +585,7 @@ impl Visitor {
                 // cursor -> a_expr
                 let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
-                let qualifier =
-                    Qualifier::new(on_keyword, comments_after_keyword, expr.to_aligned());
+                let qualifier = Qualifier::new(on_keyword, comments_after_keyword, expr.into());
 
                 cursor.goto_parent();
                 pg_ensure_kind!(cursor, SyntaxKind::join_qual, src);
