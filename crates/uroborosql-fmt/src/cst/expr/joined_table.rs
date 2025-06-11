@@ -35,8 +35,8 @@ impl Qualifier {
         Ok(())
     }
 
-    pub(crate) fn last_line_len_from_left(&self, _acc: usize) -> usize {
-        unimplemented!()
+    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
+        self.condition.last_line_len_from_left(acc)
     }
 
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {

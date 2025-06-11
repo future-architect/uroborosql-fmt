@@ -73,6 +73,10 @@ impl SepLinesContent {
         self.sep.as_ref().map_or(0, |sep| sep.len())
     }
 
+    fn last_line_len_from_left(&self, acc: usize) -> usize {
+        self.expr.last_line_len_from_left(acc)
+    }
+
     fn render(
         &self,
         align_info: &AlignInfo,
@@ -164,6 +168,13 @@ impl SeparatedLines {
 
     pub(crate) fn loc(&self) -> Option<Location> {
         self.loc.clone()
+    }
+
+    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
+        self.contents
+            .last()
+            .map(|c| c.last_line_len_from_left(acc))
+            .unwrap_or(acc)
     }
 
     /// 式をセパレータ(AND/OR)とともに追加する
