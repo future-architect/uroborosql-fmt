@@ -429,14 +429,20 @@ impl Visitor {
                     cursor.goto_next_sibling();
                 }
 
-                let joined_table = self.visit_joined_table(cursor, src)?;
+                let mut joined_table = self.visit_joined_table(cursor, src)?;
 
                 cursor.goto_next_sibling();
 
                 let mut end_comments = vec![];
                 while cursor.node().is_comment() {
                     let comment = Comment::pg_new(cursor.node());
-                    end_comments.push(comment);
+                    if !comment.is_block_comment()
+                        && comment.loc().is_same_line(&joined_table.loc())
+                    {
+                        joined_table.add_comment_to_child(comment)?;
+                    } else {
+                        end_comments.push(comment);
+                    }
                     cursor.goto_next_sibling();
                 }
 
