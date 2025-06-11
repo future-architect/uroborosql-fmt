@@ -1,13 +1,13 @@
 pub(crate) mod insert;
 pub(crate) mod select;
-pub(crate) mod separeted_lines;
+pub(crate) mod separated_lines;
 pub(crate) mod single_line;
 pub(crate) mod with;
 
 use crate::error::UroboroSQLFmtError;
 
 use self::{
-    insert::InsertBody, select::SelectBody, separeted_lines::SeparatedLines,
+    insert::InsertBody, select::SelectBody, separated_lines::SeparatedLines,
     single_line::SingleLine, with::WithBody,
 };
 

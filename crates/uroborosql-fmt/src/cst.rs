@@ -22,7 +22,7 @@ pub(crate) use subquery::*;
 
 // body
 pub(crate) use insert::*;
-pub(crate) use separeted_lines::*;
+pub(crate) use separated_lines::*;
 pub(crate) use single_line::*;
 pub(crate) use with::*;
 
