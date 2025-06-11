@@ -15,25 +15,6 @@ pub(crate) struct SepLinesContent {
     following_comments: Vec<Comment>,
 }
 
-impl From<Expr> for SeparatedLines {
-    fn from(expr: Expr) -> SeparatedLines {
-        if expr.is_body() {
-            // BooleanはSeparatedLinesで表現されるので、そのSeparatedLinesを返す
-            if let Expr::Boolean(boolean) = expr {
-                *boolean
-            } else {
-                // 現状Expr::Boolean()以外にBodyとなりうるExprは存在しないので到達しない
-                unreachable!()
-            }
-        } else {
-            // Bodyでない場合、SeparatedLinesにして返す
-            let mut sep_lines = SeparatedLines::new();
-            sep_lines.add_expr(expr.to_aligned(), None, vec![]);
-            sep_lines
-        }
-    }
-}
-
 impl SepLinesContent {
     fn new(
         sep: Option<String>,
@@ -156,6 +137,25 @@ impl SepLinesContent {
 pub(crate) struct SeparatedLines {
     contents: Vec<SepLinesContent>,
     loc: Option<Location>,
+}
+
+impl From<Expr> for SeparatedLines {
+    fn from(expr: Expr) -> SeparatedLines {
+        if expr.is_body() {
+            // BooleanはSeparatedLinesで表現されるので、そのSeparatedLinesを返す
+            if let Expr::Boolean(boolean) = expr {
+                *boolean
+            } else {
+                // 現状Expr::Boolean()以外にBodyとなりうるExprは存在しないので到達しない
+                unreachable!()
+            }
+        } else {
+            // Bodyでない場合、SeparatedLinesにして返す
+            let mut sep_lines = SeparatedLines::new();
+            sep_lines.add_expr(expr.to_aligned(), None, vec![]);
+            sep_lines
+        }
+    }
 }
 
 impl SeparatedLines {
