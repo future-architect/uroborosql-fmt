@@ -52,7 +52,7 @@ impl Qualifier {
         }
 
         result.push_str(&self.condition.render(depth)?);
-        // SepLines を利用しているため末尾の改行を削除する
+        // SeparatedLines を利用しているため末尾の改行を削除する
         assert_eq!(result.pop(), Some('\n'));
 
         Ok(result)
