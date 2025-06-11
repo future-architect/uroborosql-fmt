@@ -16,10 +16,9 @@ pub(crate) struct SepLinesContent {
 }
 
 impl From<Expr> for SeparatedLines {
-    /// 一つのExprからなるBodyを生成し返す
     fn from(expr: Expr) -> SeparatedLines {
         if expr.is_body() {
-            // BooleanはSeparatedLinesで表現されるので、そのSeparatedLinesをBodyとして返す
+            // BooleanはSeparatedLinesで表現されるので、そのSeparatedLinesを返す
             if let Expr::Boolean(boolean) = expr {
                 *boolean
             } else {
