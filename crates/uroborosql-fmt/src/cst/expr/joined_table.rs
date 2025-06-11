@@ -64,6 +64,7 @@ impl Qualifier {
 pub(crate) struct JoinedTable {
     loc: Location,
     left: TableRef,
+    comments_after_left: Vec<Comment>,
     join_keyword: String,
     comments_after_join_keyword: Vec<Comment>,
     right: TableRef,
@@ -77,6 +78,7 @@ impl JoinedTable {
     pub(crate) fn new(
         loc: Location,
         left: TableRef,
+        comments_after_left: Vec<Comment>,
         join_keyword: String,
         comments_after_join_keyword: Vec<Comment>,
         right: TableRef,
@@ -84,6 +86,7 @@ impl JoinedTable {
         Self {
             loc,
             left,
+            comments_after_left,
             join_keyword,
             comments_after_join_keyword,
             right,
@@ -139,6 +142,11 @@ impl JoinedTable {
         // left
         result.push_str(&self.left.render(depth)?);
         result.push('\n');
+
+        for comment in &self.comments_after_left {
+            result.push_str(&comment.render(depth - 1)?);
+            result.push('\n');
+        }
 
         // join keyword
         add_indent(&mut result, depth - 1);

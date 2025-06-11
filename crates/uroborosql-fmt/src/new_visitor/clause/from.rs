@@ -499,16 +499,14 @@ impl Visitor {
                 cursor.goto_next_sibling();
 
                 // cursor -> comment?
-                if cursor.node().is_comment() {
+                let mut comments_after_left = vec![];
+                while cursor.node().is_comment() {
                     let comment = Comment::pg_new(cursor.node());
                     // 行末コメントであれば左辺に追加
                     if !comment.is_block_comment() && comment.loc().is_same_line(&left.loc()) {
                         left.set_trailing_comment(comment)?;
                     } else {
-                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                            "visit_joined_table(): unexpected comment\n{}",
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )));
+                        comments_after_left.push(comment);
                     }
                     cursor.goto_next_sibling();
                 }
@@ -554,15 +552,23 @@ impl Visitor {
 
                 cursor.goto_next_sibling();
 
-                if cursor.node().is_comment() {
+                while cursor.node().is_comment() {
                     let comment = Comment::pg_new(cursor.node());
-                    right.set_trailing_comment(comment)?;
+                    if !comment.is_block_comment() && comment.loc().is_same_line(&right.loc()) {
+                        right.set_trailing_comment(comment)?;
+                    } else {
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_joined_table(): unexpected comment\n{}",
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
                     cursor.goto_next_sibling();
                 }
 
                 let mut joined_table = JoinedTable::new(
                     loc,
                     left,
+                    comments_after_left,
                     keywords.join(" "),
                     comments_after_join_keyword,
                     right,
