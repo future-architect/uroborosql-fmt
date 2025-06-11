@@ -54,7 +54,7 @@ impl SepLinesContent {
         self.sep.as_ref().map_or(0, |sep| sep.len())
     }
 
-    fn last_line_len_from_left(&self, acc: usize) -> usize {
+    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
         self.expr.last_line_len_from_left(acc)
     }
 
@@ -168,13 +168,6 @@ impl SeparatedLines {
 
     pub(crate) fn loc(&self) -> Option<Location> {
         self.loc.clone()
-    }
-
-    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
-        self.contents
-            .last()
-            .map(|c| c.last_line_len_from_left(acc))
-            .unwrap_or(acc)
     }
 
     /// 式をセパレータ(AND/OR)とともに追加する
@@ -327,6 +320,10 @@ impl SeparatedLines {
         if let Some(first_content) = self.contents.first_mut() {
             first_content.sep = Some(sep);
         }
+    }
+
+    pub(crate) fn last_content(&self) -> Option<&SepLinesContent> {
+        self.contents.last()
     }
 
     /// separatorで揃えたものを返す

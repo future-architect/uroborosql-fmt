@@ -36,7 +36,8 @@ impl Qualifier {
     }
 
     pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
-        self.condition.last_line_len_from_left(acc)
+        let last_content = self.condition.last_content().unwrap();
+        last_content.last_line_len_from_left(acc)
     }
 
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
