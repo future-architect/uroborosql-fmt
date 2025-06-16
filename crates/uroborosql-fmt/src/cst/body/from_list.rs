@@ -35,10 +35,8 @@ impl TableRef {
     pub(crate) fn set_head_comment(&mut self, comment: Comment) {
         match self {
             TableRef::SimpleTable(aligned_expr) => aligned_expr.set_head_comment(comment),
-            TableRef::JoinedTable(_joined_table) => {
-                // JoinedTableの場合は先頭コメントの設定は未実装
-                // 必要に応じて実装する
-                dbg!("set_head_comment: JoinedTable");
+            TableRef::JoinedTable(joined_table) => {
+                joined_table.set_head_comment(comment);
             }
         }
     }
@@ -66,6 +64,7 @@ pub(crate) struct FromList {
     contents: Vec<TableRef>,
     loc: Option<Location>,
     extra_leading_comma: Option<String>,
+    following_comments: Vec<Comment>,
 }
 
 impl FromList {
@@ -74,12 +73,18 @@ impl FromList {
             contents: vec![],
             loc: None,
             extra_leading_comma: None,
+            following_comments: vec![],
         }
     }
 
     /// 位置情報を返す
     pub(crate) fn loc(&self) -> Option<Location> {
         self.loc.clone()
+    }
+
+    /// 空かどうかを返す
+    pub(crate) fn is_empty(&self) -> bool {
+        self.contents.is_empty()
     }
 
     /// 先頭のコンマを設定する
@@ -123,6 +128,11 @@ impl FromList {
             result.push_str(&table_ref.render(depth)?);
         }
 
+        for comment in &self.following_comments {
+            result.push('\n');
+            result.push_str(&comment.render(depth - 1)?);
+        }
+
         result.push('\n');
 
         Ok(result)
@@ -137,10 +147,8 @@ impl FromList {
 
         if let Some(last_table_ref) = self.contents.last_mut() {
             if comment.is_block_comment() || !last_table_ref.loc().is_same_line(&comment_loc) {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    "add_comment_to_child(): Non-trailing comments are not implemented yet"
-                        .to_string(),
-                ));
+                // following_comments として追加
+                self.add_following_comments(comment);
             } else {
                 // 末尾の行の行末コメントである場合
                 // 最後のTableRefにtrailing commentとして追加
@@ -157,19 +165,19 @@ impl FromList {
         Ok(())
     }
 
-    /// 空かどうかを返す
-    pub(crate) fn is_empty(&self) -> bool {
-        self.contents.is_empty()
+    /// 先頭要素にバインドパラメータをセットすることを試みる
+    pub(crate) fn try_set_head_comment(&mut self, comment: Comment) -> bool {
+        if let Some(table_ref) = self.contents.first_mut() {
+            if comment.loc().is_next_to(&table_ref.loc()) {
+                table_ref.set_head_comment(comment);
+                return true;
+            }
+        }
+
+        false
     }
 
-    /// 先頭要素にバインドパラメータをセットすることを試みる
-    pub(crate) fn try_set_head_comment(&mut self, _comment: Comment) -> bool {
-        if let Some(table_ref) = self.contents.first_mut() {
-            table_ref.set_head_comment(_comment);
-
-            true
-        } else {
-            false
-        }
+    fn add_following_comments(&mut self, comment: Comment) {
+        self.following_comments.push(comment);
     }
 }

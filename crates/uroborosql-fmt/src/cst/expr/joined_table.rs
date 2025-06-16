@@ -112,6 +112,10 @@ impl JoinedTable {
         }
     }
 
+    pub(crate) fn set_head_comment(&mut self, comment: Comment) {
+        self.left.set_head_comment(comment);
+    }
+
     pub(crate) fn add_comment_to_child(
         &mut self,
         comment: Comment,
