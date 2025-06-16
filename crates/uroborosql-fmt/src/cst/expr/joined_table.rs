@@ -1,5 +1,5 @@
 use crate::{
-    cst::{AlignedExpr, Comment, Location, SeparatedLines},
+    cst::{from_list::TableRef, Comment, Location, SeparatedLines},
     error::UroboroSQLFmtError,
     util::add_indent,
 };
@@ -63,10 +63,10 @@ impl Qualifier {
 #[derive(Debug, Clone)]
 pub(crate) struct JoinedTable {
     loc: Location,
-    left: AlignedExpr,
+    left: TableRef,
     join_keyword: String,
     comments_after_join_keyword: Vec<Comment>,
-    right: AlignedExpr,
+    right: TableRef,
 
     // ON, USING
     qualifier: Option<Qualifier>,
@@ -76,10 +76,10 @@ pub(crate) struct JoinedTable {
 impl JoinedTable {
     pub(crate) fn new(
         loc: Location,
-        left: AlignedExpr,
+        left: TableRef,
         join_keyword: String,
         comments_after_join_keyword: Vec<Comment>,
-        right: AlignedExpr,
+        right: TableRef,
     ) -> Self {
         Self {
             loc,
