@@ -151,23 +151,14 @@ impl AlignedExpr {
             )));
         }
 
-        // 左辺が JoinedTable のとき、子に SeparatedLines を持つ可能性がある
-        // その場合、子の SeparatedLines および AlignedExpr によって行末コメントの縦ぞろえをするために add_comment_to_child で処理する
-        if let Expr::JoinedTable(joined_table) = &mut self.lhs {
-            assert!(&self.rhs.is_none());
+        let Comment { text, loc } = comment;
+        // 1. 初めのハイフンを削除
+        // 2. 空白、スペースなどを削除
+        // 3. "--" を付与
+        let trailing_comment = format!("-- {}", text.trim_start_matches('-').trim_start());
 
-            self.loc.append(comment.loc());
-            joined_table.add_comment_to_child(comment)?;
-        } else {
-            let Comment { text, loc } = comment;
-            // 1. 初めのハイフンを削除
-            // 2. 空白、スペースなどを削除
-            // 3. "--" を付与
-            let trailing_comment = format!("-- {}", text.trim_start_matches('-').trim_start());
-
-            self.trailing_comment = Some(trailing_comment);
-            self.loc.append(loc);
-        }
+        self.trailing_comment = Some(trailing_comment);
+        self.loc.append(loc);
 
         Ok(())
     }
