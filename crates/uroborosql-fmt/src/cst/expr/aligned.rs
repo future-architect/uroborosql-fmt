@@ -146,20 +146,21 @@ impl AlignedExpr {
     ) -> Result<(), UroboroSQLFmtError> {
         if comment.is_block_comment() {
             // 複数行コメント
-            Err(UroboroSQLFmtError::IllegalOperation(format!(
+            return Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_trailing_comment:{comment:?} is not trailing comment!"
-            )))
-        } else {
-            let Comment { text, loc } = comment;
-            // 1. 初めのハイフンを削除
-            // 2. 空白、スペースなどを削除
-            // 3. "--" を付与
-            let trailing_comment = format!("-- {}", text.trim_start_matches('-').trim_start());
-
-            self.trailing_comment = Some(trailing_comment);
-            self.loc.append(loc);
-            Ok(())
+            )));
         }
+
+        let Comment { text, loc } = comment;
+        // 1. 初めのハイフンを削除
+        // 2. 空白、スペースなどを削除
+        // 3. "--" を付与
+        let trailing_comment = format!("-- {}", text.trim_start_matches('-').trim_start());
+
+        self.trailing_comment = Some(trailing_comment);
+        self.loc.append(loc);
+
+        Ok(())
     }
 
     /// 左辺のtrailing_commentをセットする

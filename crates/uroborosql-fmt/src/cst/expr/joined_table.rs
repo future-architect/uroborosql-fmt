@@ -1,5 +1,5 @@
 use crate::{
-    cst::{AlignedExpr, Comment, Location},
+    cst::{from_list::TableRef, Comment, Location, SeparatedLines},
     error::UroboroSQLFmtError,
     util::add_indent,
 };
@@ -10,14 +10,14 @@ use super::Expr;
 pub struct Qualifier {
     keyword: String,
     comments_after_keyword: Vec<Comment>,
-    condition: AlignedExpr,
+    condition: SeparatedLines,
 }
 
 impl Qualifier {
     pub(crate) fn new(
         keyword: String,
         comments_after_keyword: Vec<Comment>,
-        condition: AlignedExpr,
+        condition: SeparatedLines,
     ) -> Self {
         Self {
             keyword,
@@ -30,19 +30,14 @@ impl Qualifier {
         &mut self,
         comment: Comment,
     ) -> Result<(), UroboroSQLFmtError> {
-        if !comment.is_block_comment() && comment.loc().is_same_line(&self.condition.loc()) {
-            self.condition.set_trailing_comment(comment)?;
-        } else {
-            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                "add_comment_to_child(): this comment is not trailing comment\nexpr: {self:?}comment: {comment:?}\n"
-            )));
-        }
+        self.condition.add_comment_to_child(comment)?;
 
         Ok(())
     }
 
     pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
-        self.condition.last_line_len_from_left(acc)
+        let last_content = self.condition.last_content().unwrap();
+        last_content.last_line_len_from_left(acc)
     }
 
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
@@ -57,8 +52,9 @@ impl Qualifier {
             result.push('\n');
         }
 
-        add_indent(&mut result, depth);
         result.push_str(&self.condition.render(depth)?);
+        // SeparatedLines を利用しているため末尾の改行を削除する
+        assert_eq!(result.pop(), Some('\n'));
 
         Ok(result)
     }
@@ -67,10 +63,10 @@ impl Qualifier {
 #[derive(Debug, Clone)]
 pub(crate) struct JoinedTable {
     loc: Location,
-    left: AlignedExpr,
+    left: TableRef,
     join_keyword: String,
     comments_after_join_keyword: Vec<Comment>,
-    right: AlignedExpr,
+    right: TableRef,
 
     // ON, USING
     qualifier: Option<Qualifier>,
@@ -80,10 +76,10 @@ pub(crate) struct JoinedTable {
 impl JoinedTable {
     pub(crate) fn new(
         loc: Location,
-        left: AlignedExpr,
+        left: TableRef,
         join_keyword: String,
         comments_after_join_keyword: Vec<Comment>,
-        right: AlignedExpr,
+        right: TableRef,
     ) -> Self {
         Self {
             loc,
@@ -116,6 +112,10 @@ impl JoinedTable {
         }
     }
 
+    pub(crate) fn set_head_comment(&mut self, comment: Comment) {
+        self.left.set_head_comment(comment);
+    }
+
     pub(crate) fn add_comment_to_child(
         &mut self,
         comment: Comment,
@@ -123,9 +123,13 @@ impl JoinedTable {
         // qualifier があればその下に追加する
         if let Some(qualifier) = &mut self.qualifier {
             qualifier.add_comment_to_child(comment)?;
+        } else if !comment.is_block_comment() && comment.loc().is_same_line(&self.right.loc()) {
+            //  右辺の末尾コメントであれば右辺に追加する
+            self.right.set_trailing_comment(comment)?;
         } else {
             self.end_comments.push(comment);
         }
+
         Ok(())
     }
 

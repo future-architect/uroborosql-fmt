@@ -2,6 +2,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 
 use crate::{
     cst::{
+        from_list::{FromList, TableRef},
         joined_table::{JoinedTable, Qualifier},
         *,
     },
@@ -69,10 +70,11 @@ impl Visitor {
         cursor.goto_first_child();
         pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
-        let mut from_body = SeparatedLines::new();
+        let mut from_body = FromList::new();
+        from_body.set_extra_leading_comma(extra_leading_comma);
 
         let table_ref = self.visit_table_ref(cursor, src)?;
-        from_body.add_expr(table_ref, extra_leading_comma, vec![]);
+        from_body.add_table_ref(table_ref);
 
         while cursor.goto_next_sibling() {
             // cursor -> "," または table_ref
@@ -80,7 +82,7 @@ impl Visitor {
                 SyntaxKind::Comma => {}
                 SyntaxKind::table_ref => {
                     let table_ref = self.visit_table_ref(cursor, src)?;
-                    from_body.add_expr(table_ref, Some(COMMA.to_string()), vec![]);
+                    from_body.add_table_ref(table_ref);
                 }
                 SyntaxKind::SQL_COMMENT => {
                     let comment = Comment::pg_new(cursor.node());
@@ -108,7 +110,7 @@ impl Visitor {
 
                         // 置換文字列をセット
                         table_ref.set_head_comment(comment);
-                        from_body.add_expr(table_ref, Some(COMMA.to_string()), vec![]);
+                        from_body.add_table_ref(table_ref);
                     } else {
                         from_body.add_comment_to_child(comment)?;
                     }
@@ -127,16 +129,15 @@ impl Visitor {
         cursor.goto_parent();
         pg_ensure_kind!(cursor, SyntaxKind::from_list, src);
 
-        Ok(Body::SepLines(from_body))
+        Ok(Body::FromList(from_body))
     }
 
-    /// postgresql-cst-parser の table_ref を Body::SeparatedLines に変換する
     /// 呼出し後、cursor は table_ref を指している
     fn visit_table_ref(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
-    ) -> Result<AlignedExpr, UroboroSQLFmtError> {
+    ) -> Result<TableRef, UroboroSQLFmtError> {
         // table_ref
         // - relation_expr opt_alias_clause [tablesample_clause]
         // - select_with_parens opt_alias_clause
@@ -154,13 +155,31 @@ impl Visitor {
 
         match cursor.node().kind() {
             SyntaxKind::relation_expr => {
-                // テーブル参照
-                // relation_expr [opt_alias_clause] [tablesample_clause]
+                // 通常のテーブル参照
+                // relation_expr opt_alias_clause [tablesample_clause]
 
                 let table_name = self.visit_relation_expr(cursor, src)?;
                 let mut table_ref = table_name.to_aligned();
 
                 cursor.goto_next_sibling();
+
+                // cursor -> comment?
+                // エイリアスの直前にコメントが来る場合
+                if cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+
+                    // 行末以外のコメント（次行以降のコメント）は未定義
+                    // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
+                    if !comment.is_block_comment() && comment.loc().is_same_line(&table_ref.loc()) {
+                        table_ref.set_lhs_trailing_comment(comment)?;
+                    } else {
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_table_ref(): unexpected comment\n{}",
+                            pg_error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                    cursor.goto_next_sibling();
+                }
 
                 // cursor -> opt_alias_clause?
                 if cursor.node().kind() == SyntaxKind::opt_alias_clause {
@@ -200,7 +219,7 @@ impl Visitor {
                 // cursor -> table_ref
                 pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
-                Ok(table_ref)
+                Ok(TableRef::SimpleTable(table_ref))
             }
             SyntaxKind::select_with_parens => {
                 // サブクエリ
@@ -257,7 +276,7 @@ impl Visitor {
                 // cursor -> table_ref
                 pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
-                Ok(table_ref)
+                Ok(TableRef::SimpleTable(table_ref))
             }
             SyntaxKind::joined_table => {
                 // テーブル結合
@@ -266,7 +285,14 @@ impl Visitor {
                 cursor.goto_parent();
                 pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
-                Ok(joined_table.to_aligned())
+                // joined_tableがExpr::JoinedTableの場合はTableRef::JoinedTableに、
+                // それ以外（括弧付きなど）はTableRef::SimpleTableに変換
+                match joined_table {
+                    Expr::JoinedTable(joined_table_box) => {
+                        Ok(TableRef::JoinedTable(joined_table_box))
+                    }
+                    other => Ok(TableRef::SimpleTable(other.to_aligned())),
+                }
             }
             SyntaxKind::LParen => {
                 // 括弧付き結合
@@ -311,7 +337,7 @@ impl Visitor {
                 cursor.goto_parent();
                 pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
-                Ok(aligned)
+                Ok(TableRef::SimpleTable(aligned))
             }
             SyntaxKind::func_table => {
                 // テーブル関数呼び出し
@@ -429,14 +455,20 @@ impl Visitor {
                     cursor.goto_next_sibling();
                 }
 
-                let joined_table = self.visit_joined_table(cursor, src)?;
+                let mut joined_table = self.visit_joined_table(cursor, src)?;
 
                 cursor.goto_next_sibling();
 
                 let mut end_comments = vec![];
                 while cursor.node().is_comment() {
                     let comment = Comment::pg_new(cursor.node());
-                    end_comments.push(comment);
+                    if !comment.is_block_comment()
+                        && comment.loc().is_same_line(&joined_table.loc())
+                    {
+                        joined_table.add_comment_to_child(comment)?;
+                    } else {
+                        end_comments.push(comment);
+                    }
                     cursor.goto_next_sibling();
                 }
 
@@ -585,8 +617,7 @@ impl Visitor {
                 // cursor -> a_expr
                 let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
-                let qualifier =
-                    Qualifier::new(on_keyword, comments_after_keyword, expr.to_aligned());
+                let qualifier = Qualifier::new(on_keyword, comments_after_keyword, expr.into());
 
                 cursor.goto_parent();
                 pg_ensure_kind!(cursor, SyntaxKind::join_qual, src);

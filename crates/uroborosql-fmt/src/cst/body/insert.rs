@@ -7,7 +7,7 @@ use crate::{
     util::{add_single_space, add_space_by_range, tab_size},
 };
 
-use super::separeted_lines::SeparatedLines;
+use super::separated_lines::SeparatedLines;
 
 /// INSERT文のconflict_targetにおいてindexカラムを指定した場合
 #[derive(Debug, Clone)]

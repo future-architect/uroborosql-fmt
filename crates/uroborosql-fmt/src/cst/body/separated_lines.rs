@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use crate::{
-    cst::{add_indent, AlignInfo, AlignedExpr, Comment, Location},
+    cst::{add_indent, AlignInfo, AlignedExpr, Comment, Expr, Location},
     error::UroboroSQLFmtError,
     util::{add_single_space, add_space_by_range, tab_size, to_tab_num},
 };
@@ -52,6 +52,10 @@ impl SepLinesContent {
 
     fn sep_len(&self) -> usize {
         self.sep.as_ref().map_or(0, |sep| sep.len())
+    }
+
+    pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
+        self.expr.last_line_len_from_left(acc)
     }
 
     fn render(
@@ -133,6 +137,25 @@ impl SepLinesContent {
 pub(crate) struct SeparatedLines {
     contents: Vec<SepLinesContent>,
     loc: Option<Location>,
+}
+
+impl From<Expr> for SeparatedLines {
+    fn from(expr: Expr) -> SeparatedLines {
+        if expr.is_body() {
+            // BooleanはSeparatedLinesで表現されるので、そのSeparatedLinesを返す
+            if let Expr::Boolean(boolean) = expr {
+                *boolean
+            } else {
+                // 現状Expr::Boolean()以外にBodyとなりうるExprは存在しないので到達しない
+                unreachable!()
+            }
+        } else {
+            // Bodyでない場合、SeparatedLinesにして返す
+            let mut sep_lines = SeparatedLines::new();
+            sep_lines.add_expr(expr.to_aligned(), None, vec![]);
+            sep_lines
+        }
+    }
 }
 
 impl SeparatedLines {
@@ -297,6 +320,10 @@ impl SeparatedLines {
         if let Some(first_content) = self.contents.first_mut() {
             first_content.sep = Some(sep);
         }
+    }
+
+    pub(crate) fn last_content(&self) -> Option<&SepLinesContent> {
+        self.contents.last()
     }
 
     /// separatorで揃えたものを返す
