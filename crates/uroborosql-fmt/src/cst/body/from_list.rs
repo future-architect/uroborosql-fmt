@@ -1,4 +1,6 @@
-use crate::cst::{add_indent, joined_table::JoinedTable, AlignedExpr, Comment, Location};
+use crate::cst::{
+    add_indent, joined_table::JoinedTable, AlignInfo, AlignedExpr, Comment, Location,
+};
 use crate::error::UroboroSQLFmtError;
 use crate::new_visitor::COMMA;
 use crate::util::single_space;
@@ -45,10 +47,39 @@ impl TableRef {
         }
     }
 
+    /// 縦揃え可能なAlignedExprを取得する
+    pub(crate) fn get_alignable_expr(&self) -> Option<&AlignedExpr> {
+        match self {
+            TableRef::SimpleTable(aligned_expr) => Some(aligned_expr),
+            TableRef::JoinedTable(_) => None, // JoinedTableは縦揃え対象外
+        }
+    }
+
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
         match self {
             TableRef::SimpleTable(aligned_expr) => aligned_expr.render(depth),
             TableRef::JoinedTable(joined_table) => joined_table.render(depth),
+        }
+    }
+
+    /// 縦揃え情報を考慮してrenderする
+    pub(crate) fn render_with_align(
+        &self,
+        depth: usize,
+        align_info: Option<&AlignInfo>,
+    ) -> Result<String, UroboroSQLFmtError> {
+        match self {
+            TableRef::SimpleTable(aligned_expr) => {
+                if let Some(align_info) = align_info {
+                    aligned_expr.render_align(depth, align_info)
+                } else {
+                    aligned_expr.render(depth)
+                }
+            }
+            TableRef::JoinedTable(joined_table) => {
+                // JoinedTableは縦揃え対象外なので通常のrender
+                joined_table.render(depth)
+            }
         }
     }
 }
@@ -132,6 +163,19 @@ impl FromList {
     }
 
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        // 縦揃え可能な要素からAlignInfoを作成
+        let alignable_exprs: Vec<&AlignedExpr> = self
+            .contents
+            .iter()
+            .filter_map(|table_ref| table_ref.get_alignable_expr())
+            .collect();
+
+        let align_info = if !alignable_exprs.is_empty() {
+            Some(AlignInfo::from(alignable_exprs))
+        } else {
+            None
+        };
+
         let mut result = String::new();
 
         let Some((first, rest)) = self.contents.split_first() else {
@@ -140,20 +184,24 @@ impl FromList {
             ));
         };
 
+        // 先頭要素の前にカンマがある場合
         if let Some(ref comma) = self.extra_leading_comma {
             result.push_str(comma);
         }
 
+        // 先頭要素の render
         add_indent(&mut result, depth);
-        result.push_str(&first.render(depth)?);
+        result.push_str(&first.render_with_align(depth, align_info.as_ref())?);
 
+        // 残りの要素を render
         for table_ref in rest {
             result.push('\n');
+
             add_indent(&mut result, depth - 1);
             result.push_str(COMMA);
             result.push(single_space());
 
-            result.push_str(&table_ref.render(depth)?);
+            result.push_str(&table_ref.render_with_align(depth, align_info.as_ref())?);
         }
 
         for comment in &self.following_comments {
