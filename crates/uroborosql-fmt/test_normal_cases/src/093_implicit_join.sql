@@ -20,13 +20,3 @@ table1
     ,inner_table2 -- inner_table2_comment
 ) t7
 ;
-select /* _SQL_ID_ */
-	*
-from
-	t1
-inner join
-	t2
-on
-	t1.num	=	t2.numnumnum	-- test
-and	t1.num	=	t2.num	-- trailing
-;
