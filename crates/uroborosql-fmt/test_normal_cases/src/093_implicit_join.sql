@@ -1,4 +1,4 @@
--- from_list: implicit outer join alignment
+-- from_list: implicit join alignment
 select *
 from -- comment after keyword 1
 -- comment after keyword 2
