@@ -1,5 +1,6 @@
 mod expr_as_typename_function;
 mod expr_list_function;
+mod nullif_function;
 mod only_keyword_function;
 mod optional_iconst_function;
 
@@ -152,7 +153,8 @@ impl Visitor {
             }
             SyntaxKind::NULLIF => {
                 // nullif '(' a_expr ',' a_expr ')'
-                unimplemented!()
+                let func_call = self.handle_nullif_function(cursor, src)?;
+                Expr::FunctionCall(Box::new(func_call))
             }
             _ => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
