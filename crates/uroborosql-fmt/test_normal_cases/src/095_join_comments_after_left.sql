@@ -1,6 +1,7 @@
 select * from t1 -- t1 trailing
 -- t1
-inner join t2 on t1.num = t2.num;
+inner join t2 -- t2 trailing
+on t1.num = t2.num;
 
 select a from (
     select * from t1 

@@ -4,7 +4,7 @@ from
 	t1	-- t1 trailing
 -- t1
 inner join
-	t2
+	t2	-- t2 trailing
 on
 	t1.num	=	t2.num
 ;
