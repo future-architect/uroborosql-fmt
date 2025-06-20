@@ -1,6 +1,7 @@
 mod expr_as_typename_function;
 mod expr_list_function;
 mod only_keyword_function;
+mod optional_iconst_function;
 
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
@@ -131,11 +132,11 @@ impl Visitor {
             }
 
             // only keyword or keyword '(' Iconst ')'
-            SyntaxKind::CURRENT_TIME
+            kind @ (SyntaxKind::CURRENT_TIME
             | SyntaxKind::CURRENT_TIMESTAMP
             | SyntaxKind::LOCALTIME
-            | SyntaxKind::LOCALTIMESTAMP => {
-                unimplemented!()
+            | SyntaxKind::LOCALTIMESTAMP) => {
+                self.handle_optional_iconst_function(cursor, src, kind)?
             }
 
             SyntaxKind::TRIM => {
