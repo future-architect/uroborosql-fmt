@@ -22,6 +22,8 @@ impl Visitor {
         let mut clause = pg_create_clause!(cursor, SyntaxKind::WHERE);
         cursor.goto_next_sibling();
 
+        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+
         match cursor.node().kind() {
             SyntaxKind::a_expr => {
                 let a_expr = self.visit_a_expr_or_b_expr(cursor, src)?;
