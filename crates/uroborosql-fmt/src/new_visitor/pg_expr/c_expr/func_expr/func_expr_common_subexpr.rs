@@ -3,6 +3,7 @@ mod expr_list_function;
 mod nullif_function;
 mod only_keyword_function;
 mod optional_iconst_function;
+mod trim_function;
 
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
@@ -145,7 +146,8 @@ impl Visitor {
                 // TRIM '(' BOTH trim_list ')'
                 // TRIM '(' LEADING trim_list ')'
                 // TRIM '(' TRAILING trim_list ')'
-                unimplemented!()
+                let func_call = self.handle_trim_function(cursor, src)?;
+                Expr::FunctionCall(Box::new(func_call))
             }
             SyntaxKind::SUBSTRING => {
                 // SUBSTRING '(' substr_list ')'
