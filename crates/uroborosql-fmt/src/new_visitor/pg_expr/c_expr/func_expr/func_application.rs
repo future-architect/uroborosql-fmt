@@ -168,7 +168,7 @@ impl Visitor {
     /// 呼出時、cursor は func_arg_list を指している
     /// 引数に FunctionCallArgs を受け取り、ミュータブルに追加する
     /// first_arg_bind_param には、最初の引数のバインドパラメータになりうるコメントを渡す
-    fn visit_func_arg_list(
+    pub(crate) fn visit_func_arg_list(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
