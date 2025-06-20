@@ -42,13 +42,18 @@ impl Visitor {
         // - json_aggregate_func filter_clause over_clause
 
         cursor.goto_first_child();
-        // cursor -> func_application | func_expr_common_subexpr | json_aggregate_func
 
+        // cursor -> func_expr_common_subexpr
+        if cursor.node().kind() == SyntaxKind::func_expr_common_subexpr {
+            let expr = self.visit_func_expr_common_subexpr(cursor, src)?;
+            cursor.goto_parent();
+            pg_ensure_kind!(cursor, SyntaxKind::func_expr, src);
+            return Ok(expr);
+        }
+
+        // cursor -> func_application | json_aggregate_func
         let mut func = match cursor.node().kind() {
             SyntaxKind::func_application => self.visit_func_application(cursor, src)?,
-            SyntaxKind::func_expr_common_subexpr => {
-                self.visit_func_expr_common_subexpr(cursor, src)?
-            }
             SyntaxKind::json_aggregate_func => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_func_expr(): json_aggregate_func is not implemented\n{}",
