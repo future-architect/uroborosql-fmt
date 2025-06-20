@@ -1,4 +1,4 @@
-mod cast;
+mod expr_as_typename_function;
 mod expr_list_function;
 
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
@@ -67,7 +67,11 @@ impl Visitor {
         cursor.goto_first_child();
 
         let func = match cursor.node().kind() {
-            SyntaxKind::CAST => self.handle_cast_function(cursor, src)?,
+            // keyword '(' a_expr AS Typename ')'
+            SyntaxKind::CAST => {
+                // TREAT function has the same structure as CAST, but it is not supported for now
+                self.handle_expr_as_typename_function(cursor, src, SyntaxKind::CAST)?
+            }
             kind @ (SyntaxKind::COALESCE
             | SyntaxKind::GREATEST
             | SyntaxKind::LEAST

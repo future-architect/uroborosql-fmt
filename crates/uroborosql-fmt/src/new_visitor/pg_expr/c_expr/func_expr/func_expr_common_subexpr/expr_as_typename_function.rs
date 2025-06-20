@@ -11,18 +11,21 @@ use crate::{
 use super::Visitor;
 
 impl Visitor {
-    /// 呼出時、cursor は CAST キーワード を指している
+    /// keyword '(' a_expr AS typename ')' という構造の関数をフォーマットする
+    /// 呼出時、cursor はキーワード（CAST or TREAT）を指している
     /// 呼出後、cursor は 最後の要素の RParen を指している
-    pub(crate) fn handle_cast_function(
+    pub(crate) fn handle_expr_as_typename_function(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
+        keyword_kind: SyntaxKind,
     ) -> Result<FunctionCall, UroboroSQLFmtError> {
         // CAST '(' a_expr AS typename ')'
+        // TREAT '(' a_expr AS typename ')'
 
-        // cursor -> CAST
-        pg_ensure_kind!(cursor, SyntaxKind::CAST, src);
-        let cast_keyword = convert_keyword_case(cursor.node().text());
+        // cursor -> keyword (CAST or TREAT)
+        pg_ensure_kind!(cursor, expr: keyword_kind, src);
+        let keyword = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
         // cursor -> '('
@@ -56,10 +59,15 @@ impl Visitor {
         let args = FunctionCallArgs::new(vec![aligned], cursor.node().range().into());
 
         let function = FunctionCall::new(
-            cast_keyword,
+            keyword,
             args,
             FunctionCallKind::BuiltIn,
-            cursor.node().range().into(),
+            cursor
+                .node()
+                .parent()
+                .expect("handle_expr_as_typename_function: cursor.node().parent() is None")
+                .range()
+                .into(),
         );
 
         Ok(function)
