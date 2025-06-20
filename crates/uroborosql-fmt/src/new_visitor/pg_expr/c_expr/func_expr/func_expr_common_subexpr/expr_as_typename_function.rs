@@ -1,9 +1,10 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{AlignedExpr, Expr, PrimaryExpr, PrimaryExprKind},
+    cst::{AlignedExpr, Comment, Expr, PrimaryExpr, PrimaryExprKind},
     new_visitor::{
-        pg_ensure_kind, FunctionCall, FunctionCallArgs, FunctionCallKind, UroboroSQLFmtError,
+        pg_ensure_kind, pg_error_annotation_from_cursor, FunctionCall, FunctionCallArgs,
+        FunctionCallKind, UroboroSQLFmtError,
     },
     util::convert_keyword_case,
 };
@@ -32,6 +33,15 @@ impl Visitor {
         pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         cursor.goto_next_sibling();
+        // cursor -> comment?
+        let first_arg_bind_param = if cursor.node().kind() == SyntaxKind::C_COMMENT {
+            let comment = Comment::pg_new(cursor.node());
+            cursor.goto_next_sibling();
+            Some(comment)
+        } else {
+            None
+        };
+
         // cursor -> a_expr
         pg_ensure_kind!(cursor, SyntaxKind::a_expr, src);
         let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
@@ -55,6 +65,17 @@ impl Visitor {
 
         let mut aligned = AlignedExpr::new(expr);
         aligned.add_rhs(Some(as_keyword), Expr::Primary(Box::new(type_name)));
+
+        if let Some(bind_param) = first_arg_bind_param {
+            if bind_param.is_block_comment() && bind_param.loc().is_next_to(&aligned.loc()) {
+                aligned.set_head_comment(bind_param);
+            } else {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "handle_expr_as_typename_function(): Comments are not supported at this position\n{}",
+                    pg_error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        }
 
         let args = FunctionCallArgs::new(vec![aligned], cursor.node().range().into());
 
