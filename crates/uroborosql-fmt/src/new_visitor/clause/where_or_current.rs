@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{Body, Clause, Comment},
+    cst::{Body, Clause},
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
     NewVisitor as Visitor,
@@ -39,10 +39,6 @@ impl Visitor {
                     "visit_where_or_current_clause(): WHERE CURRENT_P OF cursor_name is not implemented.\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
-            }
-            SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
-                let comment = Comment::pg_new(cursor.node());
-                clause.add_comment_to_child(comment)?;
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
