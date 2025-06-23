@@ -10,3 +10,9 @@ from
 where
 	tbl1.value	=	1
 ;
+delete
+from
+/* comment */
+-- comment
+	tbl1
+;

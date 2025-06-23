@@ -57,6 +57,8 @@ impl Visitor {
         let mut from_clause = pg_create_clause!(cursor, SyntaxKind::FROM);
         cursor.goto_next_sibling();
 
+        self.pg_consume_comments_in_clause(cursor, &mut from_clause)?;
+
         // cursor -> relation_expr_opt_alias
         let body = self.visit_relation_expr_opt_alias(cursor, src)?;
 

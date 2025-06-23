@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{FunctionCall, FunctionCallArgs, FunctionCallKind, Location},
+    cst::{Comment, FunctionCall, FunctionCallArgs, FunctionCallKind, Location},
     error::UroboroSQLFmtError,
     new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
     util::convert_keyword_case,
@@ -28,6 +28,15 @@ impl Visitor {
         let mut args = FunctionCallArgs::new(vec![], Location::from(cursor.node().range()));
         cursor.goto_next_sibling();
 
+        // cursor -> C_COMMENT?
+        let comment_before_first_argument = if cursor.node().kind() == SyntaxKind::C_COMMENT {
+            let comment = Comment::pg_new(cursor.node());
+            cursor.goto_next_sibling();
+            Some(comment)
+        } else {
+            None
+        };
+
         // cursor -> substr_list | func_arg_list_opt
         match cursor.node().kind() {
             SyntaxKind::substr_list => {
@@ -43,7 +52,7 @@ impl Visitor {
                 cursor.goto_first_child();
 
                 pg_ensure_kind!(cursor, SyntaxKind::func_arg_list, src);
-                self.visit_func_arg_list(cursor, src, &mut args, None)?;
+                self.visit_func_arg_list(cursor, src, &mut args, comment_before_first_argument)?;
 
                 cursor.goto_parent();
             }

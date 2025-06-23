@@ -38,6 +38,7 @@ impl Visitor {
         let mut clause = pg_create_clause!(cursor, SyntaxKind::RETURNING);
 
         cursor.goto_next_sibling();
+        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> target_list
         pg_ensure_kind!(cursor, SyntaxKind::target_list, src);
