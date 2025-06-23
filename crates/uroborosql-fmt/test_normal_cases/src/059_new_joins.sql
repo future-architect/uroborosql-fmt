@@ -40,20 +40,21 @@ select * from t1, t2, t3;
 -- after join keyword comment
 select
 	*
+from (
+select
+    *
 from
-	(
-		select
-			*
-		from
-			t1
-		cross join
-		-- comment 1
-		-- comment 2
-			t2
-        left join -- left join comment
-            t3 -- table 3
-        on /* on keyword comment */ t2.id = t3.id -- on comment
-	)	a
+    t1
+cross join
+-- comment 1
+-- comment 2
+    t2
+left join -- left join comment
+    t3 -- table 3
+-- after right comment 1
+-- after right comment 2
+on /* on keyword comment */ t2.id = t3.id -- on comment
+)	a
 ;
 
 select * from t1 -- table 1
@@ -71,6 +72,8 @@ from
 inner join -- after keyword
 -- another comment 
     t2 -- after table
+    -- after right comment 1
+-- after right comment 2
 on t1.num = t2.num -- cond
 -- comment 1
 -- comment 2

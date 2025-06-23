@@ -68,10 +68,10 @@ pub(crate) struct JoinedTable {
     join_keyword: String,
     comments_after_join_keyword: Vec<Comment>,
     right: TableRef,
+    comments_after_right: Vec<Comment>,
 
     // ON, USING
     qualifier: Option<Qualifier>,
-    end_comments: Vec<Comment>,
 }
 
 impl JoinedTable {
@@ -90,8 +90,8 @@ impl JoinedTable {
             join_keyword,
             comments_after_join_keyword,
             right,
+            comments_after_right: vec![],
             qualifier: None,
-            end_comments: vec![],
         }
     }
 
@@ -127,10 +127,11 @@ impl JoinedTable {
         if let Some(qualifier) = &mut self.qualifier {
             qualifier.add_comment_to_child(comment)?;
         } else if !comment.is_block_comment() && comment.loc().is_same_line(&self.right.loc()) {
-            //  右辺の末尾コメントであれば右辺に追加する
+            //  qualifier が無く、右辺の末尾コメントであれば右辺に追加する
             self.right.set_trailing_comment(comment)?;
         } else {
-            self.end_comments.push(comment);
+            // 右辺の末尾コメントでもない場合は右辺の後のコメントになる
+            self.comments_after_right.push(comment);
         }
 
         Ok(())
@@ -162,14 +163,14 @@ impl JoinedTable {
         add_indent(&mut result, depth);
         result.push_str(&self.right.render(depth)?);
 
+        for comment in &self.comments_after_right {
+            result.push('\n');
+            result.push_str(&comment.render(depth - 1)?);
+        }
+
         if let Some(qualifier) = &self.qualifier {
             result.push('\n');
             result.push_str(&qualifier.render(depth)?);
-        }
-
-        for comment in &self.end_comments {
-            result.push('\n');
-            result.push_str(&comment.render(depth)?);
         }
 
         Ok(result)

@@ -75,6 +75,8 @@ from
 		left outer join
 		-- left join comment
 			t3	-- table 3
+		-- after right comment 1
+		-- after right comment 2
 		on
 		/* on keyword comment */
 			t2.id	=	t3.id	-- on comment
@@ -104,6 +106,8 @@ inner join
 -- after keyword
 -- another comment 
 	t2	-- after table
+-- after right comment 1
+-- after right comment 2
 on
 	t1.num	=	t2.num	-- cond
 -- comment 1

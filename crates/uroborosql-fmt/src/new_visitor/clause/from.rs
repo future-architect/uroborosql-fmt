@@ -548,22 +548,9 @@ impl Visitor {
                 }
 
                 // cursor -> table_ref
-                let mut right = self.visit_table_ref(cursor, src)?;
+                let right = self.visit_table_ref(cursor, src)?;
 
                 cursor.goto_next_sibling();
-
-                while cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
-                    if !comment.is_block_comment() && comment.loc().is_same_line(&right.loc()) {
-                        right.set_trailing_comment(comment)?;
-                    } else {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_joined_table(): unexpected comment\n{}",
-                            pg_error_annotation_from_cursor(cursor, src)
-                        )));
-                    }
-                    cursor.goto_next_sibling();
-                }
 
                 let mut joined_table = JoinedTable::new(
                     loc,
@@ -573,6 +560,14 @@ impl Visitor {
                     comments_after_join_keyword,
                     right,
                 );
+
+                // cursor -> comments?
+                while cursor.node().is_comment() {
+                    let comment = Comment::pg_new(cursor.node());
+                    joined_table.add_comment_to_child(comment)?;
+
+                    cursor.goto_next_sibling();
+                }
 
                 // cursor -> join_qual
                 if cursor.node().kind() == SyntaxKind::join_qual {
