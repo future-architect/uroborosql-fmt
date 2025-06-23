@@ -36,7 +36,7 @@ impl Visitor {
             SyntaxKind::BOTH | SyntaxKind::LEADING | SyntaxKind::TRAILING
         ) {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "handle_trim_function(): BOTH/LEADING/TRAILING not implemented yet\n{}",
+                "handle_trim_function(): BOTH/LEADING/TRAILING is not implemented yet\n{}",
                 pg_error_annotation_from_cursor(cursor, src)
             )));
         }
@@ -88,14 +88,14 @@ impl Visitor {
             SyntaxKind::a_expr => {
                 // a_expr FROM expr_list
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_trim_list(): a_expr FROM expr_list pattern not implemented yet\n{}",
+                    "visit_trim_list(): a_expr FROM expr_list is not implemented yet\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
             SyntaxKind::FROM => {
                 // FROM expr_list
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_trim_list(): FROM expr_list pattern not implemented yet\n{}",
+                    "visit_trim_list(): FROM expr_list pattern is not implemented yet\n{}",
                     pg_error_annotation_from_cursor(cursor, src)
                 )));
             }
