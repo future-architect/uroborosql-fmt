@@ -40,13 +40,15 @@ impl Visitor {
                 let unary = self.handle_unary_expr_nodes(cursor, src)?;
                 Ok(Expr::Unary(Box::new(unary)))
             }
-            SyntaxKind::a_expr => {
+            // a_expr と b_expr を同一視する
+            SyntaxKind::a_expr | SyntaxKind::b_expr => {
                 // cursor -> a_expr
                 let lhs = self.visit_a_expr_or_b_expr(cursor, src)?;
 
                 cursor.goto_next_sibling();
 
                 // cursor -> コメント | 算術演算子 | 比較演算子 | 論理演算子 | TYPECAST | COLLATE | AT | LIKE | ILIKE | SIMILAR | IS | ISNULL | NOTNULL | IN | サブクエリ
+                // b_expr の文法は a_expr のサブセットのため、a_expr を走査する関数をそのまま利用する
                 let expr = self.handle_nodes_after_a_expr(cursor, src, lhs)?;
 
                 Ok(expr)
