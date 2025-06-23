@@ -80,9 +80,22 @@ impl Visitor {
         // first for_locking_item
         self.visit_for_locking_item(cursor, src, &mut clauses)?;
 
-        // cursor -> for_locking_item
         while cursor.goto_next_sibling() {
-            self.visit_for_locking_item(cursor, src, &mut clauses)?;
+            match cursor.node().kind() {
+                SyntaxKind::for_locking_item => {
+                    self.visit_for_locking_item(cursor, src, &mut clauses)?;
+                }
+                SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
+                    let comment = Comment::pg_new(cursor.node());
+                    clauses.last_mut().unwrap().add_comment_to_child(comment)?;
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_for_locking_items: unexpected node kind: {}",
+                        cursor.node().kind()
+                    )));
+                }
+            }
         }
 
         cursor.goto_parent();
@@ -144,6 +157,8 @@ impl Visitor {
         // - FOR KEY SHARE
         cursor.goto_first_child();
 
+        // cursor -> FOR
+        pg_ensure_kind!(cursor, SyntaxKind::FOR, src);
         let mut clause = Clause::from_pg_node(cursor.node());
 
         while cursor.goto_next_sibling() {
