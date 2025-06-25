@@ -82,6 +82,8 @@ impl Visitor {
             let (filter_keyword, filter_clause) = self.visit_filter_clause(cursor, src)?;
             func.set_filter_keyword(&filter_keyword);
             func.set_filter_clause(filter_clause);
+
+            func.append_loc(Location::from(cursor.node().range()));
         }
 
         // cursor -> over_clause?
