@@ -40,14 +40,15 @@ impl Visitor {
                 let unary = self.handle_unary_expr_nodes(cursor, src)?;
                 Ok(Expr::Unary(Box::new(unary)))
             }
-            SyntaxKind::a_expr => {
+            // a_expr と b_expr を同一視する
+            SyntaxKind::a_expr | SyntaxKind::b_expr => {
                 // cursor -> a_expr
                 let lhs = self.visit_a_expr_or_b_expr(cursor, src)?;
 
                 cursor.goto_next_sibling();
 
                 // cursor -> コメント | 算術演算子 | 比較演算子 | 論理演算子 | TYPECAST | COLLATE | AT | LIKE | ILIKE | SIMILAR | IS | ISNULL | NOTNULL | IN | サブクエリ
-                let expr = self.handle_nodes_after_a_expr(cursor, src, lhs)?;
+                let expr = self.handle_nodes_after_a_expr_or_b_expr(cursor, src, lhs)?;
 
                 Ok(expr)
             }
@@ -69,10 +70,10 @@ impl Visitor {
         }
     }
 
-    /// a_expr の子ノードのうち、最初に a_expr が現れた後のノードを走査する
-    /// 呼出時、cursor は a_expr の次のノードを指している
-    /// 呼出後、cursor は a_expr の最後の子ノードを指している
-    fn handle_nodes_after_a_expr(
+    /// a_expr または b_expr の子ノードのうち、最初に a_expr または b_expr が現れた後のノードを走査する
+    /// 呼出時、cursor は a_expr または b_expr の次のノードを指している
+    /// 呼出後、cursor は a_expr または b_expr の最後の子ノードを指している
+    fn handle_nodes_after_a_expr_or_b_expr(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,

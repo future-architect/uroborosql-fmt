@@ -25,6 +25,14 @@ where
 	grade	between		/*start1*/60	and	/*end1*/100
 and	grade	not between	/*start2*/70	and	/*end2*/80
 ;
+select
+	*
+from
+	t
+where
+	1	=		1
+and	a	between	/*offset*/0	+	1	and	/*offset*/0	+	/*limit*/10
+;
 -- comments
 select
 	std.grade	as	grade
