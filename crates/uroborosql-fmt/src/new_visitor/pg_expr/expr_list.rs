@@ -24,19 +24,22 @@ impl ExprList {
     fn new() -> Self {
         Self { items: vec![] }
     }
-    
+
     fn first_expr_mut(&mut self) -> Option<&mut AlignedExpr> {
         self.items.first_mut().map(|item| &mut item.expr)
     }
 
-    fn add_expr(&mut self, expr: AlignedExpr) {
+    pub(crate) fn add_expr(&mut self, expr: AlignedExpr) {
         self.items.push(ExprListItem {
             expr,
             following_comments: vec![],
         });
     }
 
-    fn add_comment_to_last_item(&mut self, comment: Comment) -> Result<(), UroboroSQLFmtError> {
+    pub(crate) fn add_comment_to_last_item(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
         if let Some(last) = self.items.last_mut() {
             // 行末コメントならば最後の式に追加
             if !comment.is_block_comment() && last.expr.loc().is_same_line(&comment.loc()) {
@@ -50,36 +53,83 @@ impl ExprList {
         } else {
             // 式がない場合はエラー
             Err(UroboroSQLFmtError::IllegalOperation(
-                "ExprList::add_comment_to_last_item(): Unexpected syntax. \n{}".to_string()
+                "ExprList::add_comment_to_last_item(): Unexpected syntax. \n{}".to_string(),
             ))
         }
     }
-    
-    pub(crate) fn to_separated_lines(&self, sep: Option<String>) -> SeparatedLines {
+
+    pub(crate) fn to_separated_lines(
+        &self,
+        sep: Option<String>,
+    ) -> Result<SeparatedLines, UroboroSQLFmtError> {
         let mut sep_lines = SeparatedLines::new();
 
         let Some((first, rest)) = self.items.split_first() else {
-            return sep_lines;
+            return Ok(sep_lines);
         };
 
-        let ExprListItem { expr, following_comments } = first;
+        let ExprListItem {
+            expr,
+            following_comments,
+        } = first;
         sep_lines.add_expr(expr.clone(), None, vec![]);
 
         for comment in following_comments {
-            sep_lines.add_comment_to_child(comment.clone());
+            sep_lines.add_comment_to_child(comment.clone())?;
         }
-        
+
         for item in rest {
-            let ExprListItem { expr, following_comments } = item;
+            let ExprListItem {
+                expr,
+                following_comments,
+            } = item;
 
             sep_lines.add_expr(expr.clone(), sep.clone(), vec![]);
 
             for comment in following_comments {
-                sep_lines.add_comment_to_child(comment.clone());
+                sep_lines.add_comment_to_child(comment.clone())?;
             }
         }
 
-        sep_lines
+        Ok(sep_lines)
+    }
+
+    pub(crate) fn to_function_call_args(
+        &self,
+        location: Location,
+    ) -> Result<FunctionCallArgs, UroboroSQLFmtError> {
+        let mut exprs = Vec::new();
+        for item in &self.items {
+            if !item.following_comments.is_empty() {
+                return Err(UroboroSQLFmtError::Unimplemented(
+                    "Comments following function argument are not supported".to_string(),
+                ));
+            }
+
+            exprs.push(item.expr.clone());
+        }
+
+        Ok(FunctionCallArgs::new(exprs, location))
+    }
+
+    pub(crate) fn to_column_list(
+        &self,
+        location: Location,
+        start_comments: Vec<Comment>,
+    ) -> Result<ColumnList, UroboroSQLFmtError> {
+        // いづれかの ExprListItem に following_comments がある場合はエラーにする
+        let mut exprs = Vec::new();
+        for item in &self.items {
+            if !item.following_comments.is_empty() {
+                return Err(UroboroSQLFmtError::Unimplemented(
+                    "Comments following column list are not supported".to_string(),
+                ));
+            }
+
+            exprs.push(item.expr.clone());
+        }
+
+        Ok(ColumnList::new(exprs, location, start_comments))
     }
 }
 
@@ -113,21 +163,25 @@ impl Visitor {
                 }
                 SyntaxKind::C_COMMENT => {
                     let comment = Comment::pg_new(cursor.node());
-                    
+
                     cursor.goto_next_sibling();
 
                     // cursor -> a_expr
-                    pg_ensure_kind!(cursor, SyntaxKind::a_expr, src);
-                    let mut expr = self.visit_a_expr_or_b_expr(cursor, src)?;
+                    if cursor.node().kind() == SyntaxKind::a_expr {
+                        let mut expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
-                    // コメントがバインドパラメータならば式に付与し、そうでなければすでにある式の下に追加
-                    if comment.is_block_comment() && comment.loc().is_next_to(&expr.loc()) {
-                        expr.set_head_comment(comment.clone());
+                        // コメントがバインドパラメータならば式に付与し、そうでなければすでにある式の下に追加
+                        if comment.is_block_comment() && comment.loc().is_next_to(&expr.loc()) {
+                            expr.set_head_comment(comment.clone());
+                        } else {
+                            expr_list.add_comment_to_last_item(comment)?;
+                        }
+
+                        expr_list.add_expr(expr.to_aligned());
                     } else {
+                        // 次に式が無い場合
                         expr_list.add_comment_to_last_item(comment)?;
                     }
-
-                    expr_list.add_expr(expr.to_aligned());
                 }
                 SyntaxKind::SQL_COMMENT => {
                     let comment = Comment::pg_new(cursor.node());
@@ -177,9 +231,10 @@ impl TryFrom<ParenthesizedExprList> for ColumnList {
         let mut exprs = Vec::new();
         for (index, item) in paren_list.expr_list.items.iter().enumerate() {
             if !item.following_comments.is_empty() {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    format!("Comments following column list at position {} are not supported", index + 1)
-                ));
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "Comments following column list at position {} are not supported",
+                    index + 1
+                )));
             }
             exprs.push(item.expr.clone());
         }
@@ -201,14 +256,15 @@ impl TryFrom<ParenthesizedExprList> for FunctionCallArgs {
                 "Comments immediately after opening parenthesis in function arguments are not supported".to_string()
             ));
         }
-        
+
         // いづれかの ExprListItem に following_comments がある場合はエラーにする
         let mut exprs = Vec::new();
         for (index, item) in paren_list.expr_list.items.iter().enumerate() {
             if !item.following_comments.is_empty() {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    format!("Comments following function argument at position {} are not supported", index + 1)
-                ));
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "Comments following function argument at position {} are not supported",
+                    index + 1
+                )));
             }
             exprs.push(item.expr.clone());
         }

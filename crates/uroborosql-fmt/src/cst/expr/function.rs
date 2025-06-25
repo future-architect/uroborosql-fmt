@@ -281,6 +281,10 @@ impl FunctionCall {
         self.loc.clone()
     }
 
+    pub(crate) fn append_loc(&mut self, loc: Location) {
+        self.loc.append(loc)
+    }
+
     /// 引数が複数行になる場合 true を返す
     fn has_multi_line_arguments(&self) -> bool {
         self.args.is_multi_line()

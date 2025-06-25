@@ -96,7 +96,7 @@ impl Visitor {
                 // Expr::ColumnList を返す
                 // '(' expr_list ')' を ColumnList に変換する
                 let column_list =
-                    ColumnList::from(self.handle_parenthesized_expr_list(cursor, src)?);
+                    ColumnList::try_from(self.handle_parenthesized_expr_list(cursor, src)?)?;
 
                 Expr::ColumnList(Box::new(column_list))
             }

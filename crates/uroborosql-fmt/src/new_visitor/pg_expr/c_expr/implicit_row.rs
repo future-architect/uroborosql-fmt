@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{ColumnList, Comment, Location},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    new_visitor::pg_ensure_kind,
 };
 
 use super::Visitor;
@@ -44,18 +44,7 @@ impl Visitor {
         if cursor.node().is_comment() {
             let comment = Comment::pg_new(cursor.node());
 
-            // expr_list は必ず1つ以上要素を持っている
-            let last = expr_list.last_mut().expect("empty expr_list");
-
-            // 末尾コメントのみを考慮する
-            if last.loc().is_same_line(&comment.loc()) {
-                last.set_trailing_comment(comment)?;
-            } else {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_implicit_row(): Unexpected comment\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
-                )));
-            }
+            expr_list.add_comment_to_last_item(comment)?;
 
             cursor.goto_next_sibling();
         }
@@ -66,7 +55,7 @@ impl Visitor {
         let a_expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         // expr_list に a_expr を追加
-        expr_list.push(a_expr.to_aligned());
+        expr_list.add_expr(a_expr.to_aligned());
 
         cursor.goto_next_sibling();
         // cursor -> ')'
@@ -76,6 +65,6 @@ impl Visitor {
         // cursor -> implicit_row
         pg_ensure_kind!(cursor, SyntaxKind::implicit_row, src);
 
-        Ok(ColumnList::new(expr_list, loc, start_comments))
+        expr_list.to_column_list(loc, start_comments)
     }
 }
