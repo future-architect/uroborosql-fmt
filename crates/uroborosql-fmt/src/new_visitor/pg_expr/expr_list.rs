@@ -143,7 +143,51 @@ impl Visitor {
 
         Ok(exprs)
     }
+}
 
+/// 括弧で囲まれた式リストの共通表現
+#[derive(Debug, Clone)]
+pub struct ParenthesizedExprList {
+    pub exprs: Vec<AlignedExpr>,
+    pub location: Location,
+    pub start_comments: Vec<Comment>,
+}
+
+impl ParenthesizedExprList {
+    pub fn new(exprs: Vec<AlignedExpr>, location: Location, start_comments: Vec<Comment>) -> Self {
+        Self {
+            exprs,
+            location,
+            start_comments,
+        }
+    }
+}
+
+impl From<ParenthesizedExprList> for ColumnList {
+    fn from(paren_list: ParenthesizedExprList) -> Self {
+        ColumnList::new(
+            paren_list.exprs,
+            paren_list.location,
+            paren_list.start_comments,
+        )
+    }
+}
+
+/// FunctionCallArgsへの変換
+impl TryFrom<ParenthesizedExprList> for FunctionCallArgs {
+    type Error = UroboroSQLFmtError;
+
+    fn try_from(paren_list: ParenthesizedExprList) -> Result<Self, Self::Error> {
+        if !paren_list.start_comments.is_empty() {
+            return Err(UroboroSQLFmtError::Unimplemented(
+                "Comments immediately after opening parenthesis in function arguments are not supported".to_string()
+            ));
+        }
+        Ok(FunctionCallArgs::new(paren_list.exprs, paren_list.location))
+    }
+}
+
+impl Visitor {
     /// 括弧で囲まれた式リストを処理するメソッド
     /// 呼出し時、cursor は '(' を指している
     /// 呼出し後、cursor は ')' を指している
