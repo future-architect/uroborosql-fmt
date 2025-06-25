@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{ColumnList, Comment, Location},
     error::UroboroSQLFmtError,
-    new_visitor::pg_ensure_kind,
+    new_visitor::{pg_ensure_kind, COMMA},
 };
 
 use super::Visitor;
@@ -55,7 +55,7 @@ impl Visitor {
         let a_expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         // expr_list に a_expr を追加
-        expr_list.add_expr(a_expr.to_aligned());
+        expr_list.add_expr(a_expr.to_aligned(), Some(COMMA.to_string()));
 
         cursor.goto_next_sibling();
         // cursor -> ')'
