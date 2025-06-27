@@ -1,5 +1,5 @@
 use crate::{
-    cst::{AlignedExpr, ColumnList, Comment, FunctionCallArgs, Location},
+    cst::{AlignedExpr, Comment, Location},
     error::UroboroSQLFmtError,
 };
 
@@ -92,52 +92,4 @@ impl ParenthesizedExprList {
     }
 }
 
-impl TryFrom<ParenthesizedExprList> for ColumnList {
-    type Error = UroboroSQLFmtError;
 
-    fn try_from(paren_list: ParenthesizedExprList) -> Result<Self, Self::Error> {
-        // いずれかの ExprListItem に following_comments がある場合はエラーにする
-        let mut exprs = Vec::new();
-        for item in paren_list.expr_list.items {
-            if let Some(following_comment) = item.following_comments.first() {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "Comments following columns are not supported. Only trailing comments are supported.\ncomment: {}",
-                    following_comment.text()
-                )));
-            }
-            exprs.push(item.expr.clone());
-        }
-
-        Ok(ColumnList::new(
-            exprs,
-            paren_list.location,
-            paren_list.start_comments,
-        ))
-    }
-}
-
-impl TryFrom<ParenthesizedExprList> for FunctionCallArgs {
-    type Error = UroboroSQLFmtError;
-
-    fn try_from(paren_list: ParenthesizedExprList) -> Result<Self, Self::Error> {
-        if !paren_list.start_comments.is_empty() {
-            return Err(UroboroSQLFmtError::Unimplemented(
-                "Comments immediately after opening parenthesis in function arguments are not supported".to_string()
-            ));
-        }
-
-        // いずれかの ExprListItem に following_comments がある場合はエラーにする
-        let mut exprs = Vec::new();
-        for item in paren_list.expr_list.items {
-            if let Some(following_comment) = item.following_comments.first() {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "Comments following function arguments are not supported. Only trailing comments are supported.\ncomment: {}",
-                    following_comment.text()
-                )));
-            }
-            exprs.push(item.expr.clone());
-        }
-
-        Ok(FunctionCallArgs::new(exprs, paren_list.location))
-    }
-}

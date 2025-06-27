@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use crate::{
-    cst::{add_indent, AlignInfo, AlignedExpr, Comment, Location},
+    cst::{add_indent, AlignInfo, AlignedExpr, Comment, Location, ParenthesizedExprList},
     error::UroboroSQLFmtError,
     util::{add_space_by_range, count_width, tab_size, trim_bind_param},
 };
@@ -177,5 +177,29 @@ impl ColumnList {
 
         // 閉じかっこの後の改行は呼び出し元が担当
         Ok(result)
+    }
+}
+
+impl TryFrom<ParenthesizedExprList> for ColumnList {
+    type Error = UroboroSQLFmtError;
+
+    fn try_from(paren_list: ParenthesizedExprList) -> Result<Self, Self::Error> {
+        // いずれかの ExprListItem に following_comments がある場合はエラーにする
+        let mut exprs = Vec::new();
+        for item in paren_list.expr_list.items() {
+            if let Some(following_comment) = item.following_comments().first() {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "Comments following columns are not supported. Only trailing comments are supported.\ncomment: {}",
+                    following_comment.text()
+                )));
+            }
+            exprs.push(item.expr().clone());
+        }
+
+        Ok(ColumnList::new(
+            exprs,
+            paren_list.location,
+            paren_list.start_comments,
+        ))
     }
 }

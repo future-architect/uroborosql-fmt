@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use crate::{
-    cst::{add_indent, AlignInfo, AlignedExpr, Clause, Comment, Location},
+    cst::{add_indent, AlignInfo, AlignedExpr, Clause, Comment, Location, ParenthesizedExprList},
     error::UroboroSQLFmtError,
     util::{add_space_by_range, convert_keyword_case, is_line_overflow, tab_size, to_tab_num},
 };
@@ -372,5 +372,31 @@ impl FunctionCall {
         }
 
         Ok(result)
+    }
+}
+
+impl TryFrom<ParenthesizedExprList> for FunctionCallArgs {
+    type Error = UroboroSQLFmtError;
+
+    fn try_from(paren_list: ParenthesizedExprList) -> Result<Self, Self::Error> {
+        if !paren_list.start_comments.is_empty() {
+            return Err(UroboroSQLFmtError::Unimplemented(
+                "Comments immediately after opening parenthesis in function arguments are not supported".to_string()
+            ));
+        }
+
+        // いずれかの ExprListItem に following_comments がある場合はエラーにする
+        let mut exprs = Vec::new();
+        for item in paren_list.expr_list.items() {
+            if let Some(following_comment) = item.following_comments().first() {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "Comments following function arguments are not supported. Only trailing comments are supported.\ncomment: {}",
+                    following_comment.text()
+                )));
+            }
+            exprs.push(item.expr().clone());
+        }
+
+        Ok(FunctionCallArgs::new(exprs, paren_list.location))
     }
 }
