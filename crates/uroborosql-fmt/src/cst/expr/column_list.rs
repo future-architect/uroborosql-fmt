@@ -184,6 +184,10 @@ impl TryFrom<ParenthesizedExprList> for ColumnList {
     type Error = UroboroSQLFmtError;
 
     fn try_from(paren_list: ParenthesizedExprList) -> Result<Self, Self::Error> {
-        ColumnList::from_expr_list(&paren_list.expr_list, paren_list.location, paren_list.start_comments)
+        ColumnList::from_expr_list(
+            &paren_list.expr_list,
+            paren_list.location,
+            paren_list.start_comments,
+        )
     }
 }
