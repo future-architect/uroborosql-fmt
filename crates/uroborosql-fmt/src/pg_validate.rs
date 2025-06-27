@@ -34,16 +34,16 @@ fn error_annotation(src_token: &Token, dst_token: Option<&Token>, _src: &str) ->
     // とりあえず Token の種類と値を表示する
 
     // src token
-    let src_token_str = format!("src_token: {:?}", src_token);
+    let src_token_str = format!("src_token: {src_token:?}");
 
     // dst token (if exists)
     let dst_token_str = if let Some(dst_token) = dst_token {
-        format!("dst_token: {:?}", dst_token)
+        format!("dst_token: {dst_token:?}")
     } else {
         "dst_token: None".to_string()
     };
 
-    format!("src_token: {}\ndst_token: {}", src_token_str, dst_token_str)
+    format!("src_token: {src_token_str}\ndst_token: {dst_token_str}")
 }
 
 fn compare_tokens(
@@ -78,7 +78,7 @@ fn compare_tokens(
                 // src.len() < dst.len() の場合
                 return Err(UroboroSQLFmtError::Validation {
                     format_result: format_result.to_owned(),
-                    error_msg: format!("different kind token: For some reason the number of tokens in the format result has increased\nformat_result: \n{}", format_result),
+                    error_msg: format!("different kind token: For some reason the number of tokens in the format result has increased\nformat_result: \n{format_result}"),
                 });
             }
         }

@@ -169,7 +169,7 @@ fn compare_tokens(
                 // src.len() < dst.len() の場合
                 return Err(UroboroSQLFmtError::Validation {
                     format_result: format_result.to_owned(),
-                    error_msg: format!("different kind token: For some reason the number of tokens in the format result has increased\nformat_result: \n{}", format_result),
+                    error_msg: format!("different kind token: For some reason the number of tokens in the format result has increased\nformat_result: \n{format_result}"),
                 });
             }
         }

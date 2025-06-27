@@ -60,9 +60,9 @@ pub(crate) fn format_sql_with_config(
         let use_parser_error_recovery = config.use_parser_error_recovery;
 
         let parse_result = if use_parser_error_recovery {
-            pg_parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{:?}", e)))
+            pg_parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
         } else {
-            pg_parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{:?}", e)))
+            pg_parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
         };
 
         match parse_result {
@@ -226,9 +226,9 @@ fn pg_print_cst(node: postgresql_cst_parser::tree_sitter::Node, depth: usize) {
 
 pub(crate) fn pg_format(src: &str) -> Result<String, UroboroSQLFmtError> {
     let tree = if CONFIG.read().unwrap().use_parser_error_recovery {
-        pg_parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{:?}", e)))?
+        pg_parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))?
     } else {
-        pg_parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{:?}", e)))?
+        pg_parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))?
     };
 
     pg_format_cst(&tree, src)
