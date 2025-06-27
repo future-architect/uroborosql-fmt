@@ -166,7 +166,7 @@ impl SeparatedLines {
         }
     }
 
-    pub(crate) fn from_expr_list(
+    pub(crate) fn try_from_expr_list(
         expr_list: &crate::cst::ExprList,
     ) -> Result<Self, crate::error::UroboroSQLFmtError> {
         let mut sep_lines = SeparatedLines::new();

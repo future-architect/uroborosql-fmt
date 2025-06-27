@@ -36,7 +36,7 @@ impl FunctionCallArgs {
         }
     }
 
-    pub(crate) fn from_expr_list(
+    pub(crate) fn try_from_expr_list(
         expr_list: &crate::cst::ExprList,
         location: crate::cst::Location,
     ) -> Result<Self, crate::error::UroboroSQLFmtError> {
@@ -385,6 +385,6 @@ impl TryFrom<ParenthesizedExprList> for FunctionCallArgs {
             ));
         }
 
-        FunctionCallArgs::from_expr_list(&paren_list.expr_list, paren_list.location)
+        FunctionCallArgs::try_from_expr_list(&paren_list.expr_list, paren_list.location)
     }
 }

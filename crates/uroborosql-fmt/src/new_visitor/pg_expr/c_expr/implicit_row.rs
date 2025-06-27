@@ -65,6 +65,6 @@ impl Visitor {
         // cursor -> implicit_row
         pg_ensure_kind!(cursor, SyntaxKind::implicit_row, src);
 
-        ColumnList::from_expr_list(&expr_list, loc, start_comments)
+        ColumnList::try_from_expr_list(&expr_list, loc, start_comments)
     }
 }

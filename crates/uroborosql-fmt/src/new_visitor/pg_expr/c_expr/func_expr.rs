@@ -264,7 +264,7 @@ impl Visitor {
         // cursor -> expr_list
         let exprs = self.visit_expr_list(cursor, src)?;
 
-        let sep_lines = SeparatedLines::from_expr_list(&exprs)?;
+        let sep_lines = SeparatedLines::try_from_expr_list(&exprs)?;
         clause.set_body(Body::SepLines(sep_lines));
 
         cursor.goto_parent();
