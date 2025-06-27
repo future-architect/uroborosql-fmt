@@ -385,18 +385,6 @@ impl TryFrom<ParenthesizedExprList> for FunctionCallArgs {
             ));
         }
 
-        // いずれかの ExprListItem に following_comments がある場合はエラーにする
-        let mut exprs = Vec::new();
-        for item in paren_list.expr_list.items() {
-            if let Some(following_comment) = item.following_comments().first() {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "Comments following function arguments are not supported. Only trailing comments are supported.\ncomment: {}",
-                    following_comment.text()
-                )));
-            }
-            exprs.push(item.expr().clone());
-        }
-
-        Ok(FunctionCallArgs::new(exprs, paren_list.location))
+        FunctionCallArgs::from_expr_list(&paren_list.expr_list, paren_list.location)
     }
 }

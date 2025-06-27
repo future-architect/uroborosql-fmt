@@ -184,22 +184,6 @@ impl TryFrom<ParenthesizedExprList> for ColumnList {
     type Error = UroboroSQLFmtError;
 
     fn try_from(paren_list: ParenthesizedExprList) -> Result<Self, Self::Error> {
-        // いずれかの ExprListItem に following_comments がある場合はエラーにする
-        let mut exprs = Vec::new();
-        for item in paren_list.expr_list.items() {
-            if let Some(following_comment) = item.following_comments().first() {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "Comments following columns are not supported. Only trailing comments are supported.\ncomment: {}",
-                    following_comment.text()
-                )));
-            }
-            exprs.push(item.expr().clone());
-        }
-
-        Ok(ColumnList::new(
-            exprs,
-            paren_list.location,
-            paren_list.start_comments,
-        ))
+        ColumnList::from_expr_list(&paren_list.expr_list, paren_list.location, paren_list.start_comments)
     }
 }
