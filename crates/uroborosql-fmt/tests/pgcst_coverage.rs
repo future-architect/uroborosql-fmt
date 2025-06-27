@@ -86,9 +86,9 @@ fn try_format_with_new_parser(
     use uroborosql_fmt::error::UroboroSQLFmtError;
 
     let input =
-        fs::read_to_string(src_file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+        fs::read_to_string(src_file_path).map_err(|e| format!("Failed to read file: {e}"))?;
     let expected =
-        fs::read_to_string(dst_file_path).map_err(|e| format!("Failed to read dst file: {}", e))?;
+        fs::read_to_string(dst_file_path).map_err(|e| format!("Failed to read dst file: {e}"))?;
 
     let setting = r#"
     {
@@ -114,19 +114,19 @@ fn try_format_with_new_parser(
         Err(e) => {
             // エラーの種類に応じてメッセージを詳細化
             let error_detail = match e {
-                UroboroSQLFmtError::ParseError(msg) => format!("Parse error: {}", msg),
-                UroboroSQLFmtError::IllegalOperation(msg) => format!("Illegal operation: {}", msg),
-                UroboroSQLFmtError::UnexpectedSyntax(msg) => format!("Syntax error: {}", msg),
-                UroboroSQLFmtError::Unimplemented(msg) => format!("Unimplemented: {}", msg),
-                UroboroSQLFmtError::FileNotFound(msg) => format!("File not found: {}", msg),
-                UroboroSQLFmtError::IllegalSettingFile(msg) => format!("Invalid config: {}", msg),
-                UroboroSQLFmtError::Rendering(msg) => format!("Rendering error: {}", msg),
-                UroboroSQLFmtError::Runtime(msg) => format!("Runtime error: {}", msg),
+                UroboroSQLFmtError::ParseError(msg) => format!("Parse error: {msg}"),
+                UroboroSQLFmtError::IllegalOperation(msg) => format!("Illegal operation: {msg}"),
+                UroboroSQLFmtError::UnexpectedSyntax(msg) => format!("Syntax error: {msg}"),
+                UroboroSQLFmtError::Unimplemented(msg) => format!("Unimplemented: {msg}"),
+                UroboroSQLFmtError::FileNotFound(msg) => format!("File not found: {msg}"),
+                UroboroSQLFmtError::IllegalSettingFile(msg) => format!("Invalid config: {msg}"),
+                UroboroSQLFmtError::Rendering(msg) => format!("Rendering error: {msg}"),
+                UroboroSQLFmtError::Runtime(msg) => format!("Runtime error: {msg}"),
                 UroboroSQLFmtError::Validation { error_msg, .. } => {
-                    format!("Validation error: {}", error_msg)
+                    format!("Validation error: {error_msg}")
                 }
             };
-            Err(format!("❌ {}", error_detail))
+            Err(format!("❌ {error_detail}"))
         }
     }
 }
@@ -147,7 +147,7 @@ fn print_coverage_report(results: &[TestResult], config: &TestReportConfig) {
         let unsupported = total - supported - skipped;
 
         println!("\nCoverage Report:");
-        println!("Total test cases: {:>4} cases", total);
+        println!("Total test cases: {total:>4} cases");
         println!(
             "{:<14} : {:>4} cases, {:>6.1}%",
             "✅ Supported",
@@ -301,12 +301,12 @@ fn print_error_group(
     show_annotations: bool,
 ) {
     if !errors.is_empty() {
-        println!("\n{}:", group_name);
+        println!("\n{group_name}:");
         for (file, message, annotation) in errors {
             println!("  {} - {}", file.display(), message);
             if show_annotations {
                 if let Some(ann) = annotation {
-                    println!("{}", ann);
+                    println!("{ann}");
                 }
             }
         }
@@ -364,9 +364,9 @@ fn run_config_test_suite() -> Vec<TestResult> {
             .to_str()
             .expect("Failed to convert config file stem to str.");
 
-        let dst_dir = PathBuf::from(format!("testfiles/config_test/dst_{}", config_name));
+        let dst_dir = PathBuf::from(format!("testfiles/config_test/dst_{config_name}"));
 
-        println!("config: {}", config_name);
+        println!("config: {config_name}");
 
         for src_file_path in src_files.iter().sorted() {
             let filename = src_file_path

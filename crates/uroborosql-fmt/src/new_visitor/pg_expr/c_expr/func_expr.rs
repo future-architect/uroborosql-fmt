@@ -4,9 +4,9 @@ mod func_expr_common_subexpr;
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{AlignedExpr, Body, Clause, Expr, SeparatedLines},
+    cst::{Body, Clause, Expr, Location, SeparatedLines},
     error::UroboroSQLFmtError,
-    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, COMMA},
+    new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
     util::convert_keyword_case,
 };
 
@@ -82,6 +82,8 @@ impl Visitor {
             let (filter_keyword, filter_clause) = self.visit_filter_clause(cursor, src)?;
             func.set_filter_keyword(&filter_keyword);
             func.set_filter_clause(filter_clause);
+
+            func.append_loc(Location::from(cursor.node().range()));
         }
 
         // cursor -> over_clause?
@@ -89,6 +91,8 @@ impl Visitor {
             let (over_keyword, over_window_definition) = self.visit_over_clause(cursor, src)?;
             func.set_over_keyword(&over_keyword);
             func.set_over_window_definition(&over_window_definition);
+
+            func.append_loc(Location::from(cursor.node().range()));
         }
 
         cursor.goto_parent();
@@ -258,19 +262,10 @@ impl Visitor {
         self.pg_consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> expr_list
-        let exprs: Vec<AlignedExpr> = self.visit_expr_list(cursor, src)?;
+        let exprs = self.visit_expr_list(cursor, src)?;
 
-        // expr_list (Vec<AlignedExpr>) を Body::SepLines に変換し Clause に追加する
-        let mut separated_lines = SeparatedLines::new();
-        if let Some((first, rest)) = exprs.split_first() {
-            // 最初の要素だけカンマ無し
-            separated_lines.add_expr(first.clone(), None, vec![]);
-
-            for expr in rest {
-                separated_lines.add_expr(expr.clone(), Some(COMMA.to_string()), vec![]);
-            }
-        }
-        clause.set_body(Body::SepLines(separated_lines));
+        let sep_lines = SeparatedLines::try_from_expr_list(&exprs)?;
+        clause.set_body(Body::SepLines(sep_lines));
 
         cursor.goto_parent();
         pg_ensure_kind!(cursor, SyntaxKind::opt_partition_clause, src);

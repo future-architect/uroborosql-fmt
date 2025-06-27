@@ -91,7 +91,7 @@ fn print_test_report(results: &[TestResult]) {
         .count();
 
     println!("\nTest Report:");
-    println!("Total test cases: {:>4} cases", total);
+    println!("Total test cases: {total:>4} cases");
     println!("{:<14} : {:>4} cases", "✅ Passed", passed);
     println!("{:<14} : {:>4} cases", "❌ Failed", failed);
     println!("{:<14} : {:>4} cases", "💥 Errors", errors);
@@ -142,15 +142,15 @@ fn collect_test_cases() -> Vec<TestCase> {
                     .and_then(|s| s.to_str())
                     .unwrap_or_default();
 
-                let dst_path = dst_dir.join(format!("{}.sql", file_stem));
+                let dst_path = dst_dir.join(format!("{file_stem}.sql"));
 
                 if dst_path.exists() {
                     match TestCase::from_files(file_stem, &src_path, &dst_path) {
                         Ok(test_case) => cases.push(test_case),
-                        Err(e) => eprintln!("Error loading test case {:?}: {}", src_path, e),
+                        Err(e) => eprintln!("Error loading test case {src_path:?}: {e}"),
                     }
                 } else {
-                    eprintln!("Missing dst file for test case: {:?}", src_path);
+                    eprintln!("Missing dst file for test case: {src_path:?}");
                 }
             }
         }

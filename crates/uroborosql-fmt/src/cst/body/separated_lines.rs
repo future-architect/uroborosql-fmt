@@ -166,6 +166,22 @@ impl SeparatedLines {
         }
     }
 
+    pub(crate) fn try_from_expr_list(
+        expr_list: &crate::cst::ExprList,
+    ) -> Result<Self, crate::error::UroboroSQLFmtError> {
+        let mut sep_lines = SeparatedLines::new();
+
+        for item in expr_list.items() {
+            sep_lines.add_expr(item.expr().clone(), item.sep().clone(), vec![]);
+
+            for comment in item.following_comments() {
+                sep_lines.add_comment_to_child(comment.clone())?;
+            }
+        }
+
+        Ok(sep_lines)
+    }
+
     pub(crate) fn loc(&self) -> Option<Location> {
         self.loc.clone()
     }

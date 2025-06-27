@@ -30,14 +30,14 @@ impl Visitor {
         cursor.goto_next_sibling();
         // cursor -> '('
 
-        let first_row = ColumnList::from(self.handle_parenthesized_expr_list(cursor, src)?);
+        let first_row = ColumnList::try_from(self.handle_parenthesized_expr_list(cursor, src)?)?;
         let mut rows = vec![first_row];
 
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
                 SyntaxKind::LParen => {
                     let parenthesized_expr_list =
-                        ColumnList::from(self.handle_parenthesized_expr_list(cursor, src)?);
+                        ColumnList::try_from(self.handle_parenthesized_expr_list(cursor, src)?)?;
 
                     rows.push(parenthesized_expr_list);
                 }
