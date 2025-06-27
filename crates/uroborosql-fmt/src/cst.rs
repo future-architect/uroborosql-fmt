@@ -1,11 +1,13 @@
 mod body;
 mod clause;
 mod expr;
+mod expr_list;
 mod statement;
 
 pub(crate) use body::*;
 pub(crate) use clause::*;
 pub(crate) use expr::*;
+pub(crate) use expr_list::*;
 pub(crate) use statement::*;
 
 // expr

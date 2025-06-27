@@ -1,11 +1,9 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{FunctionCall, FunctionCallKind, Location},
+    cst::{ExprList, FunctionCall, FunctionCallKind, Location},
     error::UroboroSQLFmtError,
-    new_visitor::{
-        pg_ensure_kind, pg_error_annotation_from_cursor, pg_expr::expr_list::ExprList, Visitor,
-    },
+    new_visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
     util::convert_keyword_case,
 };
 
