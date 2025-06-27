@@ -87,11 +87,11 @@ impl ExprList {
     ) -> Result<FunctionCallArgs, UroboroSQLFmtError> {
         let mut exprs = Vec::new();
         for item in &self.items {
-            if !item.following_comments.is_empty() {
+            if let Some(following_comment) = item.following_comments.first() {
                 return Err(UroboroSQLFmtError::Unimplemented(
                     format!(
-                        "Comments following function argument are not supported. Only trailing comments are supported.\ncomment: {}",
-                        item.following_comments.first().unwrap().text()
+                        "Comments following function arguments are not supported. Only trailing comments are supported.\ncomment: {}",
+                        following_comment.text()
                     ),
                 ));
             }
@@ -110,11 +110,11 @@ impl ExprList {
         // いずれかの ExprListItem に following_comments がある場合はエラーにする
         let mut exprs = Vec::new();
         for item in &self.items {
-            if !item.following_comments.is_empty() {
+            if let Some(following_comment) = item.following_comments.first() {
                 return Err(UroboroSQLFmtError::Unimplemented(
                     format!(
-                        "Comments following column list are not supported. Only trailing comments are supported.\ncomment: {}",
-                        item.following_comments.first().unwrap().text()
+                        "Comments following columns are not supported. Only trailing comments are supported.\ncomment: {}",
+                        following_comment.text()
                     ),
                 ));
             }
@@ -226,10 +226,10 @@ impl TryFrom<ParenthesizedExprList> for ColumnList {
         // いずれかの ExprListItem に following_comments がある場合はエラーにする
         let mut exprs = Vec::new();
         for item in paren_list.expr_list.items {
-            if !item.following_comments.is_empty() {
+            if let Some(following_comment) = item.following_comments.first() {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "Comments following function argument are not supported. Only trailing comments are supported.\ncomment: {}",
-                    item.following_comments.first().unwrap().text()
+                    "Comments following columns are not supported. Only trailing comments are supported.\ncomment: {}",
+                    following_comment.text()
                 )));
             }
             exprs.push(item.expr.clone());
@@ -256,10 +256,10 @@ impl TryFrom<ParenthesizedExprList> for FunctionCallArgs {
         // いずれかの ExprListItem に following_comments がある場合はエラーにする
         let mut exprs = Vec::new();
         for item in paren_list.expr_list.items {
-            if !item.following_comments.is_empty() {
+            if let Some(following_comment) = item.following_comments.first() {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "Comments following function argument are not supported. Only trailing comments are supported.\ncomment: {}",
-                    item.following_comments.first().unwrap().text()
+                    "Comments following function arguments are not supported. Only trailing comments are supported.\ncomment: {}",
+                    following_comment.text()
                 )));
             }
             exprs.push(item.expr.clone());
