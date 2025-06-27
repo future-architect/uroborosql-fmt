@@ -36,6 +36,27 @@ impl FunctionCallArgs {
         }
     }
 
+    pub(crate) fn from_expr_list(
+        expr_list: &crate::cst::ExprList,
+        location: crate::cst::Location,
+    ) -> Result<Self, crate::error::UroboroSQLFmtError> {
+        let mut exprs = Vec::new();
+        for item in expr_list.items() {
+            if let Some(following_comment) = item.following_comments().first() {
+                return Err(crate::error::UroboroSQLFmtError::Unimplemented(
+                    format!(
+                        "Comments following function arguments are not supported. Only trailing comments are supported.\ncomment: {}",
+                        following_comment.text()
+                    ),
+                ));
+            }
+
+            exprs.push(item.expr().clone());
+        }
+
+        Ok(FunctionCallArgs::new(exprs, location))
+    }
+
     pub(crate) fn force_multi_line(&self) -> bool {
         self.force_multi_line
     }

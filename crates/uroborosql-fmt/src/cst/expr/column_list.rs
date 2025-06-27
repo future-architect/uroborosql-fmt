@@ -35,6 +35,29 @@ impl ColumnList {
         }
     }
 
+    pub(crate) fn from_expr_list(
+        expr_list: &crate::cst::ExprList,
+        location: crate::cst::Location,
+        start_comments: Vec<Comment>,
+    ) -> Result<Self, crate::error::UroboroSQLFmtError> {
+        // いずれかの ExprListItem に following_comments がある場合はエラーにする
+        let mut exprs = Vec::new();
+        for item in expr_list.items() {
+            if let Some(following_comment) = item.following_comments().first() {
+                return Err(crate::error::UroboroSQLFmtError::Unimplemented(
+                    format!(
+                        "Comments following columns are not supported. Only trailing comments are supported.\ncomment: {}",
+                        following_comment.text()
+                    ),
+                ));
+            }
+
+            exprs.push(item.expr().clone());
+        }
+
+        Ok(ColumnList::new(exprs, location, start_comments))
+    }
+
     pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
     }

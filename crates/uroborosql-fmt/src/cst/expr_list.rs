@@ -1,13 +1,27 @@
 use crate::{
-    cst::{AlignedExpr, ColumnList, Comment, FunctionCallArgs, Location, SeparatedLines},
+    cst::{AlignedExpr, ColumnList, Comment, FunctionCallArgs, Location},
     error::UroboroSQLFmtError,
 };
 
 #[derive(Debug, Clone)]
-struct ExprListItem {
+pub(crate) struct ExprListItem {
     sep: Option<String>,
     expr: AlignedExpr,
     following_comments: Vec<Comment>,
+}
+
+impl ExprListItem {
+    pub(crate) fn sep(&self) -> &Option<String> {
+        &self.sep
+    }
+
+    pub(crate) fn expr(&self) -> &AlignedExpr {
+        &self.expr
+    }
+
+    pub(crate) fn following_comments(&self) -> &Vec<Comment> {
+        &self.following_comments
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -18,6 +32,10 @@ pub(crate) struct ExprList {
 impl ExprList {
     pub(crate) fn new() -> Self {
         Self { items: vec![] }
+    }
+
+    pub(crate) fn items(&self) -> &Vec<ExprListItem> {
+        &self.items
     }
 
     pub(crate) fn first_expr_mut(&mut self) -> Option<&mut AlignedExpr> {
@@ -53,70 +71,6 @@ impl ExprList {
                     .to_string(),
             ))
         }
-    }
-
-    pub(crate) fn to_separated_lines(&self) -> Result<SeparatedLines, UroboroSQLFmtError> {
-        let mut sep_lines = SeparatedLines::new();
-
-        for item in &self.items {
-            let ExprListItem {
-                sep,
-                expr,
-                following_comments,
-            } = item;
-
-            sep_lines.add_expr(expr.clone(), sep.clone(), vec![]);
-
-            for comment in following_comments {
-                sep_lines.add_comment_to_child(comment.clone())?;
-            }
-        }
-
-        Ok(sep_lines)
-    }
-
-    pub(crate) fn to_function_call_args(
-        &self,
-        location: Location,
-    ) -> Result<FunctionCallArgs, UroboroSQLFmtError> {
-        let mut exprs = Vec::new();
-        for item in &self.items {
-            if let Some(following_comment) = item.following_comments.first() {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    format!(
-                        "Comments following function arguments are not supported. Only trailing comments are supported.\ncomment: {}",
-                        following_comment.text()
-                    ),
-                ));
-            }
-
-            exprs.push(item.expr.clone());
-        }
-
-        Ok(FunctionCallArgs::new(exprs, location))
-    }
-
-    pub(crate) fn to_column_list(
-        &self,
-        location: Location,
-        start_comments: Vec<Comment>,
-    ) -> Result<ColumnList, UroboroSQLFmtError> {
-        // いずれかの ExprListItem に following_comments がある場合はエラーにする
-        let mut exprs = Vec::new();
-        for item in &self.items {
-            if let Some(following_comment) = item.following_comments.first() {
-                return Err(UroboroSQLFmtError::Unimplemented(
-                    format!(
-                        "Comments following columns are not supported. Only trailing comments are supported.\ncomment: {}",
-                        following_comment.text()
-                    ),
-                ));
-            }
-
-            exprs.push(item.expr.clone());
-        }
-
-        Ok(ColumnList::new(exprs, location, start_comments))
     }
 }
 

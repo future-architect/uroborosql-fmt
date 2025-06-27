@@ -4,7 +4,7 @@ mod func_expr_common_subexpr;
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{Body, Clause, Expr, Location},
+    cst::{Body, Clause, Expr, Location, SeparatedLines},
     error::UroboroSQLFmtError,
     new_visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
     util::convert_keyword_case,
@@ -264,7 +264,7 @@ impl Visitor {
         // cursor -> expr_list
         let exprs = self.visit_expr_list(cursor, src)?;
 
-        let sep_lines = exprs.to_separated_lines()?;
+        let sep_lines = SeparatedLines::from_expr_list(&exprs)?;
         clause.set_body(Body::SepLines(sep_lines));
 
         cursor.goto_parent();
