@@ -23,11 +23,6 @@ impl Statement {
         }
     }
 
-    /// ClauseのVecへの参照を取得する
-    pub(crate) fn get_clauses(self) -> Vec<Clause> {
-        self.clauses
-    }
-
     // 文に句を追加する
     pub(crate) fn add_clause(&mut self, clause: Clause) {
         match &mut self.loc {
