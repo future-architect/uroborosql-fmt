@@ -1,20 +1,20 @@
 pub mod config;
 mod cst;
 pub mod error;
+mod new_visitor;
+mod pg_validate;
 mod re;
 mod two_way_sql;
 mod util;
-mod new_visitor;
-mod pg_validate;
 
+use crate::pg_validate::validate_format_result as pg_validate_format_result;
 use config::*;
 use error::UroboroSQLFmtError;
 use new_visitor::Visitor as NewVisitor;
 use postgresql_cst_parser::tree_sitter::parse as pg_parse;
 use postgresql_cst_parser::tree_sitter::parse_2way as pg_parse_2way;
+use two_way_sql::is_two_way_sql;
 use two_way_sql::pg_format_two_way_sql;
-use two_way_sql::{is_two_way_sql};
-use crate::pg_validate::validate_format_result as pg_validate_format_result;
 
 /// 設定ファイルより優先させるオプションを JSON 文字列で与えて、SQLのフォーマットを行う。
 ///
