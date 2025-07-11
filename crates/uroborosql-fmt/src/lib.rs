@@ -2,12 +2,12 @@ pub mod config;
 mod cst;
 pub mod error;
 mod new_visitor;
-mod pg_validate;
 mod re;
 mod two_way_sql;
 mod util;
+mod validate;
 
-use crate::pg_validate::validate_format_result as pg_validate_format_result;
+use crate::validate::validate_format_result;
 use config::*;
 use error::UroboroSQLFmtError;
 use new_visitor::Visitor as NewVisitor;
@@ -58,7 +58,7 @@ pub(crate) fn format_sql_with_config(
                 eprintln!("mode: normal");
             }
 
-            pg_validate_format_result(src, false)?;
+            validate_format_result(src, false)?;
             load_settings(config);
 
             pg_format_cst(&tree, src)
@@ -71,7 +71,7 @@ pub(crate) fn format_sql_with_config(
                     eprintln!("mode: 2way-sql");
                 }
 
-                pg_validate_format_result(src, true)?;
+                validate_format_result(src, true)?;
                 load_settings(config);
 
                 pg_format_two_way_sql(src)
