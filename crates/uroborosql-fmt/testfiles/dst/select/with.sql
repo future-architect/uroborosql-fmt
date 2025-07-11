@@ -52,7 +52,7 @@ with /* _SQL_ID_ */
 			default
 		)
 		returning
-			did
+			did	as	did
 	)
 select
 	*
@@ -71,7 +71,7 @@ with recursive
 			default
 		)
 		returning
-			did	-- test
+			did	as	did	-- test
 	)	-- comment
 select
 	*

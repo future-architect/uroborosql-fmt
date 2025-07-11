@@ -40,5 +40,5 @@ INTO
 ,	'XYZ Widgets'
 )
 RETURNING
-	did
+	did	AS	did
 ;
