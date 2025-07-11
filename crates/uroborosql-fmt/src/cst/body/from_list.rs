@@ -2,8 +2,8 @@ use crate::cst::{
     add_indent, joined_table::JoinedTable, AlignInfo, AlignedExpr, Comment, Location,
 };
 use crate::error::UroboroSQLFmtError;
-use crate::new_visitor::COMMA;
 use crate::util::single_space;
+use crate::visitor::COMMA;
 
 #[derive(Debug, Clone)]
 pub(crate) enum TableRef {

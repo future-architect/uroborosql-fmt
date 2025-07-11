@@ -1,20 +1,20 @@
 pub mod config;
 mod cst;
 pub mod error;
-mod new_visitor;
 mod re;
 mod two_way_sql;
 mod util;
 mod validate;
+mod visitor;
 
 use crate::validate::validate_format_result;
 use config::*;
 use error::UroboroSQLFmtError;
-use new_visitor::Visitor as NewVisitor;
 use postgresql_cst_parser::tree_sitter::parse as pg_parse;
 use postgresql_cst_parser::tree_sitter::parse_2way as pg_parse_2way;
 use two_way_sql::is_two_way_sql;
 use two_way_sql::pg_format_two_way_sql;
+use visitor::Visitor;
 
 /// 設定ファイルより優先させるオプションを JSON 文字列で与えて、SQLのフォーマットを行う。
 ///
@@ -127,7 +127,7 @@ pub(crate) fn pg_format_cst(
     // }
 
     // ビジターオブジェクトを生成
-    let mut visitor = NewVisitor::default();
+    let mut visitor = Visitor::default();
 
     // SQLソースファイルをフォーマット用構造体に変換する
     let stmts = visitor.visit_sql(tree.root_node(), src.as_ref())?;
