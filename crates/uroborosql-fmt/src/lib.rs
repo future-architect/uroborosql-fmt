@@ -43,91 +43,49 @@ pub(crate) fn format_sql_with_config(
     config: Config,
 ) -> Result<String, UroboroSQLFmtError> {
     if CONFIG.read().unwrap().debug {
-        eprintln!("use_pg_parser = {}", config.use_pg_parser);
         eprintln!(
             "use_parser_error_recovery = {}",
             config.use_parser_error_recovery
         );
+        eprintln!("parser: postgresql-cst-parser");
     }
 
-    if config.use_pg_parser {
-        // postgresql-cst-parser を使用してパースする
-        if CONFIG.read().unwrap().debug {
-            eprintln!("parser: postgresql-cst-parser");
+    // パーサの2way-sql用エラー回復機能を使うかどうか
+    let use_parser_error_recovery = config.use_parser_error_recovery;
+
+    let parse_result = if use_parser_error_recovery {
+        pg_parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
+    } else {
+        pg_parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
+    };
+
+    match parse_result {
+        // パースできるSQLはそのままフォーマットする
+        Ok(tree) => {
+            if CONFIG.read().unwrap().debug {
+                eprintln!("mode: normal");
+            }
+
+            pg_validate_format_result(src, false)?;
+            load_settings(config);
+
+            pg_format_cst(&tree, src)
         }
-
-        // パーサの2way-sql用エラー回復機能を使うかどうか
-        let use_parser_error_recovery = config.use_parser_error_recovery;
-
-        let parse_result = if use_parser_error_recovery {
-            pg_parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
-        } else {
-            pg_parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
-        };
-
-        match parse_result {
-            // パースできるSQLはそのままフォーマットする
-            Ok(tree) => {
+        // パース出来ないSQLは、それが 2way-sqlならば2way-sqlモードでフォーマットする
+        // 2way-sqlでもない場合はパースエラーとして返す
+        Err(e) => {
+            if is_two_way_sql(src) {
                 if CONFIG.read().unwrap().debug {
-                    eprintln!("mode: normal");
+                    eprintln!("mode: 2way-sql");
                 }
 
-                pg_validate_format_result(src, false)?;
+                pg_validate_format_result(src, true)?;
                 load_settings(config);
 
-                pg_format_cst(&tree, src)
+                pg_format_two_way_sql(src)
+            } else {
+                Err(e)
             }
-            // パース出来ないSQLは、それが 2way-sqlならば2way-sqlモードでフォーマットする
-            // 2way-sqlでもない場合はパースエラーとして返す
-            Err(e) => {
-                if is_two_way_sql(src) {
-                    if CONFIG.read().unwrap().debug {
-                        eprintln!("mode: 2way-sql");
-                    }
-
-                    pg_validate_format_result(src, true)?;
-                    load_settings(config);
-
-                    pg_format_two_way_sql(src)
-                } else {
-                    Err(e)
-                }
-            }
-        }
-    } else {
-        // tree-sitter-sql を使用してパースする
-
-        // tree-sitter-sqlの言語を取得
-        let language = tree_sitter_sql::language();
-
-        let is_two_way_sql = is_two_way_sql(src);
-
-        validate_format_result(src, language, is_two_way_sql)?;
-
-        load_settings(config);
-
-        // パーサオブジェクトを生成
-        let mut parser = tree_sitter::Parser::new();
-        // tree-sitter-sqlの言語をパーサにセットする
-        parser.set_language(language).unwrap();
-        // srcをパースし、結果のTreeを取得
-        let tree = parser.parse(src, None).unwrap();
-        let has_syntax_error = has_syntax_error(&tree);
-
-        if is_two_way_sql && has_syntax_error {
-            // 2way-sqlモードでフォーマットする
-            if CONFIG.read().unwrap().debug {
-                eprintln!("\n{} 2way-sql mode {}\n", "=".repeat(20), "=".repeat(20));
-            }
-
-            format_two_way_sql(src, language)
-        } else {
-            // ノーマルモード
-            if CONFIG.read().unwrap().debug {
-                eprintln!("\n{} normal mode {}\n", "=".repeat(20), "=".repeat(20));
-            }
-
-            format_tree(tree, src)
         }
     }
 }
