@@ -2,8 +2,8 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-mod pgcst_util;
-use pgcst_util::print_diff;
+mod util;
+use util::print_diff;
 
 #[derive(Debug)]
 struct TestCase {
