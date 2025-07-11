@@ -1,5 +1,3 @@
-use tree_sitter::Node;
-
 use crate::{
     cst::{Comment, Location},
     error::UroboroSQLFmtError,
@@ -34,24 +32,9 @@ impl PrimaryExpr {
         }
     }
 
-    /// tree_sitter::Node から PrimaryExpr を生成する。
-    /// キーワードをPrimaryExprとして扱う場合があり、その際はこのメソッドで生成する。
-    /// kindによって自動でキーワードの大文字小文字ルールを適用する
-    pub(crate) fn with_node(node: Node, src: &str, kind: PrimaryExprKind) -> PrimaryExpr {
-        let element = node.utf8_text(src.as_bytes()).unwrap();
-
-        // PrimaryExprKindによって適用するルールを変更する
-        let converted_element = if matches!(kind, PrimaryExprKind::Keyword) {
-            // キーワードの大文字小文字設定を適用した文字列
-            convert_keyword_case(element)
-        } else {
-            // 文字列リテラルであればそのまま、DBオブジェクトであれば大文字小文字設定を適用した文字列
-            convert_identifier_case(element)
-        };
-
-        PrimaryExpr::new(converted_element, Location::new(node.range()))
-    }
-
+    /// NodeからPrimaryExprを生成する
+    /// キーワードを PrimaryExpr として扱う場合があり、その際はこのメソッドを使用する
+    /// kind によって自動でキーワードの大文字小文字ルールを適用する
     pub(crate) fn with_pg_node(
         node: postgresql_cst_parser::tree_sitter::Node,
         expr_kind: PrimaryExprKind,

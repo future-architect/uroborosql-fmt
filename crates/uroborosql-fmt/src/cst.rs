@@ -29,7 +29,6 @@ pub(crate) use single_line::*;
 pub(crate) use with::*;
 
 use itertools::{repeat_n, Itertools};
-use tree_sitter::{Node, Point, Range};
 
 use crate::{config::CONFIG, error::UroboroSQLFmtError, re::RE, util::add_indent};
 
@@ -39,15 +38,6 @@ pub(crate) struct Position {
     pub(crate) col: usize,
 }
 
-impl Position {
-    pub(crate) fn new(point: Point) -> Position {
-        Position {
-            row: point.row,
-            col: point.column,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Location {
     pub(crate) start_position: Position,
@@ -55,12 +45,6 @@ pub(crate) struct Location {
 }
 
 impl Location {
-    pub(crate) fn new(range: Range) -> Location {
-        Location {
-            start_position: Position::new(range.start_point),
-            end_position: Position::new(range.end_point),
-        }
-    }
     // 隣り合っているか？
     pub(crate) fn is_next_to(&self, loc: &Location) -> bool {
         self.is_same_line(loc)
@@ -96,14 +80,6 @@ pub(crate) struct Comment {
 }
 
 impl Comment {
-    // tree_sitter::NodeオブジェクトからCommentオブジェクトを生成する
-    pub(crate) fn new(node: Node, src: &str) -> Comment {
-        Comment {
-            text: node.utf8_text(src.as_bytes()).unwrap().to_string(),
-            loc: Location::new(node.range()),
-        }
-    }
-
     pub(crate) fn pg_new(node: postgresql_cst_parser::tree_sitter::Node) -> Comment {
         Comment {
             text: node.text().to_string(),
