@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
-    visitor::{pg_ensure_kind, Visitor},
+    visitor::{ensure_kind, Visitor},
 };
 
 impl Visitor {
@@ -14,10 +14,10 @@ impl Visitor {
         src: &str,
         keyword_kind: SyntaxKind,
     ) -> Result<PrimaryExpr, UroboroSQLFmtError> {
-        pg_ensure_kind!(cursor, expr: keyword_kind, src);
+        ensure_kind!(cursor, expr: keyword_kind, src);
 
         // cursor -> keyword
-        let keyword = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Keyword)?;
+        let keyword = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Keyword)?;
 
         Ok(keyword)
     }

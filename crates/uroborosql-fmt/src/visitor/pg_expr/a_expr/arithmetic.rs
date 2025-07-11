@@ -33,7 +33,7 @@ impl Visitor {
         let rhs = self.visit_a_expr_or_b_expr(cursor, src)?;
 
         // 演算子を PrimaryExpr として扱う
-        let op = PrimaryExpr::with_pg_node(op_node, PrimaryExprKind::Expr)?;
+        let op = PrimaryExpr::with_node(op_node, PrimaryExprKind::Expr)?;
 
         // ExprSeq として返す
         let expr_seq = ExprSeq::new(&[lhs, op.into(), rhs]);

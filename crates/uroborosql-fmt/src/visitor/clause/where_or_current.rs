@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause},
     error::UroboroSQLFmtError,
-    visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
 impl Visitor {
@@ -18,10 +18,10 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::WHERE);
+        let mut clause = create_clause!(cursor, SyntaxKind::WHERE);
         cursor.goto_next_sibling();
 
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         match cursor.node().kind() {
             SyntaxKind::a_expr => {
@@ -36,20 +36,20 @@ impl Visitor {
                 // - ColId
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_where_or_current_clause(): WHERE CURRENT_P OF cursor_name is not implemented.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_where_or_current_clause(): unexpected node kind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }
 
         cursor.goto_parent();
         // cursor -> where_or_current_clause
-        pg_ensure_kind!(cursor, SyntaxKind::where_or_current_clause, src);
+        ensure_kind!(cursor, SyntaxKind::where_or_current_clause, src);
 
         Ok(clause)
     }

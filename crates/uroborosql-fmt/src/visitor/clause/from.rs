@@ -8,7 +8,7 @@ use crate::{
     },
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA},
     CONFIG,
 };
 
@@ -22,12 +22,12 @@ impl Visitor {
 
         // cursor -> "FROM"
         cursor.goto_first_child();
-        pg_ensure_kind!(cursor, SyntaxKind::FROM, src);
+        ensure_kind!(cursor, SyntaxKind::FROM, src);
 
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::FROM);
+        let mut clause = create_clause!(cursor, SyntaxKind::FROM);
         cursor.goto_next_sibling();
 
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> Comma?
         let extra_leading_comma = if cursor.node().kind() == SyntaxKind::Comma {
@@ -37,10 +37,10 @@ impl Visitor {
             None
         };
 
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> from_list
-        pg_ensure_kind!(cursor, SyntaxKind::from_list, src);
+        ensure_kind!(cursor, SyntaxKind::from_list, src);
 
         let from_list = self.visit_from_list(cursor, src, extra_leading_comma)?;
 
@@ -48,7 +48,7 @@ impl Visitor {
 
         // cursor -> from_clause
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::from_clause, src);
+        ensure_kind!(cursor, SyntaxKind::from_clause, src);
 
         Ok(clause)
     }
@@ -66,7 +66,7 @@ impl Visitor {
         // from_listは必ず table_ref を子供に持つ
         // cursor -> table_ref
         cursor.goto_first_child();
-        pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
+        ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
         let mut from_body = FromList::new();
         from_body.set_extra_leading_comma(extra_leading_comma);
@@ -83,19 +83,19 @@ impl Visitor {
                     from_body.add_table_ref(table_ref);
                 }
                 SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     from_body.add_comment_to_child(comment)?;
                 }
                 SyntaxKind::C_COMMENT => {
                     let comment_node = cursor.node();
-                    let comment = Comment::pg_new(comment_node);
+                    let comment = Comment::new(comment_node);
 
                     let Some(next_sibling) = cursor.node().next_sibling() else {
                         // 最後の要素の行末にあるコメントは、 from_list の直下に現れず from_list と同階層の要素になる
                         // そのためコメントが最後の子供になることはなく、次のノードを必ず取得できる
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "visit_from_list(): unexpected node kind\n{}",
-                            pg_error_annotation_from_cursor(cursor, src)
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     };
 
@@ -103,7 +103,7 @@ impl Visitor {
                     if comment.loc().is_next_to(&next_sibling.range().into()) {
                         cursor.goto_next_sibling();
                         // cursor -> table_ref
-                        pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
+                        ensure_kind!(cursor, SyntaxKind::table_ref, src);
                         let mut table_ref = self.visit_table_ref(cursor, src)?;
 
                         // 置換文字列をセット
@@ -117,7 +117,7 @@ impl Visitor {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_from_list(): unexpected node kind: {}\n{}",
                         cursor.node().kind(),
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
@@ -125,7 +125,7 @@ impl Visitor {
 
         // cursor -> from_list
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::from_list, src);
+        ensure_kind!(cursor, SyntaxKind::from_list, src);
 
         Ok(Body::FromList(from_body))
     }
@@ -164,7 +164,7 @@ impl Visitor {
                 // cursor -> comment?
                 // エイリアスの直前にコメントが来る場合
                 if cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
 
                     // 行末以外のコメント（次行以降のコメント）は未定義
                     // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
@@ -173,7 +173,7 @@ impl Visitor {
                     } else {
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "visit_table_ref(): unexpected comment\n{}",
-                            pg_error_annotation_from_cursor(cursor, src)
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     }
                     cursor.goto_next_sibling();
@@ -200,7 +200,7 @@ impl Visitor {
                     }
 
                     cursor.goto_parent();
-                    pg_ensure_kind!(cursor, SyntaxKind::opt_alias_clause, src);
+                    ensure_kind!(cursor, SyntaxKind::opt_alias_clause, src);
                     cursor.goto_next_sibling();
                 }
 
@@ -209,13 +209,13 @@ impl Visitor {
                     // TABLESAMPLE
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "visit_table_ref(): tablesample_clause node appeared. Tablesample is not implemented yet.\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
 
                 cursor.goto_parent();
                 // cursor -> table_ref
-                pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
+                ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
                 Ok(TableRef::SimpleTable(table_ref))
             }
@@ -231,7 +231,7 @@ impl Visitor {
                 // cursor -> comment?
                 // エイリアスの直前にコメントが来る場合
                 if cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
 
                     // 行末以外のコメント（次行以降のコメント）は未定義
                     // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
@@ -240,7 +240,7 @@ impl Visitor {
                     } else {
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "visit_table_ref(): unexpected comment\n{}",
-                            pg_error_annotation_from_cursor(cursor, src)
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     }
                     cursor.goto_next_sibling();
@@ -267,12 +267,12 @@ impl Visitor {
                     }
 
                     cursor.goto_parent();
-                    pg_ensure_kind!(cursor, SyntaxKind::opt_alias_clause, src);
+                    ensure_kind!(cursor, SyntaxKind::opt_alias_clause, src);
                 }
 
                 cursor.goto_parent();
                 // cursor -> table_ref
-                pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
+                ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
                 Ok(TableRef::SimpleTable(table_ref))
             }
@@ -281,7 +281,7 @@ impl Visitor {
                 let joined_table = self.visit_joined_table(cursor, src)?;
 
                 cursor.goto_parent();
-                pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
+                ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
                 // joined_tableがExpr::JoinedTableの場合はTableRef::JoinedTableに、
                 // それ以外（括弧付きなど）はTableRef::SimpleTableに変換
@@ -308,17 +308,17 @@ impl Visitor {
                 cursor.goto_next_sibling();
                 // cursor -> comment?
                 while cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     paren.add_comment_to_child(comment)?;
                     cursor.goto_next_sibling();
                 }
 
-                pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+                ensure_kind!(cursor, SyntaxKind::RParen, src);
 
                 let mut aligned = paren.to_aligned();
 
                 cursor.goto_next_sibling();
-                pg_ensure_kind!(cursor, SyntaxKind::alias_clause, src);
+                ensure_kind!(cursor, SyntaxKind::alias_clause, src);
                 let (as_keyword, col_id) = self.visit_alias_clause(cursor, src)?;
 
                 // as の補完はしない。as が存在し、 remove_table_as_keyword が有効ならば AS を除去
@@ -333,7 +333,7 @@ impl Visitor {
                 }
 
                 cursor.goto_parent();
-                pg_ensure_kind!(cursor, SyntaxKind::table_ref, src);
+                ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
                 Ok(TableRef::SimpleTable(aligned))
             }
@@ -344,7 +344,7 @@ impl Visitor {
                 // - unnest(array[1, 2, 3]) as nums(n)
                 Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_table_ref(): func_table node appeared. Table function calls are not implemented yet.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
             SyntaxKind::LATERAL_P => {
@@ -355,7 +355,7 @@ impl Visitor {
                 // LATERAL json_table opt_alias_clause
                 Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_table_ref(): LATERAL_P node appeared. LATERAL expressions are not implemented yet.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
             SyntaxKind::xmltable => {
@@ -364,14 +364,14 @@ impl Visitor {
                 // - XMLTABLE('/root/row' PASSING data COLUMNS id int PATH '@id')
                 Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_table_ref(): xmltable node appeared. XML tables are not implemented yet.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
             _ => {
                 // TODO: json_table
                 Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_table_ref(): unexpected node kind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
         }
@@ -388,7 +388,7 @@ impl Visitor {
         // - [AS] ColId ['(' name_list ')']
 
         // cursor -> alias_clause
-        pg_ensure_kind!(cursor, SyntaxKind::alias_clause, src);
+        ensure_kind!(cursor, SyntaxKind::alias_clause, src);
 
         cursor.goto_first_child();
         // cursor -> AS?
@@ -402,7 +402,7 @@ impl Visitor {
         };
 
         // cursor -> ColId
-        let col_id = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Expr)?;
+        let col_id = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Expr)?;
         cursor.goto_next_sibling();
 
         // cursor -> '('?
@@ -410,12 +410,12 @@ impl Visitor {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_alias_clause(): {} node appeared. Name lists are not implemented yet.\n{}",
                 cursor.node().kind(),
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             )));
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::alias_clause, src);
+        ensure_kind!(cursor, SyntaxKind::alias_clause, src);
 
         Ok((as_keyword, col_id.into()))
     }
@@ -443,12 +443,12 @@ impl Visitor {
         match cursor.node().kind() {
             SyntaxKind::LParen => {
                 // '(' joined_table ')'
-                pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+                ensure_kind!(cursor, SyntaxKind::LParen, src);
 
                 cursor.goto_next_sibling();
                 let mut start_comments = vec![];
                 while cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     start_comments.push(comment);
                     cursor.goto_next_sibling();
                 }
@@ -459,7 +459,7 @@ impl Visitor {
 
                 let mut end_comments = vec![];
                 while cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     if !comment.is_block_comment()
                         && comment.loc().is_same_line(&joined_table.loc())
                     {
@@ -470,7 +470,7 @@ impl Visitor {
                     cursor.goto_next_sibling();
                 }
 
-                pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+                ensure_kind!(cursor, SyntaxKind::RParen, src);
 
                 cursor.goto_parent();
 
@@ -499,7 +499,7 @@ impl Visitor {
                 // cursor -> comment?
                 let mut comments_after_left = vec![];
                 while cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     // 行末コメントであれば左辺に追加
                     if !comment.is_block_comment() && comment.loc().is_same_line(&left.loc()) {
                         left.set_trailing_comment(comment)?;
@@ -533,14 +533,14 @@ impl Visitor {
                 }
 
                 // cursor -> JOIN
-                pg_ensure_kind!(cursor, SyntaxKind::JOIN, src);
+                ensure_kind!(cursor, SyntaxKind::JOIN, src);
                 keywords.push(convert_keyword_case(cursor.node().text()));
 
                 cursor.goto_next_sibling();
                 // cursor -> comment?
                 let mut comments_after_join_keyword = vec![];
                 while cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     comments_after_join_keyword.push(comment);
                     cursor.goto_next_sibling();
                 }
@@ -561,7 +561,7 @@ impl Visitor {
 
                 // cursor -> comments?
                 while cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     joined_table.add_comment_to_child(comment)?;
 
                     cursor.goto_next_sibling();
@@ -575,13 +575,13 @@ impl Visitor {
                 }
 
                 cursor.goto_parent();
-                pg_ensure_kind!(cursor, SyntaxKind::joined_table, src);
+                ensure_kind!(cursor, SyntaxKind::joined_table, src);
 
                 Ok(Expr::from(joined_table))
             }
             _ => Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                 "visit_joined_table(): unexpected node kind\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             ))),
         }
     }
@@ -601,14 +601,14 @@ impl Visitor {
             SyntaxKind::ON => {
                 // ON a_expr
 
-                pg_ensure_kind!(cursor, SyntaxKind::ON, src);
+                ensure_kind!(cursor, SyntaxKind::ON, src);
                 let on_keyword = convert_keyword_case(cursor.node().text());
 
                 cursor.goto_next_sibling();
                 // cursor -> comment?
                 let mut comments_after_keyword = vec![];
                 while cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     comments_after_keyword.push(comment);
                     cursor.goto_next_sibling();
                 }
@@ -619,7 +619,7 @@ impl Visitor {
                 let qualifier = Qualifier::new(on_keyword, comments_after_keyword, expr.into());
 
                 cursor.goto_parent();
-                pg_ensure_kind!(cursor, SyntaxKind::join_qual, src);
+                ensure_kind!(cursor, SyntaxKind::join_qual, src);
 
                 Ok(qualifier)
             }
@@ -627,12 +627,12 @@ impl Visitor {
                 // USING '(' name_list ')' opt_alias_clause_for_join_using
                 Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_join_qual(): USING node appeared. USING is not implemented yet.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
             _ => Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                 "visit_join_qual(): unexpected node kind\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             ))),
         }
     }
@@ -671,13 +671,13 @@ impl Visitor {
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_join_type(): unexpected node kind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::join_type, src);
+        ensure_kind!(cursor, SyntaxKind::join_type, src);
 
         Ok(keywords)
     }

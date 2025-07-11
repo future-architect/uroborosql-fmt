@@ -46,7 +46,7 @@ impl Visitor {
 
         let mut comments = vec![];
         while cursor.node().is_comment() {
-            comments.push(Comment::pg_new(cursor.node()));
+            comments.push(Comment::new(cursor.node()));
             cursor.goto_next_sibling();
         }
 

@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Clause, Comment, Statement},
     error::UroboroSQLFmtError,
-    visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
 // DeleteStmt
@@ -37,26 +37,26 @@ impl Visitor {
 
         // cursor -> comments?
         while cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             statement.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
 
         // cursor -> DELETE_P
-        pg_ensure_kind!(cursor, SyntaxKind::DELETE_P, src);
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::DELETE_P);
+        ensure_kind!(cursor, SyntaxKind::DELETE_P, src);
+        let mut clause = create_clause!(cursor, SyntaxKind::DELETE_P);
 
         cursor.goto_next_sibling();
-        self.pg_consume_or_complement_sql_id(cursor, &mut clause);
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_or_complement_sql_id(cursor, &mut clause);
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         statement.add_clause(clause);
 
         // cursor -> FROM
-        let mut from_clause = pg_create_clause!(cursor, SyntaxKind::FROM);
+        let mut from_clause = create_clause!(cursor, SyntaxKind::FROM);
         cursor.goto_next_sibling();
 
-        self.pg_consume_comments_in_clause(cursor, &mut from_clause)?;
+        self.consume_comments_in_clause(cursor, &mut from_clause)?;
 
         // cursor -> relation_expr_opt_alias
         let body = self.visit_relation_expr_opt_alias(cursor, src)?;
@@ -80,13 +80,13 @@ impl Visitor {
                     statement.add_clause(returning_clause);
                 }
                 SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     statement.add_comment_to_child(comment)?;
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_delete_stmt(): unexpected node kind\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
@@ -94,7 +94,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> DeleteStmt
-        pg_ensure_kind!(cursor, SyntaxKind::DeleteStmt, src);
+        ensure_kind!(cursor, SyntaxKind::DeleteStmt, src);
 
         Ok(statement)
     }
@@ -109,17 +109,17 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::USING);
+        let mut clause = create_clause!(cursor, SyntaxKind::USING);
         cursor.goto_next_sibling();
 
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         let body = self.visit_from_list(cursor, src, None)?;
         clause.set_body(body);
 
         cursor.goto_parent();
         // cursor -> using_clause
-        pg_ensure_kind!(cursor, SyntaxKind::using_clause, src);
+        ensure_kind!(cursor, SyntaxKind::using_clause, src);
 
         Ok(clause)
     }

@@ -8,10 +8,10 @@ use postgresql_cst_parser::tree_sitter::TreeCursor;
 use crate::{
     cst::{Comment, Expr},
     error::UroboroSQLFmtError,
-    visitor::pg_ensure_kind,
+    visitor::ensure_kind,
 };
 
-use super::{pg_error_annotation_from_cursor, Visitor};
+use super::{error_annotation_from_cursor, Visitor};
 
 impl Visitor {
     /// a_expr または b_expr を走査する
@@ -44,7 +44,7 @@ impl Visitor {
 
         // バインドパラメータの追加
         if let Some(comment_node) = head_comment_node {
-            let comment = Comment::pg_new(comment_node.clone());
+            let comment = Comment::new(comment_node.clone());
             if comment.loc().is_next_to(&expr.loc()) {
                 // 式に隣接していればバインドパラメータ
                 expr.set_head_comment(comment);
@@ -52,7 +52,7 @@ impl Visitor {
                 // TODO: 隣接していないコメント
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_a_expr_or_b_expr(): (bind parameter) separated comment\n{}",
-                    pg_error_annotation_from_cursor(&comment_node.walk(), src)
+                    error_annotation_from_cursor(&comment_node.walk(), src)
                 )));
             }
         }
@@ -65,7 +65,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> a_expr or b_expr (parent)
-        pg_ensure_kind!(cursor, expr: expr_kind, src);
+        ensure_kind!(cursor, expr: expr_kind, src);
 
         Ok(expr)
     }
@@ -86,19 +86,19 @@ impl Visitor {
             SyntaxKind::extended_relation_expr => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_relation_expr(): extended_relation_expr node appeared. Extended relation expressions are not implemented yet.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_relation_expr(): unexpected node kind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::relation_expr, src);
+        ensure_kind!(cursor, SyntaxKind::relation_expr, src);
 
         Ok(expr.into())
     }

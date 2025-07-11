@@ -6,7 +6,7 @@ use crate::{
     util::convert_keyword_case,
 };
 
-use super::super::pg_error_annotation_from_cursor;
+use super::super::error_annotation_from_cursor;
 use super::Visitor;
 
 impl Visitor {
@@ -46,7 +46,7 @@ impl Visitor {
         // cursor -> NULL_P | TRUE_P | FALSE_P | DISTINCT | UNKNOWN | DOCUMENT_P | NORMALIZED | unicode_normal_form | json_predicate_type_constraint
         let last_expr = match cursor.node().kind() {
             SyntaxKind::NULL_P | SyntaxKind::TRUE_P | SyntaxKind::FALSE_P => {
-                let primary = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Keyword)?;
+                let primary = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Keyword)?;
                 Expr::Primary(Box::new(primary))
             }
             SyntaxKind::DISTINCT => {
@@ -55,7 +55,7 @@ impl Visitor {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "handle_is_expr_nodes(): {} is not implemented.\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             SyntaxKind::UNKNOWN => {
@@ -64,7 +64,7 @@ impl Visitor {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "handle_is_expr_nodes(): {} is not implemented.\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             SyntaxKind::DOCUMENT_P
@@ -78,14 +78,14 @@ impl Visitor {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "handle_is_expr_nodes(): {} is not implemented.\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "handle_is_expr_nodes(): Unexpected syntax. node: {}\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };

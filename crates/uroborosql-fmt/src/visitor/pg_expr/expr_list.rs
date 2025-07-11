@@ -4,10 +4,10 @@ use postgresql_cst_parser::tree_sitter::TreeCursor;
 use crate::{
     cst::{Comment, ExprList, Location, ParenthesizedExprList},
     error::UroboroSQLFmtError,
-    visitor::{pg_ensure_kind, COMMA},
+    visitor::{ensure_kind, COMMA},
 };
 
-use super::{pg_error_annotation_from_cursor, Visitor};
+use super::{error_annotation_from_cursor, Visitor};
 
 impl Visitor {
     /// 呼出し後、 cursor は expr_list を指している
@@ -17,7 +17,7 @@ impl Visitor {
         src: &str,
     ) -> Result<ExprList, UroboroSQLFmtError> {
         // cursor -> expr_list
-        pg_ensure_kind!(cursor, SyntaxKind::expr_list, src);
+        ensure_kind!(cursor, SyntaxKind::expr_list, src);
 
         cursor.goto_first_child();
         // cursor -> a_expr
@@ -41,7 +41,7 @@ impl Visitor {
                     );
                 }
                 SyntaxKind::C_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
 
                     cursor.goto_next_sibling();
 
@@ -63,7 +63,7 @@ impl Visitor {
                     }
                 }
                 SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
 
                     expr_list.add_comment_to_last_item(comment)?;
                 }
@@ -71,7 +71,7 @@ impl Visitor {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_expr_list(): Unexpected syntax. node: {}\n{}",
                         cursor.node().kind(),
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
@@ -92,7 +92,7 @@ impl Visitor {
         src: &str,
     ) -> Result<ParenthesizedExprList, UroboroSQLFmtError> {
         // cursor -> '('
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
         let mut loc = Location::from(cursor.node().range());
 
         cursor.goto_next_sibling();
@@ -102,13 +102,13 @@ impl Visitor {
         // 最後の要素はバインドパラメータの可能性があるので、最初の式を処理した後で付け替える
         let mut start_comments = vec![];
         while cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             start_comments.push(comment);
             cursor.goto_next_sibling();
         }
 
         // cursor -> expr_list
-        pg_ensure_kind!(cursor, SyntaxKind::expr_list, src);
+        ensure_kind!(cursor, SyntaxKind::expr_list, src);
         let mut expr_list = self.visit_expr_list(cursor, src)?;
 
         // start_comments のうち最後のものは、 expr_list の最初の要素のバインドパラメータの可能性がある
@@ -129,14 +129,14 @@ impl Visitor {
         // cursor -> comment?
 
         if cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             expr_list.add_comment_to_last_item(comment)?;
 
             cursor.goto_next_sibling();
         }
 
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
         // Location が括弧全体を指すよう更新
         loc.append(Location::from(cursor.node().range()));
 

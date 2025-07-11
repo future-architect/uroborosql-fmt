@@ -7,7 +7,7 @@ use crate::{
     cst::{Body, Clause, Expr, Location, SeparatedLines},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor},
 };
 
 use super::Visitor;
@@ -47,7 +47,7 @@ impl Visitor {
         if cursor.node().kind() == SyntaxKind::func_expr_common_subexpr {
             let expr = self.visit_func_expr_common_subexpr(cursor, src)?;
             cursor.goto_parent();
-            pg_ensure_kind!(cursor, SyntaxKind::func_expr, src);
+            ensure_kind!(cursor, SyntaxKind::func_expr, src);
             return Ok(expr);
         }
 
@@ -57,13 +57,13 @@ impl Visitor {
             SyntaxKind::json_aggregate_func => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_func_expr(): json_aggregate_func is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_func_expr(): unexpected node kind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
@@ -73,7 +73,7 @@ impl Visitor {
         if cursor.node().kind() == SyntaxKind::within_group_clause {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_func_expr(): within_group_clause is not implemented\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             )));
         }
 
@@ -97,7 +97,7 @@ impl Visitor {
 
         cursor.goto_parent();
 
-        pg_ensure_kind!(cursor, SyntaxKind::func_expr, src);
+        ensure_kind!(cursor, SyntaxKind::func_expr, src);
 
         Ok(Expr::FunctionCall(Box::new(func)))
     }
@@ -111,18 +111,18 @@ impl Visitor {
         // - FILTER '(' WHERE a_expr ')'
 
         cursor.goto_first_child();
-        pg_ensure_kind!(cursor, SyntaxKind::FILTER, src);
+        ensure_kind!(cursor, SyntaxKind::FILTER, src);
         let filter_keyword = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         cursor.goto_next_sibling();
-        let mut where_clause = pg_create_clause!(cursor, SyntaxKind::WHERE);
+        let mut where_clause = create_clause!(cursor, SyntaxKind::WHERE);
 
         cursor.goto_next_sibling();
         // cursor -> comment?
-        self.pg_consume_comments_in_clause(cursor, &mut where_clause)?;
+        self.consume_comments_in_clause(cursor, &mut where_clause)?;
 
         // cursor -> a_expr
         let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
@@ -130,15 +130,15 @@ impl Visitor {
 
         cursor.goto_next_sibling();
         // cursor -> comment?
-        self.pg_consume_comments_in_clause(cursor, &mut where_clause)?;
+        self.consume_comments_in_clause(cursor, &mut where_clause)?;
 
         cursor.goto_next_sibling();
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         cursor.goto_parent();
         // cursor -> filter_clause
-        pg_ensure_kind!(cursor, SyntaxKind::filter_clause, src);
+        ensure_kind!(cursor, SyntaxKind::filter_clause, src);
 
         Ok((filter_keyword, where_clause))
     }
@@ -154,7 +154,7 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> OVER
-        pg_ensure_kind!(cursor, SyntaxKind::OVER, src);
+        ensure_kind!(cursor, SyntaxKind::OVER, src);
         let over_keyword = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
@@ -165,19 +165,19 @@ impl Visitor {
             SyntaxKind::ColId => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_over_clause(): ColId is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_over_clause(): unexpected node kind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::over_clause, src);
+        ensure_kind!(cursor, SyntaxKind::over_clause, src);
 
         Ok((over_keyword, clauses))
     }
@@ -191,7 +191,7 @@ impl Visitor {
         // - '(' opt_existing_window_name? opt_partition_clause? sort_clause? opt_frame_clause? ')'
 
         cursor.goto_first_child();
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         cursor.goto_next_sibling();
 
@@ -203,7 +203,7 @@ impl Visitor {
             // - ColId
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_window_specification(): opt_existing_window_name is not implemented\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             )));
         }
 
@@ -211,7 +211,7 @@ impl Visitor {
         if cursor.node().kind() == SyntaxKind::opt_partition_clause {
             let mut clause = self.visit_opt_partition_clause(cursor, src)?;
             cursor.goto_next_sibling();
-            self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+            self.consume_comments_in_clause(cursor, &mut clause)?;
             clauses.push(clause);
         }
 
@@ -219,7 +219,7 @@ impl Visitor {
         if cursor.node().kind() == SyntaxKind::sort_clause {
             let mut clause = self.visit_sort_clause(cursor, src)?;
             cursor.goto_next_sibling();
-            self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+            self.consume_comments_in_clause(cursor, &mut clause)?;
             clauses.push(clause);
         }
 
@@ -227,15 +227,15 @@ impl Visitor {
         if cursor.node().kind() == SyntaxKind::opt_frame_clause {
             let mut clause = self.visit_opt_frame_clause(cursor, src)?;
             cursor.goto_next_sibling();
-            self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+            self.consume_comments_in_clause(cursor, &mut clause)?;
             clauses.push(clause);
         }
 
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::window_specification, src);
+        ensure_kind!(cursor, SyntaxKind::window_specification, src);
 
         Ok(clauses)
     }
@@ -250,16 +250,16 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> PARTITION
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::PARTITION);
+        let mut clause = create_clause!(cursor, SyntaxKind::PARTITION);
 
         cursor.goto_next_sibling();
         // cursor -> BY
-        pg_ensure_kind!(cursor, SyntaxKind::BY, src);
-        clause.pg_extend_kw(cursor.node());
+        ensure_kind!(cursor, SyntaxKind::BY, src);
+        clause.extend_kw(cursor.node());
 
         cursor.goto_next_sibling();
         // cursor -> comment?
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> expr_list
         let exprs = self.visit_expr_list(cursor, src)?;
@@ -268,7 +268,7 @@ impl Visitor {
         clause.set_body(Body::SepLines(sep_lines));
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::opt_partition_clause, src);
+        ensure_kind!(cursor, SyntaxKind::opt_partition_clause, src);
 
         Ok(clause)
     }

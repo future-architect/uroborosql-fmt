@@ -4,7 +4,7 @@ use crate::{
     cst::{Comment, FunctionCall, FunctionCallArgs, FunctionCallKind, Location},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
 impl Visitor {
@@ -18,19 +18,19 @@ impl Visitor {
         // SUBSTRING '(' substr_list ')'
 
         // cursor -> SUBSTRING
-        pg_ensure_kind!(cursor, SyntaxKind::SUBSTRING, src);
+        ensure_kind!(cursor, SyntaxKind::SUBSTRING, src);
         let keyword_text = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
         // cursor -> '('
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         let mut args = FunctionCallArgs::new(vec![], Location::from(cursor.node().range()));
         cursor.goto_next_sibling();
 
         // cursor -> C_COMMENT?
         let comment_before_first_argument = if cursor.node().kind() == SyntaxKind::C_COMMENT {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             cursor.goto_next_sibling();
             Some(comment)
         } else {
@@ -42,7 +42,7 @@ impl Visitor {
             SyntaxKind::substr_list => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "handle_substring_function(): substr_list is not implemented yet\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             SyntaxKind::func_arg_list_opt => {
@@ -51,7 +51,7 @@ impl Visitor {
 
                 cursor.goto_first_child();
 
-                pg_ensure_kind!(cursor, SyntaxKind::func_arg_list, src);
+                ensure_kind!(cursor, SyntaxKind::func_arg_list, src);
                 self.visit_func_arg_list(cursor, src, &mut args, comment_before_first_argument)?;
 
                 cursor.goto_parent();
@@ -59,14 +59,14 @@ impl Visitor {
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "handle_substring_function(): unexpected node kind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }
 
         cursor.goto_next_sibling();
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
         args.append_loc(Location::from(cursor.node().range()));
 
         assert!(!cursor.goto_next_sibling());

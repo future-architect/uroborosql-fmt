@@ -33,7 +33,7 @@ impl PrimaryExpr {
     /// NodeからPrimaryExprを生成する
     /// キーワードを PrimaryExpr として扱う場合があり、その際はこのメソッドを使用する
     /// kind によって自動でキーワードの大文字小文字ルールを適用する
-    pub(crate) fn with_pg_node(
+    pub(crate) fn with_node(
         node: postgresql_cst_parser::tree_sitter::Node,
         expr_kind: PrimaryExprKind,
     ) -> Result<PrimaryExpr, UroboroSQLFmtError> {

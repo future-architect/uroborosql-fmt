@@ -4,7 +4,7 @@ use crate::{
     cst::{ExprList, FunctionCall, FunctionCallArgs, FunctionCallKind, Location},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
 impl Visitor {
@@ -20,12 +20,12 @@ impl Visitor {
         // TRIM '(' TRAILING trim_list ')'
 
         // cursor -> TRIM
-        pg_ensure_kind!(cursor, SyntaxKind::TRIM, src);
+        ensure_kind!(cursor, SyntaxKind::TRIM, src);
         let keyword_text = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
         // cursor -> '('
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
         let mut arg_loc = Location::from(cursor.node().range());
 
         cursor.goto_next_sibling();
@@ -37,17 +37,17 @@ impl Visitor {
         ) {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "handle_trim_function(): BOTH/LEADING/TRAILING is not implemented yet\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             )));
         }
 
         // cursor -> trim_list
-        pg_ensure_kind!(cursor, SyntaxKind::trim_list, src);
+        ensure_kind!(cursor, SyntaxKind::trim_list, src);
         let args = self.visit_trim_list(cursor, src)?;
 
         cursor.goto_next_sibling();
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
         arg_loc.append(Location::from(cursor.node().range()));
 
         assert!(!cursor.goto_next_sibling());
@@ -89,27 +89,27 @@ impl Visitor {
                 // a_expr FROM expr_list
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_trim_list(): a_expr FROM expr_list is not implemented yet\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             SyntaxKind::FROM => {
                 // FROM expr_list
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_trim_list(): FROM expr_list pattern is not implemented yet\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_trim_list(): unexpected node kind {}\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::trim_list, src);
+        ensure_kind!(cursor, SyntaxKind::trim_list, src);
 
         Ok(list)
     }

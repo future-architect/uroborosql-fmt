@@ -4,7 +4,7 @@ use crate::{
     cst::{ExistsSubquery, Expr, Location},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    visitor::{ensure_kind, error_annotation_from_cursor},
 };
 
 use super::Visitor;
@@ -32,7 +32,7 @@ impl Visitor {
         );
 
         // cursor -> EXISTS
-        pg_ensure_kind!(cursor, SyntaxKind::EXISTS, src);
+        ensure_kind!(cursor, SyntaxKind::EXISTS, src);
 
         let exists_keyword = convert_keyword_case(cursor.node().text());
 
@@ -46,14 +46,14 @@ impl Visitor {
             _ => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_exists_subquery(): select_expr is not a select expression\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         let exists_subquery = ExistsSubquery::new(&exists_keyword, select_subexpr, exists_loc);
 
-        pg_ensure_kind!(cursor, SyntaxKind::select_with_parens, src);
+        ensure_kind!(cursor, SyntaxKind::select_with_parens, src);
 
         Ok(exists_subquery)
     }

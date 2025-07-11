@@ -4,7 +4,7 @@ use crate::{
     cst::{FunctionCall, FunctionCallArgs, FunctionCallKind, Location},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_ensure_kind, Visitor},
+    visitor::{ensure_kind, Visitor},
 };
 
 impl Visitor {
@@ -15,33 +15,33 @@ impl Visitor {
         src: &str,
     ) -> Result<FunctionCall, UroboroSQLFmtError> {
         // cursor -> NULLIF
-        pg_ensure_kind!(cursor, SyntaxKind::NULLIF, src);
+        ensure_kind!(cursor, SyntaxKind::NULLIF, src);
         let keyword_text = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
         // cursor -> '('
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
         let mut arg_loc = Location::from(cursor.node().range());
 
         cursor.goto_next_sibling();
         // cursor -> a_expr (1st argument)
-        pg_ensure_kind!(cursor, SyntaxKind::a_expr, src);
+        ensure_kind!(cursor, SyntaxKind::a_expr, src);
         let first_expr = self.visit_a_expr_or_b_expr(cursor, src)?;
         let aligned_first = first_expr.to_aligned();
 
         cursor.goto_next_sibling();
         // cursor -> ','
-        pg_ensure_kind!(cursor, SyntaxKind::Comma, src);
+        ensure_kind!(cursor, SyntaxKind::Comma, src);
 
         cursor.goto_next_sibling();
         // cursor -> a_expr (2nd argument)
-        pg_ensure_kind!(cursor, SyntaxKind::a_expr, src);
+        ensure_kind!(cursor, SyntaxKind::a_expr, src);
         let second_expr = self.visit_a_expr_or_b_expr(cursor, src)?;
         let aligned_second = second_expr.to_aligned();
 
         cursor.goto_next_sibling();
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
         arg_loc.append(Location::from(cursor.node().range()));
 
         assert!(!cursor.goto_next_sibling());

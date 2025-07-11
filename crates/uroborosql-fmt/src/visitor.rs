@@ -91,13 +91,13 @@ impl Visitor {
                                 SelectStmtOutput::Expr(_) => {
                                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                                         "visit_source(): expr is not implemented\n{}",
-                                        pg_error_annotation_from_cursor(cursor, src)
+                                        error_annotation_from_cursor(cursor, src)
                                     )));
                                 }
                                 SelectStmtOutput::Values(_, _) => {
                                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                                         "visit_source(): VALUES clauses are not implemented\n{}",
-                                        pg_error_annotation_from_cursor(cursor, src)
+                                        error_annotation_from_cursor(cursor, src)
                                     )));
                                 }
                             }
@@ -108,7 +108,7 @@ impl Visitor {
                         _ => {
                             return Err(UroboroSQLFmtError::Unimplemented(format!(
                                 "visit_source(): Unimplemented statement\n{}",
-                                pg_error_annotation_from_cursor(cursor, src)
+                                error_annotation_from_cursor(cursor, src)
                             )));
                         }
                     };
@@ -123,7 +123,7 @@ impl Visitor {
                     above_semi = true;
                 }
                 SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     if !source.is_empty() && above_semi {
                         let last_stmt = source.last_mut().unwrap();
                         // すでにstatementがある場合、末尾に追加
@@ -157,7 +157,7 @@ impl Visitor {
     /// カーソルが指すノードがSQL_IDであれば、clauseに追加する
     /// もし (_SQL_ID_が存在していない) && (_SQL_ID_がまだ出現していない) && (_SQL_ID_の補完がオン)
     /// の場合は補完する
-    fn pg_consume_or_complement_sql_id(
+    fn consume_or_complement_sql_id(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         clause: &mut Clause,
@@ -182,13 +182,13 @@ impl Visitor {
     }
 
     /// カーソルが指すノードがコメントであれば、コメントを消費してclauseに追加する
-    fn pg_consume_comments_in_clause(
+    fn consume_comments_in_clause(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         clause: &mut Clause,
     ) -> Result<(), UroboroSQLFmtError> {
         while cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             clause.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
@@ -197,30 +197,30 @@ impl Visitor {
     }
 }
 
-macro_rules! pg_ensure_kind {
+macro_rules! ensure_kind {
     ($cursor:expr, expr: $keyword_expr:expr, $src:expr) => {{
         if $cursor.node().kind() != $keyword_expr {
             return Err($crate::UroboroSQLFmtError::UnexpectedSyntax(format!(
-                "pg_ensure_kind!(): excepted node is {}, but actual {}\n{}",
+                "ensure_kind!(): excepted node is {}, but actual {}\n{}",
                 $keyword_expr,
                 $cursor.node().kind(),
-                $crate::visitor::pg_error_annotation_from_cursor($cursor, $src)
+                $crate::visitor::error_annotation_from_cursor($cursor, $src)
             )));
         }
     }};
     ($cursor:expr, $keyword_pattern:pat, $src:expr) => {
         if !matches!($cursor.node().kind(), $keyword_pattern) {
             return Err($crate::UroboroSQLFmtError::UnexpectedSyntax(format!(
-                "pg_ensure_kind!(): excepted node is {}, but actual {}\n{}",
+                "ensure_kind!(): excepted node is {}, but actual {}\n{}",
                 stringify!($keyword_pattern),
                 $cursor.node().kind(),
-                $crate::visitor::pg_error_annotation_from_cursor($cursor, $src)
+                $crate::visitor::error_annotation_from_cursor($cursor, $src)
             )));
         }
     };
 }
 
-pub(crate) use pg_ensure_kind;
+pub(crate) use ensure_kind;
 
 fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
     let loc = lhs.loc();
@@ -236,18 +236,18 @@ fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
     }
 }
 
-macro_rules! pg_create_clause {
+macro_rules! create_clause {
     ($cursor:expr, expr: $keyword_expr:expr) => {{
-        pg_ensure_kind!($cursor, expr: $keyword_expr, $cursor.input);
-        crate::visitor::Clause::from_pg_node($cursor.node())
+        ensure_kind!($cursor, expr: $keyword_expr, $cursor.input);
+        crate::visitor::Clause::from_node($cursor.node())
     }};
     ($cursor:expr, $keyword_pattern:pat) => {{
-        pg_ensure_kind!($cursor, $keyword_pattern, $cursor.input);
-        crate::visitor::Clause::from_pg_node($cursor.node())
+        ensure_kind!($cursor, $keyword_pattern, $cursor.input);
+        crate::visitor::Clause::from_node($cursor.node())
     }};
 }
 
-pub(crate) use pg_create_clause;
+pub(crate) use create_clause;
 
 /// cursorからエラー注釈を作成する関数
 /// 以下の形のエラー注釈を生成
@@ -258,7 +258,7 @@ pub(crate) use pg_create_clause;
 ///   | ^^^^^^^^^^^^^ Appears as "ERROR" node on the CST
 ///   |
 /// ```
-fn pg_error_annotation_from_cursor(
+fn error_annotation_from_cursor(
     cursor: &postgresql_cst_parser::tree_sitter::TreeCursor,
     src: &str,
 ) -> String {

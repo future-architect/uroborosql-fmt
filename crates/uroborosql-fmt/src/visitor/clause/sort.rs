@@ -4,7 +4,7 @@ use crate::{
     cst::{AlignedExpr, Body, Clause, Comment, Expr, Location, PrimaryExpr, SeparatedLines},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA},
 };
 
 // sort_clause
@@ -29,17 +29,17 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> ORDER
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::ORDER);
+        let mut clause = create_clause!(cursor, SyntaxKind::ORDER);
         cursor.goto_next_sibling();
 
         // curosr -> BY
-        pg_ensure_kind!(cursor, SyntaxKind::BY, src);
-        clause.pg_extend_kw(cursor.node());
+        ensure_kind!(cursor, SyntaxKind::BY, src);
+        clause.extend_kw(cursor.node());
         cursor.goto_next_sibling();
 
         // cursor -> comment?
         if cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             clause.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
@@ -53,12 +53,12 @@ impl Visitor {
         };
 
         // cursor -> sortby_list
-        pg_ensure_kind!(cursor, SyntaxKind::sortby_list, src);
+        ensure_kind!(cursor, SyntaxKind::sortby_list, src);
         let sortby_list = self.visit_sortby_list(cursor, src, extra_leading_comma)?;
         clause.set_body(Body::SepLines(sortby_list));
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::sort_clause, src);
+        ensure_kind!(cursor, SyntaxKind::sort_clause, src);
 
         Ok(clause)
     }
@@ -95,7 +95,7 @@ impl Visitor {
                 }
                 SyntaxKind::Comma => is_preceding_comment_area = true,
                 SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     if is_preceding_comment_area {
                         preceding_comments.push(comment);
                     } else {
@@ -106,14 +106,14 @@ impl Visitor {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_sortby_list(): unexpected node\nnode kind: {}\n{}",
                         cursor.node().kind(),
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )))
                 }
             }
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::sortby_list, src);
+        ensure_kind!(cursor, SyntaxKind::sortby_list, src);
 
         Ok(sep_lines)
     }
@@ -188,7 +188,7 @@ impl Visitor {
             order_option_loc.push(Location::from(cursor.node().range()));
 
             cursor.goto_parent();
-            pg_ensure_kind!(cursor, SyntaxKind::opt_nulls_order, src);
+            ensure_kind!(cursor, SyntaxKind::opt_nulls_order, src);
         }
 
         // 要素をスペース区切りで PrimaryExpr に変換し、 AlignedExpr の右辺に追加
@@ -201,7 +201,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::sortby, src);
+        ensure_kind!(cursor, SyntaxKind::sortby, src);
 
         Ok(aligned_expr)
     }

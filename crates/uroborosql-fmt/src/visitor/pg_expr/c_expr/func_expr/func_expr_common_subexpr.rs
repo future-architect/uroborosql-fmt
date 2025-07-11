@@ -11,7 +11,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::Expr,
     error::UroboroSQLFmtError,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    visitor::{ensure_kind, error_annotation_from_cursor},
 };
 
 use super::Visitor;
@@ -165,13 +165,13 @@ impl Visitor {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_func_expr_common_subexpr(): function `{}` is not implemented\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::func_expr_common_subexpr, src);
+        ensure_kind!(cursor, SyntaxKind::func_expr_common_subexpr, src);
 
         Ok(expr)
     }

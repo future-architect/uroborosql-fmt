@@ -20,7 +20,7 @@ pub(crate) struct Clause {
 impl Clause {
     /// NodeからClauseを生成する
     /// キーワードの大文字小文字を設定に合わせて自動で変換する
-    pub(crate) fn from_pg_node(kw_node: postgresql_cst_parser::tree_sitter::Node) -> Clause {
+    pub(crate) fn from_node(kw_node: postgresql_cst_parser::tree_sitter::Node) -> Clause {
         let keyword = convert_keyword_case(kw_node.text());
         let loc = Location::from(kw_node.range());
         Clause {
@@ -38,7 +38,7 @@ impl Clause {
 
     /// postgresql-cst-parser の Node でキーワードを延長する (延長にはスペースを使用)
     /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
-    pub(crate) fn pg_extend_kw(&mut self, node: postgresql_cst_parser::tree_sitter::Node) {
+    pub(crate) fn extend_kw(&mut self, node: postgresql_cst_parser::tree_sitter::Node) {
         let loc = Location::from(node.range());
         self.loc.append(loc);
         self.keyword.push(' ');

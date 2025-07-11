@@ -4,7 +4,7 @@ use crate::{
     cst::{FunctionCall, FunctionCallKind},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_ensure_kind, Visitor},
+    visitor::{ensure_kind, Visitor},
 };
 
 impl Visitor {
@@ -20,7 +20,7 @@ impl Visitor {
         // keyword '(' expr_list ')'
 
         // cursor -> keyword
-        pg_ensure_kind!(cursor, expr: keyword_kind, src);
+        ensure_kind!(cursor, expr: keyword_kind, src);
         let keyword_text = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
@@ -41,7 +41,7 @@ impl Visitor {
                 .into(),
         );
 
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         Ok(function)
     }

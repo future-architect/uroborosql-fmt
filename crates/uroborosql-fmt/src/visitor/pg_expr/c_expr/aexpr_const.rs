@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Expr, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    visitor::{ensure_kind, error_annotation_from_cursor},
 };
 
 use super::Visitor;
@@ -37,21 +37,21 @@ impl Visitor {
             | SyntaxKind::Sconst
             | SyntaxKind::BCONST
             | SyntaxKind::XCONST => {
-                PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Expr)?.into()
+                PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Expr)?.into()
             }
             SyntaxKind::func_name => {
                 // func_name Sconst
                 // func_name '(' func_arg_list sort_clause? ')' Sconst
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_aexpr_const(): func_name is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             SyntaxKind::ConstTypename => {
                 // ConstTypename Sconst
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_aexpr_const(): ConstTypename is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             SyntaxKind::ConstInterval => {
@@ -59,22 +59,22 @@ impl Visitor {
                 // ConstInterval '(' Iconst ')' Sconst
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_aexpr_const(): ConstInterval is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             SyntaxKind::TRUE_P | SyntaxKind::FALSE_P | SyntaxKind::NULL_P => {
-                PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Keyword)?.into()
+                PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Keyword)?.into()
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_aexpr_const(): unexpected node kind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::AexprConst, src);
+        ensure_kind!(cursor, SyntaxKind::AexprConst, src);
 
         Ok(expr)
     }

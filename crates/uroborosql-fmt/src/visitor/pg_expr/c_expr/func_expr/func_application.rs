@@ -7,7 +7,7 @@ use crate::{
     },
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor},
 };
 
 use super::Visitor;
@@ -28,12 +28,12 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> func_name
-        pg_ensure_kind!(cursor, SyntaxKind::func_name, src);
+        ensure_kind!(cursor, SyntaxKind::func_name, src);
         let func_name = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
         // cursor -> '('
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         let mut args = self.handle_function_call_args(cursor, src)?;
 
@@ -52,11 +52,11 @@ impl Visitor {
         );
 
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
         cursor.goto_parent();
 
         // cursor -> func_application
-        pg_ensure_kind!(cursor, SyntaxKind::func_application, src);
+        ensure_kind!(cursor, SyntaxKind::func_application, src);
 
         Ok(func_call)
     }
@@ -81,7 +81,7 @@ impl Visitor {
 
         let mut function_call_args = FunctionCallArgs::new(vec![], cursor.node().range().into());
 
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         cursor.goto_next_sibling();
 
@@ -93,7 +93,7 @@ impl Visitor {
         // ALL | DISTINCT | VARIADIC ?
         match cursor.node().kind() {
             SyntaxKind::ALL | SyntaxKind::DISTINCT | SyntaxKind::VARIADIC => {
-                let all_distinct_clause = pg_create_clause!(cursor, expr: cursor.node().kind());
+                let all_distinct_clause = create_clause!(cursor, expr: cursor.node().kind());
                 function_call_args.set_all_distinct(all_distinct_clause);
 
                 cursor.goto_next_sibling();
@@ -103,7 +103,7 @@ impl Visitor {
 
         // cursor -> bind param?
         let first_arg_bind_param = if cursor.node().kind() == SyntaxKind::C_COMMENT {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             cursor.goto_next_sibling();
 
             Some(comment)
@@ -131,7 +131,7 @@ impl Visitor {
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "handle_function_call_args(): unexpected node kind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }
@@ -140,7 +140,7 @@ impl Visitor {
 
         // cursor -> comment?
         if cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             function_call_args.set_trailing_comment(comment)?;
 
             cursor.goto_next_sibling();
@@ -155,7 +155,7 @@ impl Visitor {
                 // e.g. concat_ws('a', 'b', VARIADIC array['c', 'd'])
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "handle_function_call_args(): VARIADIC after func_arg_list is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }
@@ -189,7 +189,7 @@ impl Visitor {
             } else {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_func_arg_list(): Comments are not supported at this position\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }
@@ -205,10 +205,10 @@ impl Visitor {
                 }
                 SyntaxKind::C_COMMENT => {
                     // バインドパラメータを想定する
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
 
                     cursor.goto_next_sibling();
-                    pg_ensure_kind!(cursor, SyntaxKind::func_arg_expr, src);
+                    ensure_kind!(cursor, SyntaxKind::func_arg_expr, src);
                     if comment
                         .loc()
                         .is_next_to(&Location::from(cursor.node().range()))
@@ -220,25 +220,25 @@ impl Visitor {
                     } else {
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "visit_func_arg_list(): Comments are not supported at this position\n{}",
-                            pg_error_annotation_from_cursor(cursor, src)
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     }
                 }
                 SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     function_call_args.set_trailing_comment(comment)?;
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_func_arg_list(): unexpected node kind\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::func_arg_list, src);
+        ensure_kind!(cursor, SyntaxKind::func_arg_list, src);
 
         Ok(())
     }
@@ -264,19 +264,19 @@ impl Visitor {
             SyntaxKind::param_name => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_func_arg_expr(): named argument is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_func_arg_expr(): unexpected node kind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::func_arg_expr, src);
+        ensure_kind!(cursor, SyntaxKind::func_arg_expr, src);
 
         Ok(arg)
     }

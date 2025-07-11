@@ -9,7 +9,7 @@ use crate::{
     cst::{Body, Expr, PrimaryExpr, PrimaryExprKind, SeparatedLines},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::pg_ensure_kind,
+    visitor::ensure_kind,
     Visitor, CONFIG,
 };
 
@@ -48,7 +48,7 @@ impl Visitor {
         let mut aligned = relation_expr.to_aligned();
         // cursor -> ColId?
         if cursor.node().kind() == SyntaxKind::ColId {
-            let col_id = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Expr)?;
+            let col_id = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Expr)?;
             let rhs = Expr::Primary(Box::new(col_id));
 
             aligned.add_rhs(as_keyword, rhs);
@@ -56,7 +56,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> relation_expr_opt_alias
-        pg_ensure_kind!(cursor, SyntaxKind::relation_expr_opt_alias, src);
+        ensure_kind!(cursor, SyntaxKind::relation_expr_opt_alias, src);
 
         let mut body = SeparatedLines::new();
         body.add_expr(aligned, None, vec![]);

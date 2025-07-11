@@ -9,7 +9,7 @@ use crate::{
     },
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, convert_keyword_case},
-    visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA},
 };
 
 use super::SelectStmtOutput;
@@ -56,7 +56,7 @@ impl Visitor {
 
         // cursor -> comments?
         while cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             statement.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
@@ -66,21 +66,21 @@ impl Visitor {
         // 本体をINTOがキーワードであるClauseに追加することで実現する
 
         // cursor -> INSERT
-        let mut insert_keyword_clause = pg_create_clause!(cursor, SyntaxKind::INSERT);
+        let mut insert_keyword_clause = create_clause!(cursor, SyntaxKind::INSERT);
         cursor.goto_next_sibling();
         // SQL_IDがあるかをチェック
-        self.pg_consume_or_complement_sql_id(cursor, &mut insert_keyword_clause);
-        self.pg_consume_comments_in_clause(cursor, &mut insert_keyword_clause)?;
+        self.consume_or_complement_sql_id(cursor, &mut insert_keyword_clause);
+        self.consume_comments_in_clause(cursor, &mut insert_keyword_clause)?;
 
         statement.add_clause(insert_keyword_clause);
 
         // cursor -> INTO
-        let mut into_keyword_clause = pg_create_clause!(cursor, SyntaxKind::INTO);
+        let mut into_keyword_clause = create_clause!(cursor, SyntaxKind::INTO);
         cursor.goto_next_sibling();
-        self.pg_consume_comments_in_clause(cursor, &mut into_keyword_clause)?;
+        self.consume_comments_in_clause(cursor, &mut into_keyword_clause)?;
 
         // cursor -> insert_target
-        pg_ensure_kind!(cursor, SyntaxKind::insert_target, src);
+        ensure_kind!(cursor, SyntaxKind::insert_target, src);
         let insert_target = self.visit_insert_target(cursor, src)?;
         let mut insert_body = InsertBody::new(loc, insert_target);
 
@@ -88,7 +88,7 @@ impl Visitor {
         // テーブル名直後のコメントを処理する
         // cursor -> comment?
         if cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             insert_body.add_comment_to_child(comment)?;
 
             cursor.goto_next_sibling();
@@ -109,7 +109,7 @@ impl Visitor {
 
         // cursor -> comment?
         if cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             insert_body.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
@@ -135,7 +135,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> InsertStmt
-        pg_ensure_kind!(cursor, SyntaxKind::InsertStmt, src);
+        ensure_kind!(cursor, SyntaxKind::InsertStmt, src);
 
         Ok(statement)
     }
@@ -150,7 +150,7 @@ impl Visitor {
         // - qualified_name AS ColId
 
         cursor.goto_first_child();
-        pg_ensure_kind!(cursor, SyntaxKind::qualified_name, src);
+        ensure_kind!(cursor, SyntaxKind::qualified_name, src);
 
         let loc = Location::from(cursor.node().range());
 
@@ -173,7 +173,7 @@ impl Visitor {
             cursor.goto_next_sibling();
             // パーサ側の reduce/shift conflict 回避の事情のため、
             // insert_target におけるエイリアスがある場合は AS が省略されることはない
-            pg_ensure_kind!(cursor, SyntaxKind::ColId, src);
+            ensure_kind!(cursor, SyntaxKind::ColId, src);
 
             let col_id = convert_identifier_case(cursor.node().text());
             let loc = Location::from(cursor.node().range());
@@ -183,7 +183,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::insert_target, src);
+        ensure_kind!(cursor, SyntaxKind::insert_target, src);
 
         Ok(aligned)
     }
@@ -219,7 +219,7 @@ impl Visitor {
         let values_or_query = self.handle_values_or_query_nodes(cursor, src)?;
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::insert_rest, src);
+        ensure_kind!(cursor, SyntaxKind::insert_rest, src);
 
         Ok((column_list_opt, values_or_query))
     }
@@ -238,19 +238,19 @@ impl Visitor {
         cursor.goto_next_sibling();
 
         // cursor -> insert_column_list
-        pg_ensure_kind!(cursor, SyntaxKind::insert_column_list, src);
+        ensure_kind!(cursor, SyntaxKind::insert_column_list, src);
         let mut column_list = self.visit_insert_column_list(cursor, src)?;
         cursor.goto_next_sibling();
 
         // カラム指定の最後のコメントを処理する
         if cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             column_list.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
 
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         Ok(column_list)
     }
@@ -267,7 +267,7 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> insert_column_item
-        pg_ensure_kind!(cursor, SyntaxKind::insert_column_item, src);
+        ensure_kind!(cursor, SyntaxKind::insert_column_item, src);
 
         let column_item = self.visit_insert_column_item(cursor, src)?;
         sep_lines.add_expr(column_item, None, vec![]);
@@ -280,20 +280,20 @@ impl Visitor {
                     sep_lines.add_expr(column_item, Some(COMMA.to_string()), vec![]);
                 }
                 SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     sep_lines.add_comment_to_child(comment)?;
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_insert_column_list: unexpected node \n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::insert_column_list, src);
+        ensure_kind!(cursor, SyntaxKind::insert_column_list, src);
 
         Ok(sep_lines)
     }
@@ -331,7 +331,7 @@ impl Visitor {
         // cursor -> comments?
         let mut comments_before_query = Vec::new();
         while cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             comments_before_query.push(comment);
             cursor.goto_next_sibling();
         }
@@ -347,7 +347,7 @@ impl Visitor {
                         if !comments_before_query.is_empty() {
                             return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                                 "visit_insert_rest: comments are not supported in this position \n{}",
-                                pg_error_annotation_from_cursor(cursor, src)
+                                error_annotation_from_cursor(cursor, src)
                             )));
                         }
 
@@ -367,7 +367,7 @@ impl Visitor {
                         if !comments_before_query.is_empty() {
                             return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                                 "visit_insert_rest: comments are not supported in this position \n{}",
-                                pg_error_annotation_from_cursor(cursor, src)
+                                error_annotation_from_cursor(cursor, src)
                             )));
                         }
 
@@ -380,20 +380,20 @@ impl Visitor {
                 // OVERRIDING override_kind VALUE_P SelectStmt
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_insert_rest: OVERRIDING is not implemented \n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             SyntaxKind::DEFAULT => {
                 // DEFAULT VALUES
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_insert_rest: DEFAULT is not implemented \n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_insert_rest: unexpected node \n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
         };
@@ -402,7 +402,7 @@ impl Visitor {
         assert!(
             !cursor.goto_next_sibling(),
             "visit_insert_rest: unexpected node \n{}",
-            pg_error_annotation_from_cursor(cursor, src)
+            error_annotation_from_cursor(cursor, src)
         );
 
         Ok(values_or_query)
@@ -420,12 +420,12 @@ impl Visitor {
         cursor.goto_first_child();
 
         // cursor -> ON
-        pg_ensure_kind!(cursor, SyntaxKind::ON, src);
+        ensure_kind!(cursor, SyntaxKind::ON, src);
         let on_keyword = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
         // cursor -> CONFLICT
-        pg_ensure_kind!(cursor, SyntaxKind::CONFLICT, src);
+        ensure_kind!(cursor, SyntaxKind::CONFLICT, src);
         let conflict_keyword = convert_keyword_case(cursor.node().text());
 
         let on_conflict_keyword = (on_keyword, conflict_keyword);
@@ -447,7 +447,7 @@ impl Visitor {
         let conflict_action = self.handle_conflict_action_nodes(cursor, src)?;
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::opt_on_conflict, src);
+        ensure_kind!(cursor, SyntaxKind::opt_on_conflict, src);
 
         Ok(OnConflict::new(
             on_conflict_keyword,
@@ -478,7 +478,7 @@ impl Visitor {
                 cursor.goto_next_sibling();
                 // cursor -> where_clause?
                 if cursor.node().kind() == SyntaxKind::where_clause {
-                    let where_clause = self.pg_visit_where_clause(cursor, src)?;
+                    let where_clause = self.visit_where_clause(cursor, src)?;
                     specify_index_column.set_where_clause(where_clause);
                 };
 
@@ -492,12 +492,12 @@ impl Visitor {
 
                 cursor.goto_next_sibling();
                 // cursor -> CONSTRAINT
-                pg_ensure_kind!(cursor, SyntaxKind::CONSTRAINT, src);
+                ensure_kind!(cursor, SyntaxKind::CONSTRAINT, src);
                 let constraint_keyword = cursor.node().text();
 
                 cursor.goto_next_sibling();
                 // cursor -> name
-                pg_ensure_kind!(cursor, SyntaxKind::name, src);
+                ensure_kind!(cursor, SyntaxKind::name, src);
 
                 let constraint_name = cursor.node().text();
 
@@ -512,13 +512,13 @@ impl Visitor {
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_opt_conf_expr: unexpected node \n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::opt_conf_expr, src);
+        ensure_kind!(cursor, SyntaxKind::opt_conf_expr, src);
 
         Ok(conflict_target)
     }
@@ -532,16 +532,16 @@ impl Visitor {
         src: &str,
     ) -> Result<ConflictTargetColumnList, UroboroSQLFmtError> {
         // '(' index_params ')'
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
         let mut loc = Location::from(cursor.node().range());
 
         cursor.goto_next_sibling();
-        pg_ensure_kind!(cursor, SyntaxKind::index_params, src);
+        ensure_kind!(cursor, SyntaxKind::index_params, src);
 
         let elements = self.visit_index_params(cursor, src)?;
 
         cursor.goto_next_sibling();
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
         // 閉じ括弧の位置まで Location を更新
         loc.append(Location::from(cursor.node().range()));
 
@@ -574,14 +574,14 @@ impl Visitor {
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_index_params: unexpected node \n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::index_params, src);
+        ensure_kind!(cursor, SyntaxKind::index_params, src);
 
         Ok(elements)
     }
@@ -619,21 +619,21 @@ impl Visitor {
                 }
 
                 cursor.goto_parent();
-                pg_ensure_kind!(cursor, SyntaxKind::index_elem, src);
+                ensure_kind!(cursor, SyntaxKind::index_elem, src);
 
                 Ok(element)
             }
             SyntaxKind::func_expr_windowless => Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_index_elem: func_expr_windowless is not implemented \n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             ))),
             SyntaxKind::LParen => Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_index_elem: '(' is not implemented \n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             ))),
             _ => Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                 "visit_index_elem: unexpected node \n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             ))),
         }
     }
@@ -679,14 +679,14 @@ impl Visitor {
             | SyntaxKind::opt_nulls_order => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_index_elem_options: not implemented \n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {}
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::index_elem_options, src);
+        ensure_kind!(cursor, SyntaxKind::index_elem_options, src);
 
         Ok((collate, qualified_name))
     }
@@ -700,15 +700,15 @@ impl Visitor {
         // - 'COLLATE' any_name
 
         cursor.goto_first_child();
-        pg_ensure_kind!(cursor, SyntaxKind::COLLATE, src);
+        ensure_kind!(cursor, SyntaxKind::COLLATE, src);
         let collate_keyword = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
-        pg_ensure_kind!(cursor, SyntaxKind::any_name, src);
+        ensure_kind!(cursor, SyntaxKind::any_name, src);
         let collation = convert_identifier_case(cursor.node().text());
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::opt_collate, src);
+        ensure_kind!(cursor, SyntaxKind::opt_collate, src);
 
         Ok(Collate::new(collate_keyword, collation))
     }
@@ -724,7 +724,7 @@ impl Visitor {
         // DO UPDATE SET set_clause_list where_clause
         // DO NOTHING
 
-        pg_ensure_kind!(cursor, SyntaxKind::DO, src);
+        ensure_kind!(cursor, SyntaxKind::DO, src);
         let do_keyword = cursor.node().text();
 
         cursor.goto_next_sibling();
@@ -739,14 +739,14 @@ impl Visitor {
                 );
 
                 cursor.goto_next_sibling();
-                pg_ensure_kind!(cursor, SyntaxKind::SET, src);
+                ensure_kind!(cursor, SyntaxKind::SET, src);
                 let set_clause = self.handle_set_clause_nodes(cursor, src)?;
 
                 cursor.goto_next_sibling();
 
                 // cursor -> where_clause?
                 let where_clause = if cursor.node().kind() == SyntaxKind::where_clause {
-                    Some(self.pg_visit_where_clause(cursor, src)?)
+                    Some(self.visit_where_clause(cursor, src)?)
                 } else {
                     None
                 };
@@ -766,7 +766,7 @@ impl Visitor {
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "handle_conflict_action_nodes: unexpected node \n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
@@ -775,7 +775,7 @@ impl Visitor {
         assert!(
             !cursor.goto_next_sibling(),
             "handle_conflict_action_nodes: unexpected node \n{}",
-            pg_error_annotation_from_cursor(cursor, src)
+            error_annotation_from_cursor(cursor, src)
         );
 
         Ok(conflict_action)

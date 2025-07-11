@@ -4,10 +4,10 @@ use crate::{
     cst::{AlignedExpr, ColumnList, Comment, Expr},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::pg_ensure_kind,
+    visitor::ensure_kind,
 };
 
-use super::super::{pg_error_annotation_from_cursor, Visitor};
+use super::super::{error_annotation_from_cursor, Visitor};
 
 impl Visitor {
     /// 左辺の式とオプションのNOTキーワードを受け取り、IN述語にあたるノード群を走査する
@@ -30,7 +30,7 @@ impl Visitor {
         //        └ not_keyword
 
         // cursor -> IN_P
-        pg_ensure_kind!(cursor, SyntaxKind::IN_P, src);
+        ensure_kind!(cursor, SyntaxKind::IN_P, src);
 
         // op_text: NOT IN or IN
         let op_text = if let Some(not_keyword) = not_keyword {
@@ -47,7 +47,7 @@ impl Visitor {
 
         // cursor -> comment?
         let bind_param = if cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             cursor.goto_next_sibling();
             Some(comment)
         } else {
@@ -55,7 +55,7 @@ impl Visitor {
         };
 
         // cursor -> in_expr
-        let mut rhs = self.visit_pg_in_expr(cursor, src)?;
+        let mut rhs = self.visit_in_expr(cursor, src)?;
 
         if let Some(comment) = bind_param {
             if comment.is_block_comment() && comment.loc().is_next_to(&rhs.loc()) {
@@ -63,7 +63,7 @@ impl Visitor {
             } else {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "handle_in_expr_nodes(): Unexpected comment\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }
@@ -77,7 +77,7 @@ impl Visitor {
     /// in_expr を Expr に変換する
     /// 呼出し後、cursorは in_expr を指している
     ///
-    fn visit_pg_in_expr(
+    fn visit_in_expr(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -104,14 +104,14 @@ impl Visitor {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_in_expr(): Unexpected syntax. node: {}\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
         // cursor -> in_expr
-        pg_ensure_kind!(cursor, SyntaxKind::in_expr, src);
+        ensure_kind!(cursor, SyntaxKind::in_expr, src);
 
         Ok(expr)
     }

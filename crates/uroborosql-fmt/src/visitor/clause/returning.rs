@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::Clause,
     error::UroboroSQLFmtError,
-    visitor::{pg_create_clause, pg_ensure_kind, Visitor},
+    visitor::{create_clause, ensure_kind, Visitor},
 };
 
 // returning_clause
@@ -34,18 +34,18 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::RETURNING);
+        let mut clause = create_clause!(cursor, SyntaxKind::RETURNING);
 
         cursor.goto_next_sibling();
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> target_list
-        pg_ensure_kind!(cursor, SyntaxKind::target_list, src);
+        ensure_kind!(cursor, SyntaxKind::target_list, src);
         let body = self.visit_target_list(cursor, src, None)?;
         clause.set_body(body);
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::returning_clause, src);
+        ensure_kind!(cursor, SyntaxKind::returning_clause, src);
 
         Ok(clause)
     }

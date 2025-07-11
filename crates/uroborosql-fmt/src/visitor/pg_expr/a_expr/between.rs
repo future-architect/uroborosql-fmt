@@ -4,7 +4,7 @@ use crate::{
     cst::{AlignedExpr, Comment, Expr},
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    visitor::{ensure_kind, error_annotation_from_cursor},
 };
 
 use super::Visitor;
@@ -33,7 +33,7 @@ impl Visitor {
         }
 
         // cursor -> BETWEEN
-        pg_ensure_kind!(cursor, SyntaxKind::BETWEEN, src);
+        ensure_kind!(cursor, SyntaxKind::BETWEEN, src);
         let between_keyword = cursor.node().text();
         operator += &convert_keyword_case(between_keyword);
         cursor.goto_next_sibling();
@@ -42,12 +42,12 @@ impl Visitor {
         if cursor.node().kind() == SyntaxKind::SYMMETRIC {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "handle_between_expr_nodes(): SYMMETRIC keyword is not implemented.\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             )));
         } else if cursor.node().kind() == SyntaxKind::opt_asymmetric {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "handle_between_expr_nodes(): ASYMMETRIC keyword is not implemented.\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             )));
         }
 
@@ -59,7 +59,7 @@ impl Visitor {
         // 行末コメント以外のコメントは想定しない
         // TODO: 左辺に行末コメントが現れた場合のコメント縦ぞろえ
         let start_trailing_comment = if cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             cursor.goto_next_sibling();
             Some(comment)
         } else {
@@ -67,7 +67,7 @@ impl Visitor {
         };
 
         // cursor -> AND
-        pg_ensure_kind!(cursor, SyntaxKind::AND, src);
+        ensure_kind!(cursor, SyntaxKind::AND, src);
         let and_keyword = cursor.node().text();
         cursor.goto_next_sibling();
 

@@ -11,11 +11,11 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Comment, Expr, ParenExpr},
     error::UroboroSQLFmtError,
-    visitor::pg_ensure_kind,
+    visitor::ensure_kind,
     CONFIG,
 };
 
-use super::{pg_error_annotation_from_cursor, Visitor};
+use super::{error_annotation_from_cursor, Visitor};
 
 /*
  * c_expr の構造
@@ -50,27 +50,27 @@ impl Visitor {
             SyntaxKind::PARAM => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_c_expr(): PARAM is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
             SyntaxKind::LParen => {
                 // '(' a_expr ')' opt_indirection
 
                 // cursor -> '('
-                pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+                ensure_kind!(cursor, SyntaxKind::LParen, src);
 
                 cursor.goto_next_sibling();
                 // cursor -> comments?
 
                 let mut start_comment_buf = vec![];
                 while cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     start_comment_buf.push(comment);
                     cursor.goto_next_sibling();
                 }
 
                 // cursor -> expr
-                pg_ensure_kind!(cursor, SyntaxKind::a_expr, src);
+                ensure_kind!(cursor, SyntaxKind::a_expr, src);
                 let mut expr = self.visit_a_expr_or_b_expr(cursor, src)?;
 
                 cursor.goto_next_sibling();
@@ -80,7 +80,7 @@ impl Visitor {
                 // cursor -> comment?
                 // 式の行末コメントならば式に付与し、そうでなければ閉じ括弧の前のコメントとして保持する
                 if cursor.node().kind() == SyntaxKind::SQL_COMMENT {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
 
                     if comment.loc().is_same_line(&expr.loc()) {
                         expr.add_comment_to_child(comment)?;
@@ -94,13 +94,13 @@ impl Visitor {
                 // cursor -> comments?
                 // 閉じ括弧の前のコメントを処理する
                 while cursor.node().is_comment() {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     end_comment_buf.push(comment);
                     cursor.goto_next_sibling();
                 }
 
                 // cursor -> ")"
-                pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+                ensure_kind!(cursor, SyntaxKind::RParen, src);
 
                 // 親(c_expr) の location を設定
                 // 親が無いことはありえないので、parent() の返り値が None の場合は panic する
@@ -147,13 +147,13 @@ impl Visitor {
             SyntaxKind::ARRAY => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_c_expr(): ARRAY is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
             SyntaxKind::explicit_row => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_c_expr(): explicit_row is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
             SyntaxKind::implicit_row => {
@@ -163,19 +163,19 @@ impl Visitor {
             SyntaxKind::GROUPING => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_c_expr(): GROUPING is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_c_expr(): unexpected syntaxkind\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::c_expr, src);
+        ensure_kind!(cursor, SyntaxKind::c_expr, src);
 
         Ok(expr)
     }

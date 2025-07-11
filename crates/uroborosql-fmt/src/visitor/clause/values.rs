@@ -4,7 +4,7 @@ use crate::{
     cst::ColumnList,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
 // values_clause:
@@ -44,13 +44,13 @@ impl Visitor {
                 SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_values_clause(): unexpected comment node appeared.\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_values_clause(): unexpected node kind\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
@@ -64,11 +64,11 @@ impl Visitor {
         }
 
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         cursor.goto_parent();
         // cursor -> values_clause
-        pg_ensure_kind!(cursor, SyntaxKind::values_clause, src);
+        ensure_kind!(cursor, SyntaxKind::values_clause, src);
 
         Ok((convert_keyword_case(values_keyword), rows))
     }

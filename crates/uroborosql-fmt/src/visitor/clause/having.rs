@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause},
     error::UroboroSQLFmtError,
-    visitor::{pg_create_clause, pg_ensure_kind, Visitor},
+    visitor::{create_clause, ensure_kind, Visitor},
 };
 
 impl Visitor {
@@ -17,16 +17,16 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::HAVING);
+        let mut clause = create_clause!(cursor, SyntaxKind::HAVING);
         cursor.goto_next_sibling();
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
         let body = Body::from(expr);
         clause.set_body(body);
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::having_clause, src);
+        ensure_kind!(cursor, SyntaxKind::having_clause, src);
 
         Ok(clause)
     }

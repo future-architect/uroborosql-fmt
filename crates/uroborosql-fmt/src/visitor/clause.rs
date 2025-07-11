@@ -23,11 +23,11 @@ use crate::{
     },
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, convert_keyword_case},
-    visitor::{create_alias_from_expr, pg_ensure_kind, Visitor, COMMA},
+    visitor::{create_alias_from_expr, ensure_kind, Visitor, COMMA},
     CONFIG,
 };
 
-use super::pg_error_annotation_from_cursor;
+use super::error_annotation_from_cursor;
 
 impl Visitor {
     pub(crate) fn visit_qualified_name(
@@ -40,13 +40,13 @@ impl Visitor {
         // - ColId indirection
 
         cursor.goto_first_child();
-        pg_ensure_kind!(cursor, SyntaxKind::ColId, src);
+        ensure_kind!(cursor, SyntaxKind::ColId, src);
 
         let mut qualified_name_text = cursor.node().text().to_string();
 
         if cursor.goto_next_sibling() {
             // indirection が存在する場合
-            pg_ensure_kind!(cursor, SyntaxKind::indirection, src);
+            ensure_kind!(cursor, SyntaxKind::indirection, src);
 
             let indirection_text = cursor.node().text().to_string();
 
@@ -56,7 +56,7 @@ impl Visitor {
                 // - https://github.com/postgres/postgres/blob/e2809e3a1015697832ee4d37b75ba1cd0caac0f0/src/backend/parser/gram.y#L18963-L18967
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_qualified_name(): invalid subscript notation appeared.\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
 
@@ -71,7 +71,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> qualified_name
-        pg_ensure_kind!(cursor, SyntaxKind::qualified_name, src);
+        ensure_kind!(cursor, SyntaxKind::qualified_name, src);
 
         let primary = PrimaryExpr::new(
             convert_identifier_case(&qualified_name_text),
@@ -109,12 +109,12 @@ impl Visitor {
                     sep_lines.add_expr(target_el, Some(COMMA.to_string()), vec![]);
                 }
                 SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     sep_lines.add_comment_to_child(comment)?;
                 }
                 SyntaxKind::C_COMMENT => {
                     let comment_node = cursor.node();
-                    let comment = Comment::pg_new(comment_node);
+                    let comment = Comment::new(comment_node);
 
                     // バインドパラメータ判定のためにコメントの次のノードを取得する
                     let Some(next_sibling) = cursor.node().next_sibling() else {
@@ -123,7 +123,7 @@ impl Visitor {
 
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "visit_target_list(): unexpected node kind\n{}",
-                            pg_error_annotation_from_cursor(cursor, src)
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     };
 
@@ -145,7 +145,7 @@ impl Visitor {
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_target_list(): unexpected node kind\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
@@ -153,7 +153,7 @@ impl Visitor {
 
         // cursorをtarget_listに
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::target_list, src);
+        ensure_kind!(cursor, SyntaxKind::target_list, src);
 
         Ok(Body::SepLines(sep_lines))
     }
@@ -206,7 +206,7 @@ impl Visitor {
                     "visit_target_el(): excepted node is {}, but actual {}\n{}",
                     SyntaxKind::target_el,
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )))
             }
         };
@@ -218,14 +218,14 @@ impl Visitor {
             // cursor -> comment
             // AS の直前にコメントがある場合
             if cursor.node().is_comment() {
-                let comment = Comment::pg_new(cursor.node());
+                let comment = Comment::new(cursor.node());
 
                 if comment.is_block_comment() || !comment.loc().is_same_line(&lhs_expr.loc()) {
                     // 行末以外のコメント(次以降の行のコメント)は未定義
                     // 通常、エイリアスの直前に複数コメントが来るような書き方はしないため未対応
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_target_el(): unexpected comment\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 } else {
                     // 行末コメント
@@ -253,8 +253,8 @@ impl Visitor {
             // ColLabel は as キーワードを使ったときのラベルで、BareColLabel は as キーワードを使わないときのラベル
             // ColLabel にはどんなラベルも利用でき、 BareColLabel の場合は限られたラベルしか利用できないという構文上の区別があるが、
             // フォーマッタとしては関係がないので同じように扱う
-            pg_ensure_kind!(cursor, SyntaxKind::ColLabel | SyntaxKind::BareColLabel, src);
-            let rhs_expr = PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Expr)?;
+            ensure_kind!(cursor, SyntaxKind::ColLabel | SyntaxKind::BareColLabel, src);
+            let rhs_expr = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Expr)?;
             aligned.add_rhs(as_keyword, rhs_expr.into());
         } else {
             // エイリアスを補完する設定が有効で、かつ識別子の場合はエイリアスを補完する
@@ -266,7 +266,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::target_el, src);
+        ensure_kind!(cursor, SyntaxKind::target_el, src);
 
         Ok(aligned)
     }

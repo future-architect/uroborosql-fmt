@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause, Comment, Expr, SeparatedLines},
     error::UroboroSQLFmtError,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor, COMMA},
 };
 
 // for_locking_clause
@@ -48,7 +48,7 @@ impl Visitor {
                 // FOR READ ONLY
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_for_locking_clause: FOR READ ONLY is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
@@ -60,7 +60,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::for_locking_clause, src);
+        ensure_kind!(cursor, SyntaxKind::for_locking_clause, src);
 
         Ok(clauses)
     }
@@ -85,7 +85,7 @@ impl Visitor {
                     self.visit_for_locking_item(cursor, src, &mut clauses)?;
                 }
                 SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     clauses.last_mut().unwrap().add_comment_to_child(comment)?;
                 }
                 _ => {
@@ -98,7 +98,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::for_locking_items, src);
+        ensure_kind!(cursor, SyntaxKind::for_locking_items, src);
 
         Ok(clauses)
     }
@@ -128,7 +128,7 @@ impl Visitor {
         }
 
         // cursor -> comments?
-        self.pg_consume_comments_in_clause(cursor, &mut for_update_clause)?;
+        self.consume_comments_in_clause(cursor, &mut for_update_clause)?;
 
         clauses.push(for_update_clause);
 
@@ -140,7 +140,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::for_locking_item, src);
+        ensure_kind!(cursor, SyntaxKind::for_locking_item, src);
         Ok(())
     }
 
@@ -157,15 +157,15 @@ impl Visitor {
         cursor.goto_first_child();
 
         // cursor -> FOR
-        pg_ensure_kind!(cursor, SyntaxKind::FOR, src);
-        let mut clause = Clause::from_pg_node(cursor.node());
+        ensure_kind!(cursor, SyntaxKind::FOR, src);
+        let mut clause = Clause::from_node(cursor.node());
 
         while cursor.goto_next_sibling() {
-            clause.pg_extend_kw(cursor.node());
+            clause.extend_kw(cursor.node());
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::for_locking_strength, src);
+        ensure_kind!(cursor, SyntaxKind::for_locking_strength, src);
 
         Ok(clause)
     }
@@ -181,11 +181,11 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        clause.pg_extend_kw(cursor.node());
+        clause.extend_kw(cursor.node());
         cursor.goto_next_sibling();
 
         // cursor -> comments?
-        self.pg_consume_comments_in_clause(cursor, clause)?;
+        self.consume_comments_in_clause(cursor, clause)?;
 
         // cursor -> qualified_name_list
         let table_name_list = self.visit_qualified_name_list(cursor, src)?;
@@ -193,7 +193,7 @@ impl Visitor {
         clause.set_body(table_name_list);
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::locked_rels_list, src);
+        ensure_kind!(cursor, SyntaxKind::locked_rels_list, src);
 
         Ok(())
     }
@@ -217,11 +217,11 @@ impl Visitor {
             match cursor.node().kind() {
                 SyntaxKind::Comma => {}
                 SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     separated_lines.add_comment_to_child(comment)?;
                 }
                 SyntaxKind::C_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
 
                     // コメントノードはリストにおける最後の要素になることはないため panic しない
                     let sibling_node = cursor.node().next_sibling().unwrap();
@@ -259,7 +259,7 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::qualified_name_list, src);
+        ensure_kind!(cursor, SyntaxKind::qualified_name_list, src);
 
         Ok(Body::SepLines(separated_lines))
     }
@@ -275,14 +275,14 @@ impl Visitor {
 
         cursor.goto_first_child();
 
-        let mut clause = Clause::from_pg_node(cursor.node());
+        let mut clause = Clause::from_node(cursor.node());
 
         if cursor.goto_next_sibling() {
-            clause.pg_extend_kw(cursor.node());
+            clause.extend_kw(cursor.node());
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::opt_nowait_or_skip, src);
+        ensure_kind!(cursor, SyntaxKind::opt_nowait_or_skip, src);
 
         Ok(clause)
     }

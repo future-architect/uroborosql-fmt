@@ -4,11 +4,11 @@ use crate::{
     cst::*,
     error::UroboroSQLFmtError,
     util::convert_keyword_case,
-    visitor::{pg_create_clause, pg_ensure_kind, Visitor},
+    visitor::{create_clause, ensure_kind, Visitor},
 };
 
 impl Visitor {
-    pub(crate) fn pg_visit_where_clause(
+    pub(crate) fn visit_where_clause(
         &mut self,
         cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
@@ -16,9 +16,9 @@ impl Visitor {
         cursor.goto_first_child();
 
         // cursor -> WHERE
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::WHERE);
+        let mut clause = create_clause!(cursor, SyntaxKind::WHERE);
         cursor.goto_next_sibling();
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         let extra_leading_boolean_operator =
             if cursor.node().kind() == SyntaxKind::AND || cursor.node().kind() == SyntaxKind::OR {
@@ -48,7 +48,7 @@ impl Visitor {
 
         // cursorをwhere_clauseに戻す
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::where_clause, src);
+        ensure_kind!(cursor, SyntaxKind::where_clause, src);
 
         Ok(clause)
     }

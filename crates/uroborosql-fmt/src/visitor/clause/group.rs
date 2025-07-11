@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause, Comment, Expr, SeparatedLines},
     error::UroboroSQLFmtError,
-    visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA},
 };
 
 // group_clause
@@ -33,19 +33,19 @@ impl Visitor {
         cursor.goto_first_child();
 
         // cursor -> GROUP_P
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::GROUP_P);
+        let mut clause = create_clause!(cursor, SyntaxKind::GROUP_P);
         cursor.goto_next_sibling();
 
         // cursor -> BY
-        clause.pg_extend_kw(cursor.node());
+        clause.extend_kw(cursor.node());
         cursor.goto_next_sibling();
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> set_quantifier?
         if cursor.node().kind() == SyntaxKind::set_quantifier {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_group_clause(): set_quantifier is not implemented\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             )));
         }
 
@@ -53,7 +53,7 @@ impl Visitor {
         clause.set_body(Body::SepLines(group_by_list));
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::group_clause, src);
+        ensure_kind!(cursor, SyntaxKind::group_clause, src);
 
         Ok(clause)
     }
@@ -84,20 +84,20 @@ impl Visitor {
                     sep_lines.add_expr(expr.to_aligned(), Some(COMMA.to_string()), vec![]);
                 }
                 SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     sep_lines.add_comment_to_child(comment)?;
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_group_by_list(): unexpected node\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::group_by_list, src);
+        ensure_kind!(cursor, SyntaxKind::group_by_list, src);
 
         Ok(sep_lines)
     }
@@ -124,19 +124,19 @@ impl Visitor {
             | SyntaxKind::grouping_sets_clause => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_group_by_item(): unimplemented node\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_group_by_item(): unexpected node\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::group_by_item, src);
+        ensure_kind!(cursor, SyntaxKind::group_by_item, src);
 
         Ok(expr)
     }

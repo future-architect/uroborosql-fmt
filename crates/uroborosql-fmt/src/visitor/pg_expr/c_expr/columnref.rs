@@ -4,7 +4,7 @@ use crate::{
     cst::{AsteriskExpr, Expr, PrimaryExpr},
     error::UroboroSQLFmtError,
     util::convert_identifier_case,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    visitor::{ensure_kind, error_annotation_from_cursor},
 };
 
 use super::Visitor;
@@ -22,12 +22,12 @@ impl Visitor {
         // cursor -> ColId (必ず存在する)
         cursor.goto_first_child();
 
-        pg_ensure_kind!(cursor, SyntaxKind::ColId, src);
+        ensure_kind!(cursor, SyntaxKind::ColId, src);
         let mut columnref_text = cursor.node().text().to_string();
 
         if cursor.goto_next_sibling() {
             // cursor -> indirection
-            pg_ensure_kind!(cursor, SyntaxKind::indirection, src);
+            ensure_kind!(cursor, SyntaxKind::indirection, src);
 
             // indirection
             // - indirection_el
@@ -44,7 +44,7 @@ impl Visitor {
             if indirection_text.contains('[') {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_columnref(): array access is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
 
@@ -72,7 +72,7 @@ impl Visitor {
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::columnref, src);
+        ensure_kind!(cursor, SyntaxKind::columnref, src);
 
         Ok(expr)
     }

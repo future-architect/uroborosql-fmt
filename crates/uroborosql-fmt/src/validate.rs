@@ -2,7 +2,7 @@ use itertools::Itertools;
 use postgresql_cst_parser::{lex, Token, TokenKind};
 
 use crate::{
-    config::load_never_complement_settings, pg_format, pg_format_two_way_sql, UroboroSQLFmtError,
+    config::load_never_complement_settings, format, format_two_way_sql, UroboroSQLFmtError,
 };
 
 /// フォーマット前後でSQLに欠落が生じないかを検証する。
@@ -15,9 +15,9 @@ pub(crate) fn validate_format_result(
     load_never_complement_settings();
 
     let format_result = if is_2way_sql_mode {
-        pg_format_two_way_sql(src)?
+        format_two_way_sql(src)?
     } else {
-        pg_format(src)?
+        format(src)?
     };
 
     let mut src_tokens = lex(src);

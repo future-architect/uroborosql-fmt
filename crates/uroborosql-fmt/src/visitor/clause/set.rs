@@ -6,7 +6,7 @@ use crate::{
     },
     error::UroboroSQLFmtError,
     util::convert_identifier_case,
-    visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor, COMMA},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA},
 };
 
 impl Visitor {
@@ -21,15 +21,15 @@ impl Visitor {
         // SET set_clause_list
 
         // cursor -> SET
-        pg_ensure_kind!(cursor, SyntaxKind::SET, src);
-        let mut set_clause = pg_create_clause!(cursor, SyntaxKind::SET);
+        ensure_kind!(cursor, SyntaxKind::SET, src);
+        let mut set_clause = create_clause!(cursor, SyntaxKind::SET);
         cursor.goto_next_sibling();
 
         // キーワード直後のコメントを処理
-        self.pg_consume_comments_in_clause(cursor, &mut set_clause)?;
+        self.consume_comments_in_clause(cursor, &mut set_clause)?;
 
         // cursor -> set_clause_list
-        pg_ensure_kind!(cursor, SyntaxKind::set_clause_list, src);
+        ensure_kind!(cursor, SyntaxKind::set_clause_list, src);
         let set_clause_list = self.visit_set_clause_list(cursor, src)?;
 
         set_clause.set_body(set_clause_list);
@@ -49,7 +49,7 @@ impl Visitor {
         cursor.goto_first_child();
         let mut sep_lines = SeparatedLines::new();
 
-        pg_ensure_kind!(cursor, SyntaxKind::set_clause, src);
+        ensure_kind!(cursor, SyntaxKind::set_clause, src);
         let set_clause = self.visit_set_clause(cursor, src)?;
         sep_lines.add_expr(set_clause, None, vec![]);
 
@@ -63,13 +63,13 @@ impl Visitor {
                     continue;
                 }
                 SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     sep_lines.add_comment_to_child(comment)?;
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_set_clause_list(): unexpected syntax\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
@@ -77,7 +77,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> set_clause_list
-        pg_ensure_kind!(cursor, SyntaxKind::set_clause_list, src);
+        ensure_kind!(cursor, SyntaxKind::set_clause_list, src);
 
         Ok(Body::SepLines(sep_lines))
     }
@@ -99,13 +99,13 @@ impl Visitor {
             SyntaxKind::LParen => {
                 let column_list = self.handle_parenthesized_set_target_list(cursor, src)?;
 
-                pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+                ensure_kind!(cursor, SyntaxKind::RParen, src);
                 Expr::ColumnList(Box::new(column_list))
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_set_clause(): unexpected syntax\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
@@ -113,7 +113,7 @@ impl Visitor {
         let mut aligned = AlignedExpr::new(lhs);
 
         cursor.goto_next_sibling();
-        pg_ensure_kind!(cursor, SyntaxKind::Equals, src);
+        ensure_kind!(cursor, SyntaxKind::Equals, src);
 
         cursor.goto_next_sibling();
         let rhs = self.visit_a_expr_or_b_expr(cursor, src)?;
@@ -122,7 +122,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> set_clause
-        pg_ensure_kind!(cursor, SyntaxKind::set_clause, src);
+        ensure_kind!(cursor, SyntaxKind::set_clause, src);
 
         Ok(aligned)
     }
@@ -168,7 +168,7 @@ impl Visitor {
         // '(' set_target_list ')'
 
         // cursor -> '('
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
         // 開き括弧の位置を保持
         let mut column_list_location = Location::from(cursor.node().range());
 
@@ -178,7 +178,7 @@ impl Visitor {
         // 最後の要素はバインドパラメータの可能性があるので、最初の式を処理した後で付け替える
         let mut start_comments = vec![];
         while cursor.node().is_comment() {
-            start_comments.push(Comment::pg_new(cursor.node()));
+            start_comments.push(Comment::new(cursor.node()));
             cursor.goto_next_sibling();
         }
 
@@ -202,7 +202,7 @@ impl Visitor {
 
         cursor.goto_next_sibling();
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         // location を閉じ括弧の位置までに更新
         column_list_location.append(cursor.node().range().into());
@@ -226,7 +226,7 @@ impl Visitor {
         let mut exprs = Vec::new();
 
         // 最初の要素
-        pg_ensure_kind!(cursor, SyntaxKind::set_target, src);
+        ensure_kind!(cursor, SyntaxKind::set_target, src);
         let expr = self.visit_set_target(cursor, src)?;
         exprs.push(expr.to_aligned());
 
@@ -240,7 +240,7 @@ impl Visitor {
                 }
                 // バインドパラメータを想定
                 SyntaxKind::C_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
 
                     // 次の式へ
                     if !cursor.goto_next_sibling() {
@@ -248,12 +248,12 @@ impl Visitor {
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "visit_set_target_list(): Unexpected syntax. node: {}\n{}",
                             cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     }
 
                     // cursor -> set_target
-                    pg_ensure_kind!(cursor, SyntaxKind::set_target, src);
+                    ensure_kind!(cursor, SyntaxKind::set_target, src);
                     let mut expr = self.visit_set_target(cursor, src)?;
 
                     // コメントがバインドパラメータならば式に付与
@@ -264,7 +264,7 @@ impl Visitor {
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "visit_set_target_list(): Unexpected comment\nnode_kind: {}\n{}",
                             cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     }
 
@@ -272,7 +272,7 @@ impl Visitor {
                 }
                 // 行末コメント
                 SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
 
                     // exprs は必ず1つ以上要素を持っている
                     let last = exprs.last_mut().unwrap();
@@ -283,7 +283,7 @@ impl Visitor {
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "visit_set_target_list(): Unexpected comment\nnode_kind: {}\n{}",
                             cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     }
                 }
@@ -291,7 +291,7 @@ impl Visitor {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_set_target_list(): Unexpected syntax. node: {}\n{}",
                         cursor.node().kind(),
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
@@ -299,7 +299,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> set_target_list
-        pg_ensure_kind!(cursor, SyntaxKind::set_target_list, src);
+        ensure_kind!(cursor, SyntaxKind::set_target_list, src);
 
         Ok(exprs)
     }

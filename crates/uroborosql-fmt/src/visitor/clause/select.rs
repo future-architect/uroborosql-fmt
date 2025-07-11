@@ -3,7 +3,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
-    visitor::{pg_create_clause, pg_ensure_kind, Visitor, COMMA},
+    visitor::{create_clause, ensure_kind, Visitor, COMMA},
 };
 
 impl Visitor {
@@ -16,15 +16,15 @@ impl Visitor {
     ) -> Result<Clause, UroboroSQLFmtError> {
         // select_clause が無く、すでに select キーワード を指しているため goto_first_child しない
         // context: https://github.com/future-architect/postgresql-cst-parser/pull/2#discussion_r1897026688
-        pg_ensure_kind!(cursor, SyntaxKind::SELECT, src);
+        ensure_kind!(cursor, SyntaxKind::SELECT, src);
 
         // cursor -> SELECT
-        let mut clause = pg_create_clause!(cursor, SyntaxKind::SELECT);
+        let mut clause = create_clause!(cursor, SyntaxKind::SELECT);
         cursor.goto_next_sibling();
 
         // SQL_IDとコメントを消費
-        self.pg_consume_or_complement_sql_id(cursor, &mut clause);
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_or_complement_sql_id(cursor, &mut clause);
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         let mut select_body = SelectBody::new();
 
@@ -37,15 +37,15 @@ impl Visitor {
 
                 cursor.goto_first_child();
                 // cursor -> ALL
-                pg_ensure_kind!(cursor, SyntaxKind::ALL, src);
+                ensure_kind!(cursor, SyntaxKind::ALL, src);
 
-                let all_clause = pg_create_clause!(cursor, SyntaxKind::ALL);
+                let all_clause = create_clause!(cursor, SyntaxKind::ALL);
 
                 select_body.set_all_distinct(all_clause);
 
                 cursor.goto_parent();
                 // cursor -> opt_all_clause
-                pg_ensure_kind!(cursor, SyntaxKind::opt_all_clause, src);
+                ensure_kind!(cursor, SyntaxKind::opt_all_clause, src);
 
                 cursor.goto_next_sibling();
             }
@@ -56,15 +56,15 @@ impl Visitor {
 
                 cursor.goto_first_child();
                 // cursor -> DISTINCT
-                pg_ensure_kind!(cursor, SyntaxKind::DISTINCT, src);
-                let mut distinct_clause = pg_create_clause!(cursor, SyntaxKind::DISTINCT);
+                ensure_kind!(cursor, SyntaxKind::DISTINCT, src);
+                let mut distinct_clause = create_clause!(cursor, SyntaxKind::DISTINCT);
 
                 cursor.goto_next_sibling();
 
                 // cursor -> ON?
                 if cursor.node().kind() == SyntaxKind::ON {
                     // DISTINCTにONキーワードを追加
-                    distinct_clause.pg_extend_kw(cursor.node());
+                    distinct_clause.extend_kw(cursor.node());
 
                     cursor.goto_next_sibling();
 
@@ -90,7 +90,7 @@ impl Visitor {
 
                 cursor.goto_parent();
                 // cursor -> distinct_clause
-                pg_ensure_kind!(cursor, SyntaxKind::distinct_clause, src);
+                ensure_kind!(cursor, SyntaxKind::distinct_clause, src);
 
                 cursor.goto_next_sibling();
             }
@@ -105,7 +105,7 @@ impl Visitor {
             None
         };
 
-        self.pg_consume_comments_in_clause(cursor, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         // cursor -> target_list?
         if cursor.node().kind() == SyntaxKind::target_list {
@@ -113,7 +113,7 @@ impl Visitor {
             // select_clause_body 部分に target_list から生成した Body をセット
             select_body.set_select_clause_body(target_list);
 
-            pg_ensure_kind!(cursor, SyntaxKind::target_list, src);
+            ensure_kind!(cursor, SyntaxKind::target_list, src);
         }
 
         clause.set_body(Body::Select(Box::new(select_body)));

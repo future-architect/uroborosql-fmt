@@ -3,7 +3,7 @@ use postgresql_cst_parser::tree_sitter::TreeCursor;
 use crate::{
     cst::{AlignedExpr, Comment, Expr},
     error::UroboroSQLFmtError,
-    visitor::pg_error_annotation_from_cursor,
+    visitor::error_annotation_from_cursor,
     CONFIG,
 };
 
@@ -41,7 +41,7 @@ impl Visitor {
         // cursor -> comment?
         // バインドパラメータを想定
         let bind_param = if cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             cursor.goto_next_sibling();
 
             Some(comment)
@@ -59,7 +59,7 @@ impl Visitor {
             } else {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "handle_comparison_expr_nodes(): Unexpected comment\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }

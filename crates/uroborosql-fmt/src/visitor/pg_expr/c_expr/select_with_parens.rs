@@ -3,7 +3,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::{Comment, Expr, Location, ParenExpr, SubExpr},
     error::UroboroSQLFmtError,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, statement::SelectStmtOutput},
+    visitor::{ensure_kind, error_annotation_from_cursor, statement::SelectStmtOutput},
     CONFIG,
 };
 
@@ -24,20 +24,20 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> '('
-        pg_ensure_kind!(cursor, SyntaxKind::LParen, src);
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
 
         cursor.goto_next_sibling();
 
         // cursor -> comments?
         let mut comment_buf: Vec<Comment> = vec![];
         while cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             comment_buf.push(comment);
             cursor.goto_next_sibling();
         }
 
         // cursor -> select_no_parens | select_with_parens
-        pg_ensure_kind!(
+        ensure_kind!(
             cursor,
             SyntaxKind::select_no_parens | SyntaxKind::select_with_parens,
             src
@@ -53,7 +53,7 @@ impl Visitor {
                         return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                             "visit_select_with_parens(): {} node appeared. This node is not considered yet.\n{}",
                             cursor.node().kind(),
-                            pg_error_annotation_from_cursor(cursor, src)
+                            error_annotation_from_cursor(cursor, src)
                         )));
                     }
                 };
@@ -97,23 +97,23 @@ impl Visitor {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_select_with_parens(): {} node appeared. This node is not considered yet.\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         // 閉じ括弧の前にあるコメントを追加
         while cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             expr.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
 
         // cursor -> ')'
-        pg_ensure_kind!(cursor, SyntaxKind::RParen, src);
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::select_with_parens, src);
+        ensure_kind!(cursor, SyntaxKind::select_with_parens, src);
 
         Ok(expr)
     }

@@ -10,10 +10,10 @@ mod visitor;
 use crate::validate::validate_format_result;
 use config::*;
 use error::UroboroSQLFmtError;
-use postgresql_cst_parser::tree_sitter::parse as pg_parse;
-use postgresql_cst_parser::tree_sitter::parse_2way as pg_parse_2way;
+use postgresql_cst_parser::tree_sitter::parse;
+use postgresql_cst_parser::tree_sitter::parse_2way;
+use two_way_sql::format_two_way_sql;
 use two_way_sql::is_two_way_sql;
-use two_way_sql::pg_format_two_way_sql;
 use visitor::Visitor;
 
 /// 設定ファイルより優先させるオプションを JSON 文字列で与えて、SQLのフォーマットを行う。
@@ -46,9 +46,9 @@ pub(crate) fn format_sql_with_config(
     let use_parser_error_recovery = config.use_parser_error_recovery;
 
     let parse_result = if use_parser_error_recovery {
-        pg_parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
+        parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
     } else {
-        pg_parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
+        parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
     };
 
     match parse_result {
@@ -61,7 +61,7 @@ pub(crate) fn format_sql_with_config(
             validate_format_result(src, false)?;
             load_settings(config);
 
-            pg_format_cst(&tree, src)
+            format_cst(&tree, src)
         }
         // パース出来ないSQLは、それが 2way-sqlならば2way-sqlモードでフォーマットする
         // 2way-sqlでもない場合はパースエラーとして返す
@@ -74,7 +74,7 @@ pub(crate) fn format_sql_with_config(
                 validate_format_result(src, true)?;
                 load_settings(config);
 
-                pg_format_two_way_sql(src)
+                format_two_way_sql(src)
             } else {
                 Err(e)
             }
@@ -83,7 +83,7 @@ pub(crate) fn format_sql_with_config(
 }
 
 #[allow(unused)]
-fn pg_print_cst(node: postgresql_cst_parser::tree_sitter::Node, depth: usize) {
+fn print_cst(node: postgresql_cst_parser::tree_sitter::Node, depth: usize) {
     for _ in 0..depth {
         eprint!("\t");
     }
@@ -98,7 +98,7 @@ fn pg_print_cst(node: postgresql_cst_parser::tree_sitter::Node, depth: usize) {
     if cursor.goto_first_child() {
         loop {
             eprintln!();
-            pg_print_cst(cursor.node(), depth + 1);
+            print_cst(cursor.node(), depth + 1);
             //次の兄弟ノードへカーソルを移動
             if !cursor.goto_next_sibling() {
                 break;
@@ -107,18 +107,18 @@ fn pg_print_cst(node: postgresql_cst_parser::tree_sitter::Node, depth: usize) {
     }
 }
 
-pub(crate) fn pg_format(src: &str) -> Result<String, UroboroSQLFmtError> {
+pub(crate) fn format(src: &str) -> Result<String, UroboroSQLFmtError> {
     let tree = if CONFIG.read().unwrap().use_parser_error_recovery {
-        pg_parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))?
+        parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))?
     } else {
-        pg_parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))?
+        parse(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))?
     };
 
-    pg_format_cst(&tree, src)
+    format_cst(&tree, src)
 }
 
 /// 渡されたTreeをもとにフォーマットする
-pub(crate) fn pg_format_cst(
+pub(crate) fn format_cst(
     tree: &postgresql_cst_parser::tree_sitter::Tree,
     src: &str,
 ) -> Result<String, UroboroSQLFmtError> {

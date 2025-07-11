@@ -3,7 +3,7 @@ use postgresql_cst_parser::syntax_kind::SyntaxKind;
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
 /// SelectStmt を visit した結果取りうるパターンを表す型
@@ -50,7 +50,7 @@ impl Visitor {
 
         cursor.goto_first_child();
         // cursor -> select_no_parens | select_with_parens
-        pg_ensure_kind!(
+        ensure_kind!(
             cursor,
             SyntaxKind::select_no_parens | SyntaxKind::select_with_parens,
             src
@@ -66,13 +66,13 @@ impl Visitor {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_select_stmt(): {} node appeared. This node is not considered yet.\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::SelectStmt, src);
+        ensure_kind!(cursor, SyntaxKind::SelectStmt, src);
 
         Ok(result)
     }
@@ -120,7 +120,7 @@ impl Visitor {
             );
 
             cursor.goto_parent();
-            pg_ensure_kind!(cursor, SyntaxKind::select_no_parens, src);
+            ensure_kind!(cursor, SyntaxKind::select_no_parens, src);
 
             return Ok(SelectStmtOutput::Values(values_keyword, rows));
         }
@@ -129,7 +129,7 @@ impl Visitor {
         if cursor.node().kind() == SyntaxKind::select_with_parens {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_select_no_parens(): select_with_parens node appeared. This node is not considered yet.\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             )));
         }
 
@@ -137,7 +137,7 @@ impl Visitor {
         if cursor.node().kind() == SyntaxKind::TABLE {
             return Err(UroboroSQLFmtError::Unimplemented(format!(
                 "visit_select_no_parens(): TABLE node appeared. This node is not considered yet.\n{}",
-                pg_error_annotation_from_cursor(cursor, src)
+                error_annotation_from_cursor(cursor, src)
             )));
         }
 
@@ -147,14 +147,14 @@ impl Visitor {
             cursor.goto_next_sibling();
 
             // with句の後に続くコメントを消費する
-            self.pg_consume_comments_in_clause(cursor, &mut with_clause)?;
+            self.consume_comments_in_clause(cursor, &mut with_clause)?;
 
             statement.add_clause(with_clause);
         }
 
         // cursor -> SELECT keyword
         // select_clause を消去したので、select_clause の中身が並ぶ
-        pg_ensure_kind!(cursor, SyntaxKind::SELECT, src);
+        ensure_kind!(cursor, SyntaxKind::SELECT, src);
 
         // select句を追加する
         statement.add_clause(self.visit_select_clause(cursor, src)?);
@@ -169,13 +169,13 @@ impl Visitor {
                 // - having_clause
                 // - window_clause
                 SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     statement.add_comment_to_child(comment)?;
                 }
                 SyntaxKind::UNION | SyntaxKind::INTERSECT | SyntaxKind::EXCEPT => {
                     // (UNION | INTERSECT | EXCEPT) set_quantifier? (select_clause)
 
-                    let mut combining_clause = Clause::from_pg_node(cursor.node());
+                    let mut combining_clause = Clause::from_node(cursor.node());
                     cursor.goto_next_sibling();
 
                     // cursor -> set_quantifier?
@@ -183,7 +183,7 @@ impl Visitor {
                         // set_quantifier
                         // - ALL
                         // - DISTINCT
-                        combining_clause.pg_extend_kw(cursor.node());
+                        combining_clause.extend_kw(cursor.node());
                         cursor.goto_next_sibling();
                     }
 
@@ -191,7 +191,7 @@ impl Visitor {
                     statement.add_clause(combining_clause);
 
                     while cursor.node().is_comment() {
-                        let comment = Comment::pg_new(cursor.node());
+                        let comment = Comment::new(cursor.node());
                         statement.add_comment_to_child(comment)?;
                         cursor.goto_next_sibling();
                     }
@@ -203,7 +203,7 @@ impl Visitor {
                 SyntaxKind::into_clause => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "visit_select_stmt(): into_clause is not implemented\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
                 SyntaxKind::from_clause => {
@@ -211,7 +211,7 @@ impl Visitor {
                     statement.add_clause(from_clause);
                 }
                 SyntaxKind::where_clause => {
-                    let where_clause = self.pg_visit_where_clause(cursor, src)?;
+                    let where_clause = self.visit_where_clause(cursor, src)?;
                     statement.add_clause(where_clause);
                 }
                 SyntaxKind::group_clause => {
@@ -225,7 +225,7 @@ impl Visitor {
                 SyntaxKind::window_clause => {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "visit_select_stmt(): window_clause is not implemented\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
                 SyntaxKind::sort_clause => {
@@ -248,14 +248,14 @@ impl Visitor {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "visit_select_stmt(): {} node appeared. This node is not considered yet.\n{}",
                         cursor.node().kind(),
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::select_no_parens, src);
+        ensure_kind!(cursor, SyntaxKind::select_no_parens, src);
 
         Ok(SelectStmtOutput::Statement(statement))
     }

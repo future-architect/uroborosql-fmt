@@ -4,7 +4,7 @@ use crate::{
     cst::{AlignedExpr, Expr},
     error::UroboroSQLFmtError,
     util::{convert_keyword_case, single_space},
-    visitor::pg_error_annotation_from_cursor,
+    visitor::error_annotation_from_cursor,
 };
 
 use super::Visitor;
@@ -50,14 +50,14 @@ impl Visitor {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "handle_all_some_any_nodes(): parenthesized expression is not implemented. node: {}\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "handle_all_some_any_nodes(): Unexpected syntax. node: {}\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
@@ -70,7 +70,7 @@ impl Visitor {
         assert!(
             !cursor.goto_next_sibling(),
             "handle_all_some_any_nodes(): cursor is not at the end of the node\n{}",
-            pg_error_annotation_from_cursor(cursor, src)
+            error_annotation_from_cursor(cursor, src)
         );
 
         Ok(all_some_any_sub)

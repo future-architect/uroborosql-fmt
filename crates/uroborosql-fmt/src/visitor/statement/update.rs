@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Comment, Statement},
     error::UroboroSQLFmtError,
-    visitor::{pg_create_clause, pg_ensure_kind, pg_error_annotation_from_cursor, Visitor},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
 // UpdateStmt:
@@ -32,18 +32,18 @@ impl Visitor {
 
         // cursor -> comments?
         while cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             statement.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
 
         // cursor -> UPDATE
-        pg_ensure_kind!(cursor, SyntaxKind::UPDATE, src);
-        let mut update_clause = pg_create_clause!(cursor, SyntaxKind::UPDATE);
+        ensure_kind!(cursor, SyntaxKind::UPDATE, src);
+        let mut update_clause = create_clause!(cursor, SyntaxKind::UPDATE);
 
         cursor.goto_next_sibling();
-        self.pg_consume_or_complement_sql_id(cursor, &mut update_clause);
-        self.pg_consume_comments_in_clause(cursor, &mut update_clause)?;
+        self.consume_or_complement_sql_id(cursor, &mut update_clause);
+        self.consume_comments_in_clause(cursor, &mut update_clause)?;
 
         // cursor -> relation_expr_opt_alias
         let body = self.visit_relation_expr_opt_alias(cursor, src)?;
@@ -54,21 +54,21 @@ impl Visitor {
 
         // cursor -> comments?
         while cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             statement.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
 
         // cursor -> SET
-        pg_ensure_kind!(cursor, SyntaxKind::SET, src);
-        let mut set_clause = pg_create_clause!(cursor, SyntaxKind::SET);
+        ensure_kind!(cursor, SyntaxKind::SET, src);
+        let mut set_clause = create_clause!(cursor, SyntaxKind::SET);
         cursor.goto_next_sibling();
 
         // キーワード直後のコメントを処理
-        self.pg_consume_comments_in_clause(cursor, &mut set_clause)?;
+        self.consume_comments_in_clause(cursor, &mut set_clause)?;
 
         // cursor -> set_clause_list
-        pg_ensure_kind!(cursor, SyntaxKind::set_clause_list, src);
+        ensure_kind!(cursor, SyntaxKind::set_clause_list, src);
         let set_clause_list = self.visit_set_clause_list(cursor, src)?;
 
         set_clause.set_body(set_clause_list);
@@ -90,13 +90,13 @@ impl Visitor {
                     statement.add_clause(clause);
                 }
                 SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
-                    let comment = Comment::pg_new(cursor.node());
+                    let comment = Comment::new(cursor.node());
                     statement.add_comment_to_child(comment)?;
                 }
                 _ => {
                     return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                         "visit_update_stmt(): unexpected syntax\n{}",
-                        pg_error_annotation_from_cursor(cursor, src)
+                        error_annotation_from_cursor(cursor, src)
                     )));
                 }
             }
@@ -104,7 +104,7 @@ impl Visitor {
 
         cursor.goto_parent();
         // cursor -> UpdateStmt
-        pg_ensure_kind!(cursor, SyntaxKind::UpdateStmt, src);
+        ensure_kind!(cursor, SyntaxKind::UpdateStmt, src);
 
         Ok(statement)
     }

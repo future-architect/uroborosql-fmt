@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{AlignedExpr, Comment, Expr, ExprSeq, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
-    visitor::pg_ensure_kind,
+    visitor::ensure_kind,
 };
 
 use super::Visitor;
@@ -29,7 +29,7 @@ impl Visitor {
         //        └ not_keyword
 
         // cursor -> LIKE
-        pg_ensure_kind!(cursor, SyntaxKind::LIKE, src);
+        ensure_kind!(cursor, SyntaxKind::LIKE, src);
 
         // op_text: NOT LIKE or LIKE
         let op_text = if let Some(not_keyword) = not_keyword {
@@ -49,7 +49,7 @@ impl Visitor {
 
         let mut comments_after_pattern = Vec::new();
         while cursor.node().is_comment() {
-            let comment = Comment::pg_new(cursor.node());
+            let comment = Comment::new(cursor.node());
             comments_after_pattern.push(comment);
             cursor.goto_next_sibling();
         }
@@ -58,8 +58,7 @@ impl Visitor {
 
         if cursor.node().kind() == SyntaxKind::ESCAPE {
             // cursor -> (ESCAPE _expression)?
-            let escape_keyword =
-                PrimaryExpr::with_pg_node(cursor.node(), PrimaryExprKind::Keyword)?;
+            let escape_keyword = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Keyword)?;
             let escape_keyword = Expr::Primary(Box::new(escape_keyword));
 
             cursor.goto_next_sibling();

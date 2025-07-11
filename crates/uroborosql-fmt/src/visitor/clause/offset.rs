@@ -3,7 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{Body, Clause, SingleLine},
     error::UroboroSQLFmtError,
-    visitor::{pg_ensure_kind, pg_error_annotation_from_cursor},
+    visitor::{ensure_kind, error_annotation_from_cursor},
 };
 
 use super::Visitor;
@@ -26,9 +26,9 @@ impl Visitor {
         // - OFFSET select_fetch_first_value row_or_rows
 
         cursor.goto_first_child();
-        pg_ensure_kind!(cursor, SyntaxKind::OFFSET, src);
+        ensure_kind!(cursor, SyntaxKind::OFFSET, src);
 
-        let mut offset_clause = Clause::from_pg_node(cursor.node());
+        let mut offset_clause = Clause::from_node(cursor.node());
 
         cursor.goto_next_sibling();
 
@@ -44,27 +44,27 @@ impl Visitor {
                 let body = Body::SingleLine(Box::new(SingleLine::new(expr)));
 
                 cursor.goto_parent();
-                pg_ensure_kind!(cursor, SyntaxKind::select_offset_value, src);
+                ensure_kind!(cursor, SyntaxKind::select_offset_value, src);
 
                 offset_clause.set_body(body);
             }
             SyntaxKind::select_fetch_first_value => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "visit_offset_clause(): select_fetch_first_value is not implemented\n{}",
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                     "visit_offset_clause(): unexpected node kind: {}\n{}",
                     cursor.node().kind(),
-                    pg_error_annotation_from_cursor(cursor, src)
+                    error_annotation_from_cursor(cursor, src)
                 )));
             }
         }
 
         cursor.goto_parent();
-        pg_ensure_kind!(cursor, SyntaxKind::offset_clause, src);
+        ensure_kind!(cursor, SyntaxKind::offset_clause, src);
 
         Ok(offset_clause)
     }
