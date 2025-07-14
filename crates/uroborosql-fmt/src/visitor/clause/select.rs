@@ -1,69 +1,80 @@
-use tree_sitter::TreeCursor;
+use postgresql_cst_parser::syntax_kind::SyntaxKind;
 
 use crate::{
     cst::{select::SelectBody, *},
     error::UroboroSQLFmtError,
-    visitor::{
-        create_clause, ensure_kind,
-        expr::{ComplementConfig, ComplementKind},
-        Visitor,
-    },
+    visitor::{create_clause, ensure_kind, Visitor, COMMA},
 };
 
 impl Visitor {
     /// SELECT句
-    /// 呼び出し後、cursorはselect_clauseを指している
+    /// 呼び出し後、cursor は target_list があれば target_list を、無ければ SELECT キーワードを指している
     pub(crate) fn visit_select_clause(
         &mut self,
-        cursor: &mut TreeCursor,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
-        // SELECT句の定義
-        //      select_clause =
-        //          SELECT
-        //          [ ALL | DISTINCT [ ON ( expression [, ...] ) ] ] ]
-        //          [ select_clause_body ]
-
-        // select_clauseは必ずSELECTを子供に持っているはずである
-        cursor.goto_first_child();
+        // select_clause が無く、すでに select キーワード を指しているため goto_first_child しない
+        // context: https://github.com/future-architect/postgresql-cst-parser/pull/2#discussion_r1897026688
+        ensure_kind!(cursor, SyntaxKind::SELECT, src);
 
         // cursor -> SELECT
-        let mut clause = create_clause(cursor, src, "SELECT")?;
+        let mut clause = create_clause!(cursor, SyntaxKind::SELECT);
         cursor.goto_next_sibling();
 
         // SQL_IDとコメントを消費
-        self.consume_or_complement_sql_id(cursor, src, &mut clause);
-        self.consume_comment_in_clause(cursor, src, &mut clause)?;
+        self.consume_or_complement_sql_id(cursor, &mut clause);
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         let mut select_body = SelectBody::new();
 
-        // [ ALL | DISTINCT [ ON ( expression [, ...] ) ] ] ]
+        // TODO: opt_distinct_clause の考慮
+        // opt_all_clause | distinct_clause
         match cursor.node().kind() {
-            "ALL" => {
-                let all_clause = create_clause(cursor, src, "ALL")?;
+            SyntaxKind::opt_all_clause => {
+                // opt_all_clause
+                // - ALL
+
+                cursor.goto_first_child();
+                // cursor -> ALL
+                ensure_kind!(cursor, SyntaxKind::ALL, src);
+
+                let all_clause = create_clause!(cursor, SyntaxKind::ALL);
 
                 select_body.set_all_distinct(all_clause);
 
+                cursor.goto_parent();
+                // cursor -> opt_all_clause
+                ensure_kind!(cursor, SyntaxKind::opt_all_clause, src);
+
                 cursor.goto_next_sibling();
             }
-            "DISTINCT" => {
-                let mut distinct_clause = create_clause(cursor, src, "DISTINCT")?;
+            SyntaxKind::distinct_clause => {
+                // distinct_clause
+                // - DISTINCT
+                // - DISTINCT ON '(' expr_list ')'
+
+                cursor.goto_first_child();
+                // cursor -> DISTINCT
+                ensure_kind!(cursor, SyntaxKind::DISTINCT, src);
+                let mut distinct_clause = create_clause!(cursor, SyntaxKind::DISTINCT);
 
                 cursor.goto_next_sibling();
 
-                // ON ( expression [, ...] )
-                if cursor.node().kind() == "ON" {
+                // cursor -> ON?
+                if cursor.node().kind() == SyntaxKind::ON {
                     // DISTINCTにONキーワードを追加
-                    distinct_clause.extend_kw(cursor.node(), src);
+                    distinct_clause.extend_kw(cursor.node());
 
                     cursor.goto_next_sibling();
 
-                    // ( expression [, ...] ) をColumnList構造体に格納
-                    let mut column_list = self.visit_column_list(cursor, src)?;
+                    // 括弧と expr_list を ColumnList に格納
+                    let mut column_list =
+                        ColumnList::try_from(self.handle_parenthesized_expr_list(cursor, src)?)?;
                     // 改行によるフォーマットを強制
                     column_list.set_force_multi_line(true);
 
-                    // ColumntListをSeparatedLinesに格納してBody
+                    // ColumnListをSeparatedLinesに格納してBody
                     let mut sep_lines = SeparatedLines::new();
 
                     sep_lines.add_expr(
@@ -77,48 +88,38 @@ impl Visitor {
 
                 select_body.set_all_distinct(distinct_clause);
 
+                cursor.goto_parent();
+                // cursor -> distinct_clause
+                ensure_kind!(cursor, SyntaxKind::distinct_clause, src);
+
                 cursor.goto_next_sibling();
             }
             _ => {}
         }
 
-        // cursor -> select_caluse_body
-        if cursor.node().kind() == "select_clause_body" {
-            let select_clause_body = self.visit_select_clause_body(cursor, src)?;
-            select_body.set_select_clause_body(select_clause_body)
+        let extra_leading_comma = if cursor.node().kind() == SyntaxKind::Comma {
+            cursor.goto_next_sibling();
+
+            Some(COMMA.to_string())
+        } else {
+            None
+        };
+
+        self.consume_comments_in_clause(cursor, &mut clause)?;
+
+        // cursor -> target_list?
+        if cursor.node().kind() == SyntaxKind::target_list {
+            let target_list = self.visit_target_list(cursor, src, extra_leading_comma)?;
+            // select_clause_body 部分に target_list から生成した Body をセット
+            select_body.set_select_clause_body(target_list);
+
+            ensure_kind!(cursor, SyntaxKind::target_list, src);
         }
 
         clause.set_body(Body::Select(Box::new(select_body)));
 
-        // cursorをselect_clauseに戻す
-        cursor.goto_parent();
-        ensure_kind(cursor, "select_clause", src)?;
-
+        // フラットに並んでいるため goto_parent しない
+        // cursor -> SELECT or target_list
         Ok(clause)
-    }
-
-    /// SELECT句の本体をSeparatedLinesで返す
-    /// 呼び出し後、cursorはselect_clause_bodyを指している
-    fn visit_select_clause_body(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<Body, UroboroSQLFmtError> {
-        // select_clause_body -> _aliasable_expression ("," _aliasable_expression)*
-
-        // select_clause_bodyは必ず_aliasable_expressionを子供に持つ
-        cursor.goto_first_child();
-
-        // cursor -> _aliasable_expression
-        // commaSep1(_aliasable_expression)
-        // カラム名ルール(ASがなければASを補完)でエイリアス補完、AS補完を行う
-        let complement_config = ComplementConfig::new(ComplementKind::ColumnName, true, true);
-        let body = self.visit_comma_sep_alias(cursor, src, Some(&complement_config))?;
-
-        // cursorをselect_clause_bodyに
-        cursor.goto_parent();
-        ensure_kind(cursor, "select_clause_body", src)?;
-
-        Ok(body)
     }
 }

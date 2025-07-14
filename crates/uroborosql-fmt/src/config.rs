@@ -75,10 +75,6 @@ fn default_indent_tab() -> bool {
     true
 }
 
-fn default_use_pg_parser() -> bool {
-    false
-}
-
 fn default_use_parser_error_recovery() -> bool {
     true
 }
@@ -163,10 +159,6 @@ pub struct Config {
     #[serde(default = "default_indent_tab")]
     pub(crate) indent_tab: bool,
 
-    /// パーサにpostgresql-cst-parserを使用する
-    #[serde(default = "default_use_pg_parser")]
-    pub(crate) use_pg_parser: bool,
-
     /// パーサのエラー回復機能を使うかどうか
     #[serde(default = "default_use_parser_error_recovery")]
     pub(crate) use_parser_error_recovery: bool,
@@ -233,7 +225,6 @@ impl Default for Config {
             convert_double_colon_cast: default_convert_double_colon_cast(),
             unify_not_equal: default_unify_not_equal(),
             indent_tab: default_indent_tab(),
-            use_pg_parser: default_use_pg_parser(),
             use_parser_error_recovery: default_use_parser_error_recovery(),
         }
     }
@@ -262,7 +253,6 @@ pub(crate) fn load_never_complement_settings() {
         convert_double_colon_cast: false,
         unify_not_equal: false,
         indent_tab: true,
-        use_pg_parser: default_use_pg_parser(),
         use_parser_error_recovery: default_use_parser_error_recovery(),
     };
 

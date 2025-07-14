@@ -1,178 +1,105 @@
-mod aliasable;
-mod assignment;
-mod binary;
-mod boolean;
-mod column_list;
-mod cond;
-mod conflict_target;
-mod function;
-mod in_expr;
-mod is;
-mod paren;
-mod subquery;
-mod type_cast;
-mod unary;
+mod a_expr;
+mod c_expr;
+mod expr_list;
 
-use tree_sitter::TreeCursor;
+use postgresql_cst_parser::syntax_kind::SyntaxKind;
+use postgresql_cst_parser::tree_sitter::TreeCursor;
 
-use crate::{cst::*, error::UroboroSQLFmtError, util::convert_identifier_case};
+use crate::{
+    cst::{Comment, Expr},
+    error::UroboroSQLFmtError,
+    visitor::ensure_kind,
+};
 
-pub(crate) use aliasable::{ComplementConfig, ComplementKind};
-
-use super::{ensure_kind, error_annotation_from_cursor, Visitor, COMMENT};
+use super::{error_annotation_from_cursor, Visitor};
 
 impl Visitor {
-    /// 式のフォーマットを行う。
-    /// cursorがコメントを指している場合、バインドパラメータであれば結合して返す。
-    /// 式の初めにバインドパラメータが現れた場合、式の本体は隣の兄弟ノードになる。
-    /// 呼び出し後、cursorは式の本体のノードを指す
-    pub(crate) fn visit_expr(
+    /// a_expr または b_expr を走査する
+    /// 引数で a_expr か b_expr のどちらを走査するかを指定する
+    /// 呼出し時の cursor がコメントを指している場合、バインドパラメータとして隣の兄弟ノードに付加する
+    /// 呼出し後、cursor は呼出し時の位置に戻る
+    pub(crate) fn visit_a_expr_or_b_expr(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Expr, UroboroSQLFmtError> {
-        // バインドパラメータをチェック
-        let head_comment = if cursor.node().kind() == COMMENT {
-            let comment_node = cursor.node();
+        // b_expr は a_expr のサブセットであるため、a_expr および b_expr の走査には a_expr 用の visitor をそのまま使う
+
+        // 式の直前にあるコメントを処理する
+        // この位置のコメントはバインドパラメータを想定するため、ブロックコメント（C_COMMENT）のみを処理する
+        let head_comment_node = if cursor.node().kind() == SyntaxKind::C_COMMENT {
+            let comment = cursor.node();
             cursor.goto_next_sibling();
-            // cursor -> _expression
             // 式の直前に複数コメントが来る場合は想定していない
-            Some(Comment::new(comment_node, src))
+            Some(comment)
         } else {
             None
         };
 
-        let mut result = match cursor.node().kind() {
-            "dotted_name" => {
-                // dotted_name -> identifier ("." identifier)*
+        let expr_kind = cursor.node().kind();
+        cursor.goto_first_child();
 
-                // cursor -> dotted_name
+        // cursor -> c_expr | DEFAULT | Plus | Minus | NOT | qual_Op | a_expr | UNIQUE
+        let mut expr = self.handle_a_expr_or_b_expr_inner(cursor, src)?;
 
-                let range = cursor.node().range();
+        // バインドパラメータの追加
+        if let Some(comment_node) = head_comment_node {
+            let comment = Comment::new(comment_node.clone());
+            if comment.loc().is_next_to(&expr.loc()) {
+                // 式に隣接していればバインドパラメータ
+                expr.set_head_comment(comment);
+            } else {
+                // TODO: 隣接していないコメント
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_a_expr_or_b_expr(): (bind parameter) separated comment\n{}",
+                    error_annotation_from_cursor(&comment_node.walk(), src)
+                )));
+            }
+        }
 
-                cursor.goto_first_child();
-                // cursor -> identifier
+        // cursor -> (last_node)
+        assert!(
+            !cursor.goto_next_sibling(),
+            "visit_a_expr_or_b_expr(): cursor is not at the last node."
+        );
 
-                let mut dotted_name = String::new();
+        cursor.goto_parent();
+        // cursor -> a_expr or b_expr (parent)
+        ensure_kind!(cursor, expr: expr_kind, src);
 
-                let id_node = cursor.node();
-                dotted_name.push_str(id_node.utf8_text(src.as_bytes()).unwrap());
+        Ok(expr)
+    }
 
-                while cursor.goto_next_sibling() {
-                    // cursor -> . または cursor -> identifier
-                    match cursor.node().kind() {
-                        "." => dotted_name.push('.'),
-                        "ERROR" => {
-                            return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                                "visit_expr: ERROR node appeared \n{}",
-                                error_annotation_from_cursor(cursor, src)
-                            )));
-                        }
-                        _ => dotted_name.push_str(cursor.node().utf8_text(src.as_bytes()).unwrap()),
-                    };
-                }
+    pub fn visit_relation_expr(
+        &mut self,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // relation_expr
+        // - qualified_name
+        // - extended_relation_expr
 
-                let primary =
-                    PrimaryExpr::new(convert_identifier_case(&dotted_name), Location::new(range));
+        cursor.goto_first_child();
 
-                // cursorをdotted_nameに戻す
-                cursor.goto_parent();
-                ensure_kind(cursor, "dotted_name", src)?;
-
-                Expr::Primary(Box::new(primary))
-            }
-            "binary_expression" => self.visit_binary_expr(cursor, src)?,
-            "between_and_expression" => {
-                Expr::Aligned(Box::new(self.visit_between_and_expression(cursor, src)?))
-            }
-            "like_expression" => Expr::Aligned(Box::new(self.visit_like_expression(cursor, src)?)),
-            "boolean_expression" => self.visit_bool_expr(cursor, src)?,
-            // identifier | number | string (そのまま表示)
-            "identifier" | "number" | "string" => {
-                // defaultの場合はキーワードとして扱う
-                let primary = if "default"
-                    .eq_ignore_ascii_case(cursor.node().utf8_text(src.as_bytes()).unwrap())
-                {
-                    PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword)
-                } else {
-                    PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Expr)
-                };
-                Expr::Primary(Box::new(primary))
-            }
-            "select_subexpression" => {
-                let select_subexpr = self.visit_select_subexpr(cursor, src)?;
-                Expr::Sub(Box::new(select_subexpr))
-            }
-            "parenthesized_expression" => {
-                let paren_expr = self.visit_paren_expr(cursor, src)?;
-                Expr::ParenExpr(Box::new(paren_expr))
-            }
-            "asterisk_expression" => {
-                let asterisk = AsteriskExpr::new(
-                    cursor.node().utf8_text(src.as_bytes()).unwrap(),
-                    Location::new(cursor.node().range()),
-                );
-                Expr::Asterisk(Box::new(asterisk))
-            }
-            "conditional_expression" => {
-                let cond_expr = self.visit_cond_expr(cursor, src)?;
-                Expr::Cond(Box::new(cond_expr))
-            }
-            "function_call" => {
-                let func_call = self.visit_function_call(cursor, src)?;
-                Expr::FunctionCall(Box::new(func_call))
-            }
-            "TRUE" | "FALSE" | "NULL" => {
-                let primary = PrimaryExpr::with_node(cursor.node(), src, PrimaryExprKind::Keyword);
-                Expr::Primary(Box::new(primary))
-            }
-            "is_expression" => Expr::Aligned(Box::new(self.visit_is_expr(cursor, src)?)),
-            "in_expression" => Expr::Aligned(Box::new(self.visit_in_expr(cursor, src)?)),
-            "type_cast" => self.visit_type_cast(cursor, src)?,
-            "exists_subquery_expression" => {
-                Expr::ExistsSubquery(Box::new(self.visit_exists_subquery(cursor, src)?))
-            }
-            "in_subquery_expression" => {
-                Expr::Aligned(Box::new(self.visit_in_subquery(cursor, src)?))
-            }
-            "all_some_any_subquery_expression" => {
-                Expr::Aligned(Box::new(self.visit_all_some_any_subquery(cursor, src)?))
-            }
-            "unary_expression" => {
-                let unary = self.visit_unary_expr(cursor, src)?;
-                Expr::Unary(Box::new(unary))
+        let expr = match cursor.node().kind() {
+            SyntaxKind::qualified_name => self.visit_qualified_name(cursor, src)?,
+            SyntaxKind::extended_relation_expr => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_relation_expr(): extended_relation_expr node appeared. Extended relation expressions are not implemented yet.\n{}",
+                    error_annotation_from_cursor(cursor, src)
+                )));
             }
             _ => {
-                // todo
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_expr(): unimplemented expression \n{}",
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_relation_expr(): unexpected node kind\n{}",
                     error_annotation_from_cursor(cursor, src)
                 )));
             }
         };
 
-        // バインドパラメータの追加
-        if let Some(comment) = head_comment {
-            if comment.is_block_comment() && comment.loc().is_next_to(&result.loc()) {
-                // 複数行コメントかつ式に隣接していれば、バインドパラメータ
-                result.set_head_comment(comment);
-            } else {
-                // TODO: 隣接していないコメント
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_expr(): (bind parameter) separated comment\n{}",
-                    error_annotation_from_cursor(cursor, src)
-                )));
-            }
-        }
+        cursor.goto_parent();
+        ensure_kind!(cursor, SyntaxKind::relation_expr, src);
 
-        Ok(result)
+        Ok(expr.into())
     }
-}
-
-/// 引数の文字列が比較演算子かどうかを判定する
-pub(crate) fn is_comp_op(op_str: &str) -> bool {
-    matches!(
-        op_str,
-        "<" | "<=" | "<>" | "!=" | "=" | ">" | ">=" | "~" | "!~" | "~*" | "!~*"
-    )
 }

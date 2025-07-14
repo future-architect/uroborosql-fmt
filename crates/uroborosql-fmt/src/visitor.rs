@@ -2,9 +2,9 @@ mod clause;
 mod expr;
 mod statement;
 
-use tree_sitter::{Node, TreeCursor};
+use postgresql_cst_parser::syntax_kind::SyntaxKind;
+use statement::SelectStmtOutput;
 
-pub(crate) const COMMENT: &str = "comment";
 pub(crate) const COMMA: &str = ",";
 
 use crate::{
@@ -13,8 +13,6 @@ use crate::{
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, create_error_annotation},
 };
-
-use self::expr::ComplementConfig;
 
 pub(crate) struct Visitor {
     /// select文、insert文などが複数回出てきた際に1度だけSQL_IDを補完する、という処理を実現するためのフラグ
@@ -38,7 +36,7 @@ impl Visitor {
     /// sqlソースファイルをフォーマット用構造体に変形する
     pub(crate) fn visit_sql(
         &mut self,
-        node: Node,
+        node: postgresql_cst_parser::tree_sitter::Node,
         src: &str,
     ) -> Result<Vec<Statement>, UroboroSQLFmtError> {
         // CSTを走査するTreeCursorを生成する
@@ -52,19 +50,23 @@ impl Visitor {
     /// 呼び出し終了後、cursorはsource_fileを指している
     fn visit_source(
         &mut self,
-        cursor: &mut TreeCursor,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
     ) -> Result<Vec<Statement>, UroboroSQLFmtError> {
+        use postgresql_cst_parser::syntax_kind::SyntaxKind::{
+            DeleteStmt, InsertStmt, SelectStmt, Semicolon, UpdateStmt,
+        };
+
         // source_file -> _statement*
         let mut source: Vec<Statement> = vec![];
 
         if !cursor.goto_first_child() {
             // source_fileに子供がない、つまり、ソースファイルが空である場合
             // todo
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_source(): source_file has no child\n{}",
-                error_annotation_from_cursor(cursor, src)
-            )));
+            return Err(UroboroSQLFmtError::Unimplemented(
+                // TODO: error_annotation_from_cursorの移植
+                "visit_source(): source_file has no child\n".to_string(),
+            ));
         }
 
         // ソースファイル先頭のコメントを保存するバッファ
@@ -77,48 +79,69 @@ impl Visitor {
         loop {
             let kind = cursor.node().kind();
 
-            if kind.ends_with("_statement") {
-                let mut stmt = match kind {
-                    "select_statement" => self.visit_select_stmt(cursor, src)?,
-                    "delete_statement" => self.visit_delete_stmt(cursor, src)?,
-                    "update_statement" => self.visit_update_stmt(cursor, src)?,
-                    "insert_statement" => self.visit_insert_stmt(cursor, src)?,
-                    // todo
-                    _ => {
-                        return Err(UroboroSQLFmtError::Unimplemented(format!(
-                            "visit_source(): Unimplemented statement\n{}",
-                            error_annotation_from_cursor(cursor, src)
-                        )));
+            match kind {
+                stmt_kind @ (SelectStmt | DeleteStmt | UpdateStmt | InsertStmt) => {
+                    let mut stmt = match stmt_kind {
+                        SelectStmt => {
+                            let statement_or_expr = self.visit_select_stmt(cursor, src)?;
+
+                            // 現状では、トップレベルの Select では括弧に囲まれたパターンやValuesのケースを考慮せず Statement のパターンのみ返す
+                            match statement_or_expr {
+                                SelectStmtOutput::Statement(statement) => statement,
+                                SelectStmtOutput::Expr(_) => {
+                                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                        "visit_source(): expr is not implemented\n{}",
+                                        error_annotation_from_cursor(cursor, src)
+                                    )));
+                                }
+                                SelectStmtOutput::Values(_, _) => {
+                                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                        "visit_source(): VALUES clauses are not implemented\n{}",
+                                        error_annotation_from_cursor(cursor, src)
+                                    )));
+                                }
+                            }
+                        }
+                        DeleteStmt => self.visit_delete_stmt(cursor, src)?,
+                        UpdateStmt => self.visit_update_stmt(cursor, src)?,
+                        InsertStmt => self.visit_insert_stmt(cursor, src)?,
+                        _ => {
+                            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                                "visit_source(): Unimplemented statement\n{}",
+                                error_annotation_from_cursor(cursor, src)
+                            )));
+                        }
+                    };
+
+                    comment_buf
+                        .iter()
+                        .cloned()
+                        .for_each(|c| stmt.add_comment(c));
+                    comment_buf.clear();
+
+                    source.push(stmt);
+                    above_semi = true;
+                }
+                SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::new(cursor.node());
+                    if !source.is_empty() && above_semi {
+                        let last_stmt = source.last_mut().unwrap();
+                        // すでにstatementがある場合、末尾に追加
+                        last_stmt.add_comment_to_child(comment)?;
+                    } else {
+                        // まだstatementがない場合、バッファに詰めておく
+                        comment_buf.push(comment);
                     }
-                };
-
-                // コメントが以前にあれば先頭に追加
-                comment_buf
-                    .iter()
-                    .cloned()
-                    .for_each(|c| stmt.add_comment(c));
-                comment_buf.clear();
-
-                source.push(stmt);
-                above_semi = true;
-            } else if kind == COMMENT {
-                let comment = Comment::new(cursor.node(), src);
-
-                if !source.is_empty() && above_semi {
-                    let last_stmt = source.last_mut().unwrap();
-                    // すでにstatementがある場合、末尾に追加
-                    last_stmt.add_comment_to_child(comment)?;
-                } else {
-                    // まだstatementがない場合、バッファに詰めておく
-                    comment_buf.push(comment);
                 }
-            } else if kind == ";" {
-                above_semi = false;
-                if let Some(last) = source.last_mut() {
-                    last.set_semi(true);
+                Semicolon => {
+                    above_semi = false;
+                    if let Some(last) = source.last_mut() {
+                        last.set_semi(true);
+                    }
+                    // TODO: ; の上に文がない場合にどうなるか (tree-sitter-sqlでは構文エラーになる)
                 }
-                // tree-sitter-sqlでは、;の上に文がない場合syntax errorになる
-            }
+                _ => {}
+            };
 
             if !cursor.goto_next_sibling() {
                 // 次の子供がいない場合、終了
@@ -131,128 +154,16 @@ impl Visitor {
         Ok(source)
     }
 
-    /// _aliasable_expressionが,で区切られた構造をBodyにして返す
-    fn visit_comma_sep_alias(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-        // エイリアス/AS補完に関する設定
-        // Noneの場合は補完を行わない
-        complement_config: Option<&ComplementConfig>,
-    ) -> Result<Body, UroboroSQLFmtError> {
-        let mut separated_lines = SeparatedLines::new();
-
-        // commaSep(_aliasable_expression)
-        let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
-        separated_lines.add_expr(alias, None, vec![]);
-
-        // ("," _aliasable_expression)*
-        while cursor.goto_next_sibling() {
-            // cursor -> , または comment または _aliasable_expression
-            match cursor.node().kind() {
-                // tree-sitter-sqlにより、構文エラーは検出されるはずなので、"," は読み飛ばしてもよい。
-                "," => {}
-                COMMENT => {
-                    let comment_node = cursor.node();
-                    let comment = Comment::new(comment_node, src);
-
-                    // tree-sitter-sqlの性質上、コメントが最後の子供になることはないはずなので、panicしない。
-                    let sibling_node = cursor.node().next_sibling().unwrap();
-
-                    // コメントノードがバインドパラメータであるかを判定し、バインドパラメータならば式として処理し、
-                    // そうでなければ単にコメントとして処理する。
-                    if comment.is_block_comment()
-                        && comment
-                            .loc()
-                            .is_next_to(&Location::new(sibling_node.range()))
-                    {
-                        let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
-                        separated_lines.add_expr(alias, Some(COMMA.to_string()), vec![]);
-                    } else {
-                        separated_lines.add_comment_to_child(comment)?;
-                    }
-                }
-                _ => {
-                    let alias = self.visit_aliasable_expr(cursor, src, complement_config)?;
-                    separated_lines.add_expr(alias, Some(COMMA.to_string()), vec![]);
-                }
-            }
-        }
-
-        Ok(Body::SepLines(separated_lines))
-    }
-
-    /// identifierが,で区切られた構造をBodyにして返す
-    /// 呼び出し後、cursorは区切られた構造の次の要素を指す
-    fn visit_comma_sep_identifier(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<Body, UroboroSQLFmtError> {
-        let mut separated_lines = SeparatedLines::new();
-
-        // commaSep(identifier)
-        let identifier = self.visit_expr(cursor, src)?;
-        separated_lines.add_expr(identifier.to_aligned(), None, vec![]);
-
-        // ("," identifier)*
-        while cursor.goto_next_sibling() {
-            // cursor -> , または comment または identifier
-            match cursor.node().kind() {
-                // tree-sitter-sqlにより、構文エラーは検出されるはずなので、"," は読み飛ばしてもよい。
-                "," => {}
-                COMMENT => {
-                    let comment_node = cursor.node();
-                    let comment = Comment::new(comment_node, src);
-
-                    // tree-sitter-sqlの性質上、コメントが最後の子供になることはないはずなので、panicしない。
-                    let sibling_node = cursor.node().next_sibling().unwrap();
-
-                    // コメントノードがバインドパラメータであるかを判定し、バインドパラメータならば式として処理し、
-                    // そうでなければ単にコメントとして処理する。
-                    if comment.is_block_comment()
-                        && comment
-                            .loc()
-                            .is_next_to(&Location::new(sibling_node.range()))
-                    {
-                        let identifier = self.visit_expr(cursor, src)?;
-                        separated_lines.add_expr(
-                            identifier.to_aligned(),
-                            Some(COMMA.to_string()),
-                            vec![],
-                        );
-                    } else {
-                        separated_lines.add_comment_to_child(comment)?;
-                    }
-                }
-                "identifier" => {
-                    let identifier = self.visit_expr(cursor, src)?;
-                    separated_lines.add_expr(
-                        identifier.to_aligned(),
-                        Some(COMMA.to_string()),
-                        vec![],
-                    );
-                }
-                _ => {
-                    break;
-                }
-            }
-        }
-
-        Ok(Body::SepLines(separated_lines))
-    }
-
     /// カーソルが指すノードがSQL_IDであれば、clauseに追加する
     /// もし (_SQL_ID_が存在していない) && (_SQL_ID_がまだ出現していない) && (_SQL_ID_の補完がオン)
     /// の場合は補完する
     fn consume_or_complement_sql_id(
         &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         clause: &mut Clause,
     ) {
-        if cursor.node().kind() == COMMENT {
-            let text = cursor.node().utf8_text(src.as_bytes()).unwrap();
+        if cursor.node().kind() == SyntaxKind::C_COMMENT {
+            let text = cursor.node().text();
 
             if SqlID::is_sql_id(text) {
                 clause.set_sql_id(SqlID::new(text.to_string()));
@@ -271,14 +182,13 @@ impl Visitor {
     }
 
     /// カーソルが指すノードがコメントであれば、コメントを消費してclauseに追加する
-    fn consume_comment_in_clause(
+    fn consume_comments_in_clause(
         &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         clause: &mut Clause,
     ) -> Result<(), UroboroSQLFmtError> {
-        while cursor.node().kind() == COMMENT {
-            let comment = Comment::new(cursor.node(), src);
+        while cursor.node().is_comment() {
+            let comment = Comment::new(cursor.node());
             clause.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
@@ -287,69 +197,57 @@ impl Visitor {
     }
 }
 
-/// cursorが指定した種類のノードを指しているかどうかをチェックする関数
-/// 期待しているノードではない場合、エラーを返す
-fn ensure_kind<'a>(
-    cursor: &'a TreeCursor<'a>,
-    kind: &'a str,
-    src: &'a str,
-) -> Result<&'a TreeCursor<'a>, UroboroSQLFmtError> {
-    if cursor.node().kind() != kind {
-        Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-            "ensure_kind(): excepted node is {}, but actual {}\n{}",
-            kind,
-            cursor.node().kind(),
-            error_annotation_from_cursor(cursor, src)
-        )))
-    } else {
-        Ok(cursor)
-    }
+macro_rules! ensure_kind {
+    ($cursor:expr, expr: $keyword_expr:expr, $src:expr) => {{
+        if $cursor.node().kind() != $keyword_expr {
+            return Err($crate::UroboroSQLFmtError::UnexpectedSyntax(format!(
+                "ensure_kind!(): excepted node is {}, but actual {}\n{}",
+                $keyword_expr,
+                $cursor.node().kind(),
+                $crate::visitor::error_annotation_from_cursor($cursor, $src)
+            )));
+        }
+    }};
+    ($cursor:expr, $keyword_pattern:pat, $src:expr) => {
+        if !matches!($cursor.node().kind(), $keyword_pattern) {
+            return Err($crate::UroboroSQLFmtError::UnexpectedSyntax(format!(
+                "ensure_kind!(): excepted node is {}, but actual {}\n{}",
+                stringify!($keyword_pattern),
+                $cursor.node().kind(),
+                $crate::visitor::error_annotation_from_cursor($cursor, $src)
+            )));
+        }
+    };
 }
 
-/// エイリアス補完を行う際に、エイリアス名を持つ Expr を生成する関数。
-/// 引数に元の式を与える。その式がPrimary式ではない場合は、エイリアス名を生成できないので、None を返す。
-fn create_alias(lhs: &Expr) -> Option<Expr> {
-    // 補完用に生成した式には、仮に左辺の位置情報を入れておく
+pub(crate) use ensure_kind;
+
+fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
     let loc = lhs.loc();
 
     match lhs {
-        Expr::Primary(prim) if prim.is_identifier() => {
-            // Primary式であり、さらに識別子である場合のみ、エイリアス名を作成する
-            let element = prim.element();
-            element
-                .split('.')
-                .next_back()
-                .map(|s| Expr::Primary(Box::new(PrimaryExpr::new(convert_identifier_case(s), loc))))
-        }
+        Expr::Primary(prim) => prim.element().split('.').next_back().map(|last| {
+            Expr::Primary(Box::new(PrimaryExpr::new(
+                convert_identifier_case(last),
+                loc,
+            )))
+        }),
         _ => None,
     }
 }
 
-/// keyword の Clauseを生成する関数。
-/// 呼び出し後の cursor はキーワードの最後のノードを指す。
-/// cursor のノードがキーワードと異なっていたら UroboroSQLFmtErrorを返す。
-/// 複数の語からなるキーワードは '_' で区切られており、それぞれのノードは同じ kind を持っている。
-///
-/// 例: "ORDER_BY" は
-///     (content: "ORDER", kind: "ORDER_BY")
-///     (content: "BY", kind: "ORDER_BY")
-/// というノードになっている。
-fn create_clause(
-    cursor: &mut TreeCursor,
-    src: &str,
-    keyword: &str,
-) -> Result<Clause, UroboroSQLFmtError> {
-    ensure_kind(cursor, keyword, src)?;
-    let mut clause = Clause::from_node(cursor.node(), src);
-
-    for _ in 1..keyword.split('_').count() {
-        cursor.goto_next_sibling();
-        ensure_kind(cursor, keyword, src)?;
-        clause.extend_kw(cursor.node(), src);
-    }
-
-    Ok(clause)
+macro_rules! create_clause {
+    ($cursor:expr, expr: $keyword_expr:expr) => {{
+        ensure_kind!($cursor, expr: $keyword_expr, $cursor.input);
+        crate::visitor::Clause::from_node($cursor.node())
+    }};
+    ($cursor:expr, $keyword_pattern:pat) => {{
+        ensure_kind!($cursor, $keyword_pattern, $cursor.input);
+        crate::visitor::Clause::from_node($cursor.node())
+    }};
 }
+
+pub(crate) use create_clause;
 
 /// cursorからエラー注釈を作成する関数
 /// 以下の形のエラー注釈を生成
@@ -360,9 +258,12 @@ fn create_clause(
 ///   | ^^^^^^^^^^^^^ Appears as "ERROR" node on the CST
 ///   |
 /// ```
-fn error_annotation_from_cursor(cursor: &TreeCursor, src: &str) -> String {
+fn error_annotation_from_cursor(
+    cursor: &postgresql_cst_parser::tree_sitter::TreeCursor,
+    src: &str,
+) -> String {
     let label = format!(r#"Appears as "{}" node on the CST"#, cursor.node().kind());
-    let location = Location::new(cursor.node().range());
+    let location = Location::from(cursor.node().range());
 
     match create_error_annotation(&location, &label, src) {
         Ok(error_annotation) => error_annotation,

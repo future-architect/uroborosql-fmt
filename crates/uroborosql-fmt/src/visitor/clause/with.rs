@@ -1,56 +1,137 @@
-use tree_sitter::TreeCursor;
+use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::*,
+    cst::{
+        AlignedExpr, Body, Clause, ColumnList, Comment, Cte, Expr, Location, PrimaryExpr,
+        PrimaryExprKind, Statement, SubExpr, WithBody,
+    },
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, convert_keyword_case},
-    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMA, COMMENT},
+    visitor::{
+        create_clause, ensure_kind, error_annotation_from_cursor, statement::SelectStmtOutput,
+        Visitor,
+    },
 };
 
+// with_clause
+// - WITH RECURSIVE? cte_list
+
+// cte_list
+// - common_table_expr ( ',' common_table_expr)*
+//
+// cte_list is flatten: https://github.com/future-architect/postgresql-cst-parser/pull/20
+
+// common_table_expr
+// - name opt_name_list? AS opt_materialized? '(' PreparableStmt ')' opt_search_clause? opt_cycle_clause?
+
+// opt_name_list
+// - '(' name_list ')'
+
+// name_list
+// - name ( ',' name)*
+//
+// name_list is flatten: https://github.com/future-architect/postgresql-cst-parser/pull/20
+
+// opt_materialized
+// - MATERIALIZED
+// - NOT MATERIALIZED
+
+// PreparableStmt
+// - SelectStmt
+// - InsertStmt
+// - UpdateStmt
+// - DeleteStmt
+// - MergeStmt
+
+// opt_search_clause
+// - SEARCH search_order SET ColLabel
+
+// opt_cycle_clause
+// - CYCLE name_list SET ColLabel opt_equal_to DEFAULT ColLabel opt_using_path
+
 impl Visitor {
-    /// WITH句
+    pub(crate) fn visit_opt_with_clause(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Clause, UroboroSQLFmtError> {
+        // opt_with_clause
+        // - with_clause
+
+        cursor.goto_first_child();
+        ensure_kind!(cursor, SyntaxKind::with_clause, src);
+
+        let with_clause = self.visit_with_clause(cursor, src)?;
+
+        cursor.goto_parent();
+        ensure_kind!(cursor, SyntaxKind::opt_with_clause, src);
+
+        Ok(with_clause)
+    }
+
     pub(crate) fn visit_with_clause(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
+        // with_clause
+        // - (WITH | WITH_LA) RECURSIVE? cte_list
+
         cursor.goto_first_child();
 
-        let mut with_clause = create_clause(cursor, src, "WITH")?;
+        let mut with_clause = create_clause!(cursor, SyntaxKind::WITH | SyntaxKind::WITH_LA);
 
         cursor.goto_next_sibling();
 
-        if cursor.node().kind() == "RECURSIVE" {
+        if cursor.node().kind() == SyntaxKind::RECURSIVE {
             // WITH句のキーワードにRECURSIVEを付与する
-            with_clause.extend_kw(cursor.node(), src);
+            with_clause.extend_kw(cursor.node());
             cursor.goto_next_sibling();
         }
 
-        // SQL_IDとコメントを消費
-        self.consume_or_complement_sql_id(cursor, src, &mut with_clause);
-        self.consume_comment_in_clause(cursor, src, &mut with_clause)?;
+        // SQL_ID とコメントを消費
+        self.consume_or_complement_sql_id(cursor, &mut with_clause);
+        self.consume_comments_in_clause(cursor, &mut with_clause)?;
+
+        let with_body = self.visit_cte_list(cursor, src)?;
+        with_clause.set_body(Body::With(Box::new(with_body)));
+
+        cursor.goto_parent();
+        ensure_kind!(cursor, SyntaxKind::with_clause, src);
+
+        Ok(with_clause)
+    }
+
+    fn visit_cte_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<WithBody, UroboroSQLFmtError> {
+        // cte_list
+        // - common_table_expr ( ',' common_table_expr)*
+        //
+        // cte_list is flatten: https://github.com/future-architect/postgresql-cst-parser/pull/20
+
+        cursor.goto_first_child();
 
         let mut with_body = WithBody::new();
+
         loop {
             match cursor.node().kind() {
-                COMMA => {}
-                "cte" => {
-                    let cte = self.visit_cte(cursor, src)?;
+                SyntaxKind::Comma => {}
+                SyntaxKind::common_table_expr => {
+                    let cte = self.visit_common_table_expr(cursor, src)?;
                     with_body.add_cte(cte);
                 }
-                COMMENT => {
-                    let comment = Comment::new(cursor.node(), src);
-
+                SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::new(cursor.node());
                     with_body.add_comment_to_child(comment)?;
                 }
-                "ERROR" => {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_with_clause: ERROR node appeared \n{}",
-                        error_annotation_from_cursor(cursor, src)
-                    )));
-                }
                 _ => {
-                    break;
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_cte_list: unexpected node kind: {}",
+                        cursor.node().kind()
+                    )));
                 }
             }
 
@@ -59,131 +140,136 @@ impl Visitor {
             }
         }
 
-        with_clause.set_body(Body::With(Box::new(with_body)));
-
         cursor.goto_parent();
-        ensure_kind(cursor, "with_clause", src)?;
+        ensure_kind!(cursor, SyntaxKind::cte_list, src);
 
-        Ok(with_clause)
+        Ok(with_body)
     }
 
-    /// cte(Common Table Expressions)をフォーマット
-    fn visit_cte(&mut self, cursor: &mut TreeCursor, src: &str) -> Result<Cte, UroboroSQLFmtError> {
-        let loc = Location::new(cursor.node().range());
+    fn visit_common_table_expr(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Cte, UroboroSQLFmtError> {
+        // common_table_expr
+        // - name opt_name_list? AS opt_materialized? '(' PreparableStmt ')' opt_search_clause? opt_cycle_clause?
 
         cursor.goto_first_child();
-        // cursor -> identifier
 
-        let table_name = convert_identifier_case(cursor.node().utf8_text(src.as_ref()).unwrap());
+        // cursor -> name
+        let table_name = convert_identifier_case(cursor.node().text());
 
         cursor.goto_next_sibling();
 
-        let mut column_name = None;
-
-        if cursor.node().kind() == "(" {
-            // cursor -> ( column_name [, ...] )
-            let mut column_list = self.visit_column_list(cursor, src)?;
+        // cursor -> opt_name_list?
+        let column_name = if cursor.node().kind() == SyntaxKind::opt_name_list {
+            let mut column_list = self.visit_opt_name_list(cursor, src)?;
 
             // WITH句のカラム名指定は複数行で描画する
             column_list.set_force_multi_line(true);
 
             cursor.goto_next_sibling();
-
-            column_name = Some(column_list);
+            Some(column_list)
+        } else {
+            None
         };
 
-        // テーブル名の直後のコメント
-        let mut name_trailing_comment = None;
-        if cursor.node().kind() == COMMENT {
-            name_trailing_comment = Some(Comment::new(cursor.node(), src));
+        // cursor -> comment? (テーブル名の直後のコメント)
+        let name_trailing_comment = if cursor.node().is_comment() {
+            let comment = Comment::new(cursor.node());
             cursor.goto_next_sibling();
-        }
+            Some(comment)
+        } else {
+            None
+        };
 
-        // cursor -> "AS"
-        ensure_kind(cursor, "AS", src)?;
-
-        let as_keyword = convert_keyword_case(cursor.node().utf8_text(src.as_ref()).unwrap());
+        // cursor -> AS
+        ensure_kind!(cursor, SyntaxKind::AS, src);
+        let as_keyword = convert_keyword_case(cursor.node().text());
 
         cursor.goto_next_sibling();
 
-        let mut materialized_keyword = None;
+        // cursor -> opt_materialized?
+        let materialized_keyword = if cursor.node().kind() == SyntaxKind::opt_materialized {
+            // opt_materialized
+            // - MATERIALIZED
+            // - NOT MATERIALIZED
 
-        // cursor -> "NOT"?
-        if cursor.node().kind() == "NOT" {
-            let not = convert_keyword_case(cursor.node().utf8_text(src.as_ref()).unwrap());
-            materialized_keyword = Some(not);
-            cursor.goto_next_sibling();
-        }
-
-        // cursor -> "MATERIALIZED"?
-        if cursor.node().kind() == "MATERIALIZED" {
-            let materialized = convert_keyword_case(cursor.node().utf8_text(src.as_ref()).unwrap());
-
-            if let Some(materialized_keyword) = &mut materialized_keyword {
-                // NOTがある場合にしかこの分岐に入らないのでMATERIALIZEDの前に空白を付与して挿入する
-                materialized_keyword.push_str(&format!(" {materialized}"));
-            } else {
-                // NOTがない場合
-                materialized_keyword = Some(materialized);
-            }
+            let text = cursor.node().text();
+            let splitted = text.split_whitespace().collect::<Vec<_>>();
 
             cursor.goto_next_sibling();
-        }
+            Some(convert_keyword_case(&splitted.join(" ")))
+        } else {
+            None
+        };
 
-        // ( statement ) のloc
-        let mut stmt_loc = Location::new(cursor.node().range());
+        // cursor -> '('
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
+        // `( statement )` の location を作りたいので、開き括弧の location を持っておく
+        let mut parenthized_stmt_loc = Location::from(cursor.node().range());
 
         cursor.goto_next_sibling();
-        // cursor -> select_statement | comments
 
+        // cursor -> comments?
         let mut comment_buf = vec![];
-        while cursor.node().kind() == COMMENT {
-            let comment = Comment::new(cursor.node(), src);
+        while cursor.node().is_comment() {
+            let comment = Comment::new(cursor.node());
             comment_buf.push(comment);
             cursor.goto_next_sibling();
         }
 
-        // cursor -> select_statement | delete_statement | insert_statement | update_statement
-        let mut statement = match cursor.node().kind() {
-            "select_statement" => self.visit_select_stmt(cursor, src)?,
-            "delete_statement" => self.visit_delete_stmt(cursor, src)?,
-            "insert_statement" => self.visit_insert_stmt(cursor, src)?,
-            "update_statement" => self.visit_update_stmt(cursor, src)?,
-            _ => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_cte(): Unimplemented statement\n{}",
-                    error_annotation_from_cursor(cursor, src)
-                )));
-            }
-        };
-        stmt_loc.append(Location::new(cursor.node().range()));
+        // cursor -> PreparableStmt
+        let mut statement = self.visit_preparable_stmt(cursor, src)?;
+        parenthized_stmt_loc.append(Location::from(cursor.node().range()));
 
         cursor.goto_next_sibling();
 
-        // statementの最後のコメントを処理する
-        while cursor.node().kind() == COMMENT {
-            let comment = Comment::new(cursor.node(), src);
+        // cursor -> comments? (statement 直後のコメント)
+        while cursor.node().is_comment() {
+            let comment = Comment::new(cursor.node());
             statement.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
 
-        // cursor -> )
-        ensure_kind(cursor, ")", src)?;
-        stmt_loc.append(Location::new(cursor.node().range()));
+        // cursor -> ')'
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
+        parenthized_stmt_loc.append(Location::from(cursor.node().range()));
 
-        // 開きかっことstatementの間にあるコメントを追加
+        // 開き括弧とstatementの間にあるコメントを追加
         for comment in comment_buf {
             statement.add_comment(comment);
         }
 
-        let subexpr = SubExpr::new(statement, stmt_loc);
+        let subexpr = SubExpr::new(statement, parenthized_stmt_loc);
 
-        // cursorを戻しておく
+        cursor.goto_next_sibling();
+
+        // cursor -> opt_search_clause?
+        if cursor.node().kind() == SyntaxKind::opt_search_clause {
+            // opt_search_clause
+            // - SEARCH search_order SET ColLabel
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_common_table_expr: opt_search_clause is not implemented\n{}",
+                error_annotation_from_cursor(cursor, src)
+            )));
+        }
+
+        // cursor -> opt_cycle_clause?
+        if cursor.node().kind() == SyntaxKind::opt_cycle_clause {
+            // opt_cycle_clause
+            // - CYCLE name_list SET ColLabel opt_equal_to DEFAULT ColLabel opt_using_path
+            return Err(UroboroSQLFmtError::Unimplemented(format!(
+                "visit_common_table_expr: opt_cycle_clause is not implemented\n{}",
+                error_annotation_from_cursor(cursor, src)
+            )));
+        }
+
         cursor.goto_parent();
-        ensure_kind(cursor, "cte", src)?;
+        ensure_kind!(cursor, SyntaxKind::common_table_expr, src);
 
         let mut cte = Cte::new(
-            loc,
+            Location::from(cursor.node().range()),
             table_name,
             as_keyword,
             column_name,
@@ -191,10 +277,179 @@ impl Visitor {
             subexpr,
         );
 
+        // テーブル名の直後のコメントを追加
         if let Some(comment) = name_trailing_comment {
             cte.set_name_trailing_comment(comment)?;
         }
 
         Ok(cte)
+    }
+
+    fn visit_opt_name_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<ColumnList, UroboroSQLFmtError> {
+        // opt_name_list
+        // - '(' name_list ')'
+
+        cursor.goto_first_child();
+
+        // cursor -> '('
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
+
+        cursor.goto_next_sibling();
+        // cursor -> comment?
+
+        // 開き括弧と式との間にあるコメントを保持
+        let mut start_comments = vec![];
+        while cursor.node().is_comment() {
+            let comment = Comment::new(cursor.node());
+            start_comments.push(comment);
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> name_list
+        ensure_kind!(cursor, SyntaxKind::name_list, src);
+        let mut exprs = self.visit_name_list(cursor, src)?;
+
+        cursor.goto_next_sibling();
+        // cursor -> comment?
+
+        if cursor.node().is_comment() {
+            // 行末コメントを想定する
+            let comment = Comment::new(cursor.node());
+
+            // exprs は必ず1つ以上要素を持っている
+            let last = exprs.last_mut().unwrap();
+            if last.loc().is_same_line(&comment.loc()) {
+                last.set_trailing_comment(comment)?;
+            } else {
+                // 行末コメント以外のコメントは想定していない
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_opt_name_list(): Unexpected comment\n{}",
+                    error_annotation_from_cursor(cursor, src)
+                )));
+            }
+
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> ')'
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
+
+        cursor.goto_parent();
+        ensure_kind!(cursor, SyntaxKind::opt_name_list, src);
+
+        let loc = Location::from(cursor.node().range());
+        Ok(ColumnList::new(exprs, loc, start_comments))
+    }
+
+    fn visit_name_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Vec<AlignedExpr>, UroboroSQLFmtError> {
+        // name_list
+        // - name ( ',' name)*
+        //
+        // name: ColId
+
+        cursor.goto_first_child();
+        // cursor -> name
+
+        let mut names = vec![];
+
+        ensure_kind!(cursor, SyntaxKind::name, src);
+        let first = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Expr)?;
+        names.push(Expr::Primary(Box::new(first)).to_aligned());
+
+        while cursor.goto_next_sibling() {
+            match cursor.node().kind() {
+                SyntaxKind::Comma => {}
+                SyntaxKind::name => {
+                    let name = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Expr)?;
+                    names.push(Expr::Primary(Box::new(name)).to_aligned());
+                }
+                SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
+                    let comment = Comment::new(cursor.node());
+
+                    // names は必ず1つ以上要素を持っている
+                    let last = names.last_mut().unwrap();
+                    if last.loc().is_same_line(&comment.loc()) {
+                        last.set_trailing_comment(comment)?;
+                    } else {
+                        // 行末コメント以外のコメントは想定していない
+                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                            "visit_name_list(): Unexpected comment\n{}",
+                            error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                }
+                _ => {
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_name_list: unexpected node kind: {}",
+                        cursor.node().kind()
+                    )));
+                }
+            }
+        }
+
+        cursor.goto_parent();
+        ensure_kind!(cursor, SyntaxKind::name_list, src);
+
+        Ok(names)
+    }
+
+    fn visit_preparable_stmt(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Statement, UroboroSQLFmtError> {
+        // PreparableStmt
+        // - SelectStmt
+        // - InsertStmt
+        // - UpdateStmt
+        // - DeleteStmt
+        // - MergeStmt
+
+        cursor.goto_first_child();
+
+        let statement = match cursor.node().kind() {
+            SyntaxKind::SelectStmt => {
+                let statement_output = self.visit_select_stmt(cursor, src)?;
+
+                // 現状は Statement を返すパターンのみを考慮する
+                if let SelectStmtOutput::Statement(statement) = statement_output {
+                    statement
+                } else {
+                    return Err(UroboroSQLFmtError::Unimplemented(format!(
+                        "visit_preparable_stmt: VALUES clauses or expressions are not supported as PreparableStmt.\n{}",
+                        error_annotation_from_cursor(cursor, src)
+                    )));
+                }
+            }
+            SyntaxKind::InsertStmt => self.visit_insert_stmt(cursor, src)?,
+            SyntaxKind::UpdateStmt => self.visit_update_stmt(cursor, src)?,
+            SyntaxKind::DeleteStmt => self.visit_delete_stmt(cursor, src)?,
+            unimplemented_stmt @ SyntaxKind::MergeStmt => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_preparable_stmt: {} is not implemented\n{}",
+                    unimplemented_stmt,
+                    error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_preparable_stmt: unexpected node kind: {}",
+                    cursor.node().kind()
+                )));
+            }
+        };
+
+        cursor.goto_parent();
+        ensure_kind!(cursor, SyntaxKind::PreparableStmt, src);
+
+        Ok(statement)
     }
 }

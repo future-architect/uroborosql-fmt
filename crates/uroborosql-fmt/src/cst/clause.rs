@@ -1,5 +1,3 @@
-use tree_sitter::Node;
-
 use crate::{
     error::UroboroSQLFmtError,
     util::{add_single_space, convert_keyword_case},
@@ -20,21 +18,9 @@ pub(crate) struct Clause {
 }
 
 impl Clause {
-    /// NodeからClauseを新規作成
-    /// 作成時にキーワードの大文字小文字を設定に合わせて自動で変換する
-    pub(crate) fn from_node(kw_node: Node, src: &str) -> Clause {
-        let keyword = convert_keyword_case(kw_node.utf8_text(src.as_bytes()).unwrap());
-        let loc = Location::new(kw_node.range());
-        Clause {
-            keyword,
-            body: None,
-            loc,
-            sql_id: None,
-            comments: vec![],
-        }
-    }
-
-    pub(crate) fn from_pg_node(kw_node: postgresql_cst_parser::tree_sitter::Node) -> Clause {
+    /// NodeからClauseを生成する
+    /// キーワードの大文字小文字を設定に合わせて自動で変換する
+    pub(crate) fn from_node(kw_node: postgresql_cst_parser::tree_sitter::Node) -> Clause {
         let keyword = convert_keyword_case(kw_node.text());
         let loc = Location::from(kw_node.range());
         Clause {
@@ -50,48 +36,13 @@ impl Clause {
         self.loc.clone()
     }
 
-    pub(crate) fn keyword(&self) -> String {
-        self.keyword.clone()
-    }
-
-    /// Nodeでキーワードを延長する (延長にはスペースを使用)
-    /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
-    pub(crate) fn extend_kw(&mut self, node: Node, src: &str) {
-        let loc = Location::new(node.range());
-        self.loc.append(loc);
-        self.keyword.push(' ');
-        self.keyword.push_str(&convert_keyword_case(
-            node.utf8_text(src.as_bytes()).unwrap(),
-        ));
-    }
-
     /// postgresql-cst-parser の Node でキーワードを延長する (延長にはスペースを使用)
     /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
-    pub(crate) fn pg_extend_kw(&mut self, node: postgresql_cst_parser::tree_sitter::Node) {
+    pub(crate) fn extend_kw(&mut self, node: postgresql_cst_parser::tree_sitter::Node) {
         let loc = Location::from(node.range());
         self.loc.append(loc);
         self.keyword.push(' ');
         self.keyword.push_str(&convert_keyword_case(node.text()));
-    }
-
-    /// 文字列を受け取ってキーワードを延長する
-    /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
-    pub(crate) fn extend_kw_with_string(&mut self, kw: &str) {
-        self.keyword.push(' ');
-        self.keyword.push_str(&convert_keyword_case(kw));
-    }
-
-    /// Nodeでキーワードを延長する (延長にはタブ文字を使用)
-    /// この時、キーワードの大文字小文字を設定に合わせて自動で変換する
-    /// ※ 一時的に使用しない状態になったが、今後使用するかもしれないので警告を抑制しておく
-    #[allow(dead_code)]
-    pub(crate) fn extend_kw_with_tab(&mut self, node: Node, src: &str) {
-        let loc = Location::new(node.range());
-        self.loc.append(loc);
-        add_single_space(&mut self.keyword);
-        self.keyword.push_str(&convert_keyword_case(
-            node.utf8_text(src.as_bytes()).unwrap(),
-        ));
     }
 
     /// bodyをセットする
