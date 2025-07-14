@@ -1,5 +1,5 @@
 mod clause;
-mod pg_expr;
+mod expr;
 mod statement;
 
 use postgresql_cst_parser::syntax_kind::SyntaxKind;
