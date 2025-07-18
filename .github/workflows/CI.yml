@@ -9,7 +9,7 @@ permissions:
   id-token: write
 "on":
   push:
-    branches: [main, pgcst/build-process]
+    branches: [main]
     paths-ignore:
       - "**/*.md"
       - LICENSE
