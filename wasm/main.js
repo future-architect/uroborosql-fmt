@@ -118,9 +118,6 @@ function registerUIEvents() {
   });
 }
 
-/**************************************************
- * エントリポイント
- *************************************************/
 async function main() {
   // wasm と Monaco を初期化
   await Promise.all([init(), loadMonaco()]);
