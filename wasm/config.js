@@ -14,6 +14,8 @@ export function defaultConfig() {
     complement_sql_id: false,
     convert_double_colon_cast: true,
     unify_not_equal: true,
+    indent_tab: true,
+    use_parser_error_recovery: true,
   };
 }
 
@@ -87,5 +89,7 @@ export function buildConfigJson() {
     complement_sql_id: bool("complement_sql_id"),
     convert_double_colon_cast: bool("convert_double_colon_cast"),
     unify_not_equal: bool("unify_not_equal"),
+    indent_tab: bool("indent_tab"),
+    use_parser_error_recovery: bool("use_parser_error_recovery"),
   });
 }
