@@ -82,7 +82,7 @@ function formatSql() {
 
 // ボタン等のイベント登録
 function registerUIEvents() {
-  // dafault button
+  // default button
   document.getElementById("default").addEventListener(
     "click",
     applyDefaultConfig,
