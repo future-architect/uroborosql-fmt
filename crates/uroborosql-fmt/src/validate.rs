@@ -1,9 +1,18 @@
 use itertools::Itertools;
-use postgresql_cst_parser::{lex, Token, TokenKind};
+use postgresql_cst_parser::{Token, TokenKind};
 
 use crate::{
     config::load_never_complement_settings, format, format_two_way_sql, UroboroSQLFmtError,
 };
+
+fn lex(src: &str) -> Result<Vec<Token>, UroboroSQLFmtError> {
+    match postgresql_cst_parser::lex(src) {
+        Ok(tokens) => Ok(tokens),
+        Err(e) => Err(UroboroSQLFmtError::ParseError(format!(
+            "failed to tokenize: {e:?}"
+        ))),
+    }
+}
 
 /// フォーマット前後でSQLに欠落が生じないかを検証する。
 /// is_2way_sql_mode には 2way-sql モードでフォーマットするかどうかを指定する。
@@ -20,11 +29,11 @@ pub(crate) fn validate_format_result(
         format(src)?
     };
 
-    let mut src_tokens = lex(src);
+    let mut src_tokens = lex(src)?;
     // カンマと行末コメントの並びを入れ替える
     swap_comma_and_trailing_comment(&mut src_tokens);
 
-    let dst_tokens = lex(&format_result);
+    let dst_tokens = lex(&format_result)?;
 
     compare_tokens(&src_tokens, &dst_tokens, src, &format_result)
 }
