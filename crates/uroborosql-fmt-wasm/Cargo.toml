@@ -24,6 +24,6 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 
 uroborosql-fmt = { workspace = true }
 
-# [profile.release]
-# # Tell `rustc` to optimize for small code size.
-# opt-level = "s"
+[profile.release]
+# Tell `rustc` to optimize for small code size.
+opt-level = "s"
