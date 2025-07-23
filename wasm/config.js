@@ -54,6 +54,8 @@ export const selectAllConfig = () =>
     complement_sql_id: true,
     convert_double_colon_cast: true,
     unify_not_equal: true,
+    indent_tab: true,
+    use_parser_error_recovery: true,
   });
 
 export const clearAllConfig = () =>
@@ -67,6 +69,8 @@ export const clearAllConfig = () =>
     complement_sql_id: false,
     convert_double_colon_cast: false,
     unify_not_equal: false,
+    indent_tab: false,
+    use_parser_error_recovery: false,
   });
 
 export function buildConfigJson() {
