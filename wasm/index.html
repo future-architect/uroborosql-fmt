@@ -47,7 +47,7 @@
     </summary>
     <div class="button_parent">
       <!-- defaultボタン -->
-      <input type="button" value="dafault" id="default" class="small_button" />
+      <input type="button" value="default" id="default" class="small_button" />
       <!-- select allボタン -->
       <input type="button" value="select all" id="select_all" class="small_button" />
       <!-- clear allボタン -->
@@ -116,6 +116,20 @@
       <input type="checkbox" id="unify_not_equal" name="unify_not_equal" checked />
       <label for="unify_not_equal">Convert comparison operator &lt;&gt; to !=</label>
       <span class="option_balloon">e.g. <code>STUDENT_ID &lt;&gt; 2</code> → <code>STUDENT_ID != 2</code></span>
+    </div>
+
+    <!-- indent_tab -->
+    <div class="option">
+      <input type="checkbox" id="indent_tab" name="indent_tab" checked />
+      <label for="indent_tab">Indent with tab instead of spaces</label>
+      <span class="option_balloon">Use tab characters (\t) for indentation instead of spaces</span>
+    </div>
+
+    <!-- use_parser_error_recovery -->
+    <div class="option">
+      <input type="checkbox" id="use_parser_error_recovery" name="use_parser_error_recovery" checked />
+      <label for="use_parser_error_recovery">Enable parser error recovery</label>
+      <span class="option_balloon">Allow the SQL parser to recover from syntax errors and continue formatting</span>
     </div>
 
     <table>
@@ -204,8 +218,7 @@
   <pre><code id="error_msg" style="color: red;"></code></pre>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.43.0/min/vs/loader.min.js"></script>
-  <script src="main.js"></script>
-  <script async src="uroborosql-fmt.js"></script>
+  <script type="module" src="main.js"></script>
 </body>
 
 </html>
