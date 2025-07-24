@@ -1,6 +1,5 @@
 # Overview of the process flow
 
-<!-- TODO: Update the image -->
 <img src="../../images/process_flow.png"/>
 
 1. Parse input SQL with [postgresql-cst-parser](https://github.com/future-architect/postgresql-cst-parser) to get CST.
