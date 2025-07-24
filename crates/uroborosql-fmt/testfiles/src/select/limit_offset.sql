@@ -63,4 +63,4 @@ ORDER BY
     TBL1.COLUMN2    
     DESC
 limit /*$hoge*/100 + 1
-OFFSET 5;
+OFFSET /*fuga*/5;

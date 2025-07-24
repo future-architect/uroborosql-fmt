@@ -32,6 +32,8 @@ impl Visitor {
 
         cursor.goto_next_sibling();
 
+        self.consume_comments_in_clause(cursor, &mut offset_clause)?;
+
         // cursor -> select_offset_value | select_fetch_first_value
         match cursor.node().kind() {
             SyntaxKind::select_offset_value => {
