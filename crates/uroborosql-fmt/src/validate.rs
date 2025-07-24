@@ -20,11 +20,13 @@ pub(crate) fn validate_format_result(
         format(src)?
     };
 
-    let mut src_tokens = lex(src);
+    let mut src_tokens = lex(src)
+        .map_err(|e| UroboroSQLFmtError::ParseError(format!("failed to tokenize: {e:?}")))?;
     // カンマと行末コメントの並びを入れ替える
     swap_comma_and_trailing_comment(&mut src_tokens);
 
-    let dst_tokens = lex(&format_result);
+    let dst_tokens = lex(src)
+        .map_err(|e| UroboroSQLFmtError::ParseError(format!("failed to tokenize: {e:?}")))?;
 
     compare_tokens(&src_tokens, &dst_tokens, src, &format_result)
 }

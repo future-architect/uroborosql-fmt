@@ -3,12 +3,6 @@
 version = 4
 
 [[package]]
-name = "adler2"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
-
-[[package]]
 name = "aho-corasick"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -248,15 +242,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f232d6ef707e1956a43342693d2a31e72989554d58299d7a88738cc95b0d35c"
 
 [[package]]
-name = "miniz_oxide"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8402cab7aefae129c6977bb0ff1b8fd9a04eb5b51efc50a70bea51cda0c7924"
-dependencies = [
- "adler2",
-]
-
-[[package]]
 name = "napi"
 version = "2.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -344,12 +329,10 @@ dependencies = [
 
 [[package]]
 name = "postgresql-cst-parser"
-version = "0.1.0"
-source = "git+https://github.com/future-architect/postgresql-cst-parser#9d0218fc4a35a6b6b86b623501afd1104758c620"
+version = "0.2.0"
+source = "git+https://github.com/future-architect/postgresql-cst-parser#eeb064fb948c9496b9f108ffbe4621905a14a152"
 dependencies = [
  "cstree",
- "miniz_oxide",
- "regex",
 ]
 
 [[package]]
