@@ -25,7 +25,7 @@ pub(crate) fn validate_format_result(
     // カンマと行末コメントの並びを入れ替える
     swap_comma_and_trailing_comment(&mut src_tokens);
 
-    let dst_tokens = lex(src)
+    let dst_tokens = lex(&format_result)
         .map_err(|e| UroboroSQLFmtError::ParseError(format!("failed to tokenize: {e:?}")))?;
 
     compare_tokens(&src_tokens, &dst_tokens, src, &format_result)
