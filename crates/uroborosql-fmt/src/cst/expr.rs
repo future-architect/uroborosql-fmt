@@ -5,6 +5,7 @@ pub(crate) mod cond;
 pub(crate) mod conflict_target;
 pub(crate) mod expr_seq;
 pub(crate) mod function;
+pub(crate) mod function_table;
 pub(crate) mod joined_table;
 pub(crate) mod paren;
 pub(crate) mod primary;
@@ -18,8 +19,8 @@ use crate::{error::UroboroSQLFmtError, util::to_tab_num};
 
 use self::{
     aligned::AlignedExpr, asterisk::AsteriskExpr, cond::CondExpr, function::FunctionCall,
-    paren::ParenExpr, primary::PrimaryExpr, subquery::SubExpr, type_cast::TypeCast,
-    unary::UnaryExpr,
+    function_table::FunctionTable, paren::ParenExpr, primary::PrimaryExpr, subquery::SubExpr,
+    type_cast::TypeCast, unary::UnaryExpr,
 };
 
 use super::{ColumnList, Comment, ExistsSubquery, ExprSeq, Location, SeparatedLines};
@@ -52,6 +53,8 @@ pub(crate) enum Expr {
     ColumnList(Box<ColumnList>),
     /// 関数呼び出し
     FunctionCall(Box<FunctionCall>),
+    /// テーブル関数呼び出し
+    FunctionTable(Box<FunctionTable>),
     /// N個の式の連続
     ExprSeq(Box<ExprSeq>),
     /// `::`を用いたキャスト
@@ -74,6 +77,7 @@ impl Expr {
             Expr::Unary(unary) => unary.loc(),
             Expr::ColumnList(cols) => cols.loc(),
             Expr::FunctionCall(func_call) => func_call.loc(),
+            Expr::FunctionTable(func_table) => func_table.loc(),
             Expr::ExprSeq(n_expr) => n_expr.loc(),
             Expr::TypeCast(type_cast) => type_cast.loc(),
             Expr::JoinedTable(joined_table) => joined_table.loc(),
@@ -97,6 +101,7 @@ impl Expr {
             Expr::Unary(unary) => unary.render(depth),
             Expr::ColumnList(cols) => cols.render(depth),
             Expr::FunctionCall(func_call) => func_call.render(depth),
+            Expr::FunctionTable(func_table) => func_table.render(depth),
             Expr::ExprSeq(n_expr) => n_expr.render(depth),
             Expr::TypeCast(type_cast) => type_cast.render(depth),
             Expr::JoinedTable(joined_table) => joined_table.render(depth),
@@ -133,6 +138,7 @@ impl Expr {
             Expr::Unary(unary) => unary.last_line_len_from_left(acc),
             Expr::ColumnList(cols) => cols.last_line_len(acc),
             Expr::FunctionCall(func_call) => func_call.last_line_len_from_left(acc),
+            Expr::FunctionTable(func_table) => func_table.last_line_len_from_left(acc),
             Expr::Boolean(_) => unimplemented!(),
             Expr::ExprSeq(n_expr) => n_expr.last_line_len_from_left(acc),
             Expr::TypeCast(type_cast) => type_cast.last_line_len_from_left(acc),
@@ -212,6 +218,7 @@ impl Expr {
             Expr::Unary(unary) => unary.is_multi_line(),
             Expr::ParenExpr(paren) => paren.is_multi_line(),
             Expr::FunctionCall(func_call) => func_call.is_multi_line(),
+            Expr::FunctionTable(func_table) => func_table.is_multi_line(),
             Expr::ColumnList(col_list) => col_list.is_multi_line(),
             Expr::ExprSeq(n_expr) => n_expr.is_multi_line(),
             Expr::TypeCast(type_cast) => type_cast.is_multi_line(),
@@ -234,6 +241,7 @@ impl Expr {
             | Expr::Unary(_)
             | Expr::ColumnList(_)
             | Expr::FunctionCall(_)
+            | Expr::FunctionTable(_)
             | Expr::ExprSeq(_)
             | Expr::TypeCast(_)
             | Expr::JoinedTable(_) => false,
