@@ -1,5 +1,5 @@
 use crate::{
-    cst::{add_indent, Comment, Location},
+    cst::{add_indent, Comment, Location, SpaceSeparatedColumnExpr},
     error::UroboroSQLFmtError,
     util::{add_single_space, add_space_by_range, tab_size, to_tab_num},
 };
@@ -472,5 +472,11 @@ impl AlignedExpr {
     /// 左辺がCASE文であればtrueを返す
     pub(crate) fn is_lhs_cond(&self) -> bool {
         matches!(&self.lhs, Expr::Cond(_))
+    }
+}
+
+impl From<AlignedExpr> for SpaceSeparatedColumnExpr {
+    fn from(expr: AlignedExpr) -> Self {
+        SpaceSeparatedColumnExpr::new(expr.lhs, expr.op, expr.rhs)
     }
 }

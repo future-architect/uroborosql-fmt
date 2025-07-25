@@ -1,10 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{
-        AlignedExpr, Body, Clause, ColumnList, Comment, Cte, Expr, Location, PrimaryExpr,
-        PrimaryExprKind, Statement, SubExpr, WithBody,
-    },
+    cst::{Body, Clause, Comment, Cte, Location, Statement, SubExpr, WithBody},
     error::UroboroSQLFmtError,
     util::{convert_identifier_case, convert_keyword_case},
     visitor::{
@@ -163,10 +160,12 @@ impl Visitor {
 
         // cursor -> opt_name_list?
         let column_name = if cursor.node().kind() == SyntaxKind::opt_name_list {
-            let mut column_list = self.visit_opt_name_list(cursor, src)?;
+            let parenthesized_name_list = self.visit_opt_name_list(cursor, src)?;
+
+            let mut column_list = parenthesized_name_list.try_into_column_list()?;
 
             // WITH句のカラム名指定は複数行で描画する
-            column_list.set_force_multi_line(true);
+            column_list.force_multi_line();
 
             cursor.goto_next_sibling();
             Some(column_list)
@@ -283,122 +282,6 @@ impl Visitor {
         }
 
         Ok(cte)
-    }
-
-    fn visit_opt_name_list(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<ColumnList, UroboroSQLFmtError> {
-        // opt_name_list
-        // - '(' name_list ')'
-
-        cursor.goto_first_child();
-
-        // cursor -> '('
-        ensure_kind!(cursor, SyntaxKind::LParen, src);
-
-        cursor.goto_next_sibling();
-        // cursor -> comment?
-
-        // 開き括弧と式との間にあるコメントを保持
-        let mut start_comments = vec![];
-        while cursor.node().is_comment() {
-            let comment = Comment::new(cursor.node());
-            start_comments.push(comment);
-            cursor.goto_next_sibling();
-        }
-
-        // cursor -> name_list
-        ensure_kind!(cursor, SyntaxKind::name_list, src);
-        let mut exprs = self.visit_name_list(cursor, src)?;
-
-        cursor.goto_next_sibling();
-        // cursor -> comment?
-
-        if cursor.node().is_comment() {
-            // 行末コメントを想定する
-            let comment = Comment::new(cursor.node());
-
-            // exprs は必ず1つ以上要素を持っている
-            let last = exprs.last_mut().unwrap();
-            if last.loc().is_same_line(&comment.loc()) {
-                last.set_trailing_comment(comment)?;
-            } else {
-                // 行末コメント以外のコメントは想定していない
-                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_opt_name_list(): Unexpected comment\n{}",
-                    error_annotation_from_cursor(cursor, src)
-                )));
-            }
-
-            cursor.goto_next_sibling();
-        }
-
-        // cursor -> ')'
-        ensure_kind!(cursor, SyntaxKind::RParen, src);
-
-        cursor.goto_parent();
-        ensure_kind!(cursor, SyntaxKind::opt_name_list, src);
-
-        let loc = Location::from(cursor.node().range());
-        Ok(ColumnList::new(exprs, loc, start_comments))
-    }
-
-    fn visit_name_list(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<Vec<AlignedExpr>, UroboroSQLFmtError> {
-        // name_list
-        // - name ( ',' name)*
-        //
-        // name: ColId
-
-        cursor.goto_first_child();
-        // cursor -> name
-
-        let mut names = vec![];
-
-        ensure_kind!(cursor, SyntaxKind::name, src);
-        let first = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Expr)?;
-        names.push(Expr::Primary(Box::new(first)).to_aligned());
-
-        while cursor.goto_next_sibling() {
-            match cursor.node().kind() {
-                SyntaxKind::Comma => {}
-                SyntaxKind::name => {
-                    let name = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Expr)?;
-                    names.push(Expr::Primary(Box::new(name)).to_aligned());
-                }
-                SyntaxKind::C_COMMENT | SyntaxKind::SQL_COMMENT => {
-                    let comment = Comment::new(cursor.node());
-
-                    // names は必ず1つ以上要素を持っている
-                    let last = names.last_mut().unwrap();
-                    if last.loc().is_same_line(&comment.loc()) {
-                        last.set_trailing_comment(comment)?;
-                    } else {
-                        // 行末コメント以外のコメントは想定していない
-                        return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                            "visit_name_list(): Unexpected comment\n{}",
-                            error_annotation_from_cursor(cursor, src)
-                        )));
-                    }
-                }
-                _ => {
-                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                        "visit_name_list: unexpected node kind: {}",
-                        cursor.node().kind()
-                    )));
-                }
-            }
-        }
-
-        cursor.goto_parent();
-        ensure_kind!(cursor, SyntaxKind::name_list, src);
-
-        Ok(names)
     }
 
     fn visit_preparable_stmt(

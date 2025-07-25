@@ -72,7 +72,7 @@ impl Visitor {
                     let mut column_list =
                         ColumnList::try_from(self.handle_parenthesized_expr_list(cursor, src)?)?;
                     // 改行によるフォーマットを強制
-                    column_list.set_force_multi_line(true);
+                    column_list.force_multi_line();
 
                     // ColumnListをSeparatedLinesに格納してBody
                     let mut sep_lines = SeparatedLines::new();

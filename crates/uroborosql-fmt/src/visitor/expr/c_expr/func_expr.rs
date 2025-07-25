@@ -102,6 +102,47 @@ impl Visitor {
         Ok(Expr::FunctionCall(Box::new(func)))
     }
 
+    pub(crate) fn visit_func_expr_windowless(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // func_expr_windowless:
+        // - func_application
+        // - func_expr_common_subexpr
+        // - json_aggregate_func
+
+        cursor.goto_first_child();
+
+        // cursor -> func_application | func_expr_common_subexpr | json_aggregate_func
+        let expr = match cursor.node().kind() {
+            SyntaxKind::func_application => {
+                let func = self.visit_func_application(cursor, src)?;
+                Expr::FunctionCall(Box::new(func))
+            }
+            SyntaxKind::func_expr_common_subexpr => {
+                self.visit_func_expr_common_subexpr(cursor, src)?
+            }
+            SyntaxKind::json_aggregate_func => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_func_expr_windowless(): json_aggregate_func is not implemented\n{}",
+                    error_annotation_from_cursor(cursor, src)
+                )));
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_func_expr_windowless(): unexpected node kind\n{}",
+                    error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        cursor.goto_parent();
+        ensure_kind!(cursor, SyntaxKind::func_expr_windowless, src);
+
+        Ok(expr)
+    }
+
     fn visit_filter_clause(
         &mut self,
         cursor: &mut TreeCursor,

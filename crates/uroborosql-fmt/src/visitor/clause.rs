@@ -1,3 +1,4 @@
+mod alias;
 mod for_locking;
 mod frame;
 mod from;
@@ -207,7 +208,7 @@ impl Visitor {
                     SyntaxKind::target_el,
                     cursor.node().kind(),
                     error_annotation_from_cursor(cursor, src)
-                )))
+                )));
             }
         };
 

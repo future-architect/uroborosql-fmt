@@ -18,6 +18,7 @@ pub(crate) use cond::*;
 pub(crate) use conflict_target::*;
 pub(crate) use expr_seq::*;
 pub(crate) use function::*;
+pub(crate) use function_table::*;
 pub(crate) use paren::*;
 pub(crate) use primary::*;
 pub(crate) use subquery::*;
