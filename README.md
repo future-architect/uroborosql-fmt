@@ -21,7 +21,7 @@ The main features:
   - However, not all PostgreSQL syntax is supported.
 - Supports 2way-sql such as [uroboroSQL](https://future-architect.github.io/uroborosql-doc/) and [doma2](https://doma.readthedocs.io/en/latest/).
 - Some Auto Fix functions are available.
-- All indentation is done in tabs.
+- Uses tabs for indentation by default (configurable to use spaces).
 - **Leading comma style**, not a trailing comma style.
 
 	```sql
