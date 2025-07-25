@@ -43,8 +43,9 @@ impl Visitor {
                 )))
             }
             _ => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_func_table(): unimplemented func_table node appeared. func_table node is not implemented yet.\n{}",
+                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                    "visit_func_table(): unexpected node appeared. node: {}\n{}",
+                    cursor.node().kind(),
                     error_annotation_from_cursor(cursor, src)
                 )));
             }
@@ -67,10 +68,44 @@ impl Visitor {
         // - alias_clause
         // - AS? ColId? '(' TableFuncElementList ')'
 
-        Err(UroboroSQLFmtError::Unimplemented(format!(
-            "visit_func_alias_clause(): func_alias_clause node appeared. Table function alias clauses are not implemented yet.\n{}",
+        cursor.goto_first_child();
+
+        // alias_clause なら先に処理して early return
+        if cursor.node().kind() == SyntaxKind::alias_clause {
+            let alias_clause = self.visit_alias_clause(cursor, src)?;
+
+            cursor.goto_parent();
+            ensure_kind!(cursor, SyntaxKind::func_alias_clause, src);
+
+            return Ok(alias_clause);
+        }
+
+        // cursor -> AS?
+        let _as_keyword = if cursor.node().kind() == SyntaxKind::AS {
+            let as_keyword = convert_keyword_case(cursor.node().text());
+            cursor.goto_next_sibling();
+
+            Some(as_keyword)
+        } else {
+            None
+        };
+
+        // cursor -> ColId?
+        let _col_id = if cursor.node().kind() == SyntaxKind::ColId {
+            let col_id = cursor.node().text();
+            cursor.goto_next_sibling();
+
+            Some(col_id)
+        } else {
+            None
+        };
+
+        // cursor -> '('
+        ensure_kind!(cursor, SyntaxKind::LParen, src);
+        return Err(UroboroSQLFmtError::Unimplemented(format!(
+            "visit_func_alias_clause(): '(' node appeared. '( TableFuncElementList )' pattern is not implemented yet.\n{}",
             error_annotation_from_cursor(cursor, src)
-        )))
+        )));
     }
 
     fn visit_opt_ordinality(
