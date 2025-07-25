@@ -57,6 +57,17 @@ impl Visitor {
         Ok(func_table)
     }
 
+    fn visit_opt_ordinality(
+        &mut self,
+        cursor: &mut TreeCursor,
+    ) -> Result<String, UroboroSQLFmtError> {
+        // opt_ordinality:
+        // - WITH_LA ORDINALITY
+
+        let text = cursor.node().text();
+        Ok(convert_keyword_case(text))
+    }
+
     /// func_alias_clause を visit し、 as キーワード (Option) と Expr を返す
     /// 呼出し後、cursor は func_alias_clause を指している
     pub(crate) fn visit_func_alias_clause(
@@ -66,7 +77,9 @@ impl Visitor {
     ) -> Result<(Option<String>, Expr), UroboroSQLFmtError> {
         // func_alias_clause:
         // - alias_clause
-        // - AS? ColId? '(' TableFuncElementList ')'
+        // - AS '(' TableFuncElementList ')'
+        // - ColId '(' TableFuncElementList ')'
+        // - AS ColId '(' TableFuncElementList ')'
 
         cursor.goto_first_child();
 
@@ -102,20 +115,61 @@ impl Visitor {
 
         // cursor -> '('
         ensure_kind!(cursor, SyntaxKind::LParen, src);
-        return Err(UroboroSQLFmtError::Unimplemented(format!(
-            "visit_func_alias_clause(): '(' node appeared. '( TableFuncElementList )' pattern is not implemented yet.\n{}",
-            error_annotation_from_cursor(cursor, src)
-        )));
-    }
+        let table_func_element_list = self.handle_parenthesized_table_func_element_list(cursor, src)?;
+        ensure_kind!(cursor, SyntaxKind::RParen, src);
+        
+        if let Some(col_id) = _col_id {
+            // table_func_alias 的な式に追加する
+            todo!()
+            
+        }
 
-    fn visit_opt_ordinality(
+        cursor.goto_parent();
+        ensure_kind!(cursor, SyntaxKind::func_alias_clause, src);
+
+        Ok((_as_keyword, table_func_element_list))
+    }
+    
+    //////////////////////////////////////////////////////////////
+    /// 以下仮実装： 返り値は未定
+    //////////////////////////////////////////////////////////////
+
+    
+    /// 括弧で囲まれた TableFuncElementList を走査する
+    /// 呼出し時、cursor は '(' を指している
+    /// 呼出し後、cursor は ')' を指している
+    fn handle_parenthesized_table_func_element_list(
         &mut self,
         cursor: &mut TreeCursor,
-    ) -> Result<String, UroboroSQLFmtError> {
-        // opt_ordinality:
-        // - WITH_LA ORDINALITY
-
-        let text = cursor.node().text();
-        Ok(convert_keyword_case(text))
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // '(' TableFuncElementList ')'
+        // ^^^                      ^^^
+        // 呼出し時                  呼出し後
+        
+        todo!()
+    }
+    
+    fn visit_table_func_element_list(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // TableFuncElementList:
+        // - TableFuncElement ( ',' TableFuncElementList )*
+        //
+        // this node is flatten: https://github.com/future-architect/postgresql-cst-parser/pull/29
+        
+        todo!()
+    }
+    
+    fn visit_table_func_element(
+        &mut self,
+        cursor: &mut TreeCursor,
+        src: &str,
+    ) -> Result<Expr, UroboroSQLFmtError> {
+        // TableFuncElement:
+        // - ColId Typename opt_collate_clause?
+        todo!()
     }
 }
