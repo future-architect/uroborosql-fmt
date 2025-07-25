@@ -4,7 +4,7 @@ Enable error recovery in the SQL parser.
 
 When this option is enabled, `postgresql-cst-parser` attempts to recover from certain syntax errors and continues formatting.
 
-Internally, this feature relies on the `parse_2way` function of `postgresql-cst-parser`. Refer to its documentation for details.
+Internally, this feature relies on the `parse_2way` function of `postgresql-cst-parser`. You can refer to the original source code and documentation [here](https://github.com/future-architect/postgresql-cst-parser/blob/eeb064fb948c9496b9f108ffbe4621905a14a152/crates/postgresql-cst-parser/src/lib.rs#L103-L118).
 
 ## Options
 
