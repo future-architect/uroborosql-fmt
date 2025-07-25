@@ -79,7 +79,7 @@ fn default_use_parser_error_recovery() -> bool {
     true
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Case {
     Upper,
@@ -105,7 +105,7 @@ impl Case {
 }
 
 /// 設定を保持する構造体
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     /// デバッグモード
     #[serde(default = "default_debug")]
@@ -232,7 +232,7 @@ impl Default for Config {
 
 /// 引数に与えた Config 構造体をグローバル変数 CONFIG に読み込む
 pub(crate) fn load_settings(config: Config) {
-    *CONFIG.write().unwrap() = config
+    *CONFIG.write().unwrap() = config;
 }
 
 /// 補完・削除を行わない設定をロードする

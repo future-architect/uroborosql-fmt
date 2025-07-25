@@ -37,15 +37,14 @@ pub(crate) fn format_sql_with_config(
     src: &str,
     config: Config,
 ) -> Result<String, UroboroSQLFmtError> {
-    if CONFIG.read().unwrap().debug {
-        eprintln!(
-            "use_parser_error_recovery: {}",
-            config.use_parser_error_recovery
-        );
-    }
+    load_settings(config.clone());
 
     // パーサの2way-sql用エラー回復機能を使うかどうか
-    let use_parser_error_recovery = config.use_parser_error_recovery;
+    let use_parser_error_recovery = CONFIG.read().unwrap().use_parser_error_recovery;
+
+    if CONFIG.read().unwrap().debug {
+        eprintln!("use_parser_error_recovery: {}", use_parser_error_recovery);
+    }
 
     let parse_result = if use_parser_error_recovery {
         parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))
@@ -61,6 +60,7 @@ pub(crate) fn format_sql_with_config(
             }
 
             validate_format_result(src, false)?;
+            // validate で設定が上書きされるので再度読み込む
             load_settings(config);
 
             format_cst(&tree, src)
@@ -74,6 +74,7 @@ pub(crate) fn format_sql_with_config(
                 }
 
                 validate_format_result(src, true)?;
+                // validate で設定が上書きされるので再度読み込む
                 load_settings(config);
 
                 format_two_way_sql(src)
