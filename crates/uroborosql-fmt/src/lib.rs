@@ -43,7 +43,7 @@ pub(crate) fn format_sql_with_config(
     let use_parser_error_recovery = CONFIG.read().unwrap().use_parser_error_recovery;
 
     if CONFIG.read().unwrap().debug {
-        eprintln!("use_parser_error_recovery: {}", use_parser_error_recovery);
+        eprintln!("use_parser_error_recovery: {use_parser_error_recovery}");
     }
 
     let parse_result = if use_parser_error_recovery {
