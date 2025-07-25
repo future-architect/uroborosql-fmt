@@ -12,9 +12,12 @@ use config::*;
 use error::UroboroSQLFmtError;
 use postgresql_cst_parser::tree_sitter::parse;
 use postgresql_cst_parser::tree_sitter::parse_2way;
+use postgresql_cst_parser::tree_sitter::Node;
 use two_way_sql::format_two_way_sql;
 use two_way_sql::is_two_way_sql;
 use visitor::Visitor;
+
+use std::fmt::Write;
 
 /// 設定ファイルより優先させるオプションを JSON 文字列で与えて、SQLのフォーマットを行う。
 ///
@@ -36,10 +39,9 @@ pub(crate) fn format_sql_with_config(
 ) -> Result<String, UroboroSQLFmtError> {
     if CONFIG.read().unwrap().debug {
         eprintln!(
-            "use_parser_error_recovery = {}",
+            "use_parser_error_recovery: {}",
             config.use_parser_error_recovery
         );
-        eprintln!("parser: postgresql-cst-parser");
     }
 
     // パーサの2way-sql用エラー回復機能を使うかどうか
@@ -82,31 +84,6 @@ pub(crate) fn format_sql_with_config(
     }
 }
 
-#[allow(unused)]
-fn print_cst(node: postgresql_cst_parser::tree_sitter::Node, depth: usize) {
-    for _ in 0..depth {
-        eprint!("\t");
-    }
-    eprint!(
-        "{} [{}-{}]",
-        node.kind(),
-        node.start_position(),
-        node.end_position()
-    );
-
-    let mut cursor = node.walk();
-    if cursor.goto_first_child() {
-        loop {
-            eprintln!();
-            print_cst(cursor.node(), depth + 1);
-            //次の兄弟ノードへカーソルを移動
-            if !cursor.goto_next_sibling() {
-                break;
-            }
-        }
-    }
-}
-
 pub(crate) fn format(src: &str) -> Result<String, UroboroSQLFmtError> {
     let tree = if CONFIG.read().unwrap().use_parser_error_recovery {
         parse_2way(src).map_err(|e| UroboroSQLFmtError::ParseError(format!("{e:?}")))?
@@ -122,9 +99,10 @@ pub(crate) fn format_cst(
     tree: &postgresql_cst_parser::tree_sitter::Tree,
     src: &str,
 ) -> Result<String, UroboroSQLFmtError> {
-    // if CONFIG.read().unwrap().debug {
-    //     eprintln!("CST: {:#?}", tree);
-    // }
+    if CONFIG.read().unwrap().debug {
+        eprintln!("CST:");
+        print_cst(tree.root_node(), 0);
+    }
 
     // ビジターオブジェクトを生成
     let mut visitor = Visitor::default();
@@ -132,9 +110,10 @@ pub(crate) fn format_cst(
     // SQLソースファイルをフォーマット用構造体に変換する
     let stmts = visitor.visit_sql(tree.root_node(), src.as_ref())?;
 
-    // if CONFIG.read().unwrap().debug {
-    //     eprintln!("{stmts:#?}");
-    // }
+    if CONFIG.read().unwrap().debug {
+        eprintln!();
+        eprintln!("{stmts:#?}");
+    }
 
     let result = stmts
         .iter()
@@ -142,4 +121,37 @@ pub(crate) fn format_cst(
         .collect();
 
     Ok(result)
+}
+
+fn print_cst(node: Node, depth: usize) {
+    let mut output = String::new();
+    write_cst(node, depth, &mut output).expect("debug: writing to string should not fail");
+    eprintln!("{output}");
+}
+
+fn write_cst(node: Node, depth: usize, output: &mut String) -> std::fmt::Result {
+    for _ in 0..depth {
+        write!(output, "  ")?;
+    }
+    write!(
+        output,
+        "{} [{}-{}]",
+        node.kind(),
+        node.start_position(),
+        node.end_position()
+    )?;
+
+    let mut cursor = node.walk();
+    if cursor.goto_first_child() {
+        loop {
+            writeln!(output)?;
+            write_cst(cursor.node(), depth + 1, output)?;
+            //次の兄弟ノードへカーソルを移動
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+
+    Ok(())
 }
