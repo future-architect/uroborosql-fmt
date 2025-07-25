@@ -225,8 +225,8 @@ impl Visitor {
 
                 // cursor -> func_table
                 let func_table = self.visit_func_table(cursor, src)?;
-                let func_call_expr = Expr::FunctionCall(Box::new(func_table));
-                let mut aligned = func_call_expr.to_aligned();
+                let func_table_expr = Expr::FunctionTable(Box::new(func_table));
+                let mut aligned = func_table_expr.to_aligned();
 
                 cursor.goto_next_sibling();
                 // cursor -> func_alias_clause

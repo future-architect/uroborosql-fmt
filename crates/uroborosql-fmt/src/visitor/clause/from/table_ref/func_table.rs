@@ -1,9 +1,10 @@
 use crate::{
-    cst::{Expr, FunctionCall},
+    cst::{Expr, FunctionTable},
     error::UroboroSQLFmtError,
-    visitor::{error_annotation_from_cursor, Visitor},
+    util::convert_keyword_case,
+    visitor::{ensure_kind, error_annotation_from_cursor, Visitor},
 };
-use postgresql_cst_parser::tree_sitter::TreeCursor;
+use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 impl Visitor {
     /// 呼出し後、cursor は func_table を指している
@@ -11,15 +12,48 @@ impl Visitor {
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
-    ) -> Result<FunctionCall, UroboroSQLFmtError> {
+    ) -> Result<FunctionTable, UroboroSQLFmtError> {
         // func_table
         // - func_expr_windowless opt_ordinality
         // - ROWS FROM '(' rowsfrom_list ')' opt_ordinality
 
-        Err(UroboroSQLFmtError::Unimplemented(format!(
-            "visit_func_table(): func_table node appeared. Table function calls are not implemented yet.\n{}",
-            error_annotation_from_cursor(cursor, src)
-        )))
+        let loc = cursor.node().range().into();
+
+        cursor.goto_first_child();
+
+        let func_table = match cursor.node().kind() {
+            SyntaxKind::func_expr_windowless => {
+                let func_expr = self.visit_func_expr_windowless(cursor, src)?;
+
+                cursor.goto_next_sibling();
+
+                // cursor -> opt_ordinality?
+                let with_ordinality = if cursor.node().kind() == SyntaxKind::opt_ordinality {
+                    Some(self.visit_opt_ordinality(cursor)?)
+                } else {
+                    None
+                };
+
+                FunctionTable::new(func_expr, with_ordinality, loc)
+            }
+            SyntaxKind::ROWS => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_func_table(): ROWS node appeared. 'ROWS FROM (rowsfrom_list)' pattern is not implemented yet.\n{}",
+                    error_annotation_from_cursor(cursor, src)
+                )))
+            }
+            _ => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "visit_func_table(): unimplemented func_table node appeared. func_table node is not implemented yet.\n{}",
+                    error_annotation_from_cursor(cursor, src)
+                )));
+            }
+        };
+
+        cursor.goto_parent();
+        ensure_kind!(cursor, SyntaxKind::func_table, src);
+
+        Ok(func_table)
     }
 
     /// func_alias_clause を visit し、 as キーワード (Option) と Expr を返す
@@ -37,5 +71,16 @@ impl Visitor {
             "visit_func_alias_clause(): func_alias_clause node appeared. Table function alias clauses are not implemented yet.\n{}",
             error_annotation_from_cursor(cursor, src)
         )))
+    }
+
+    fn visit_opt_ordinality(
+        &mut self,
+        cursor: &mut TreeCursor,
+    ) -> Result<String, UroboroSQLFmtError> {
+        // opt_ordinality:
+        // - WITH_LA ORDINALITY
+
+        let text = cursor.node().text();
+        Ok(convert_keyword_case(text))
     }
 }
