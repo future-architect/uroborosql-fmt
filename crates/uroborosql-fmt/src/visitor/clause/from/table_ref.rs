@@ -1,3 +1,4 @@
+mod func_table;
 mod joined_table;
 
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
@@ -9,6 +10,7 @@ use crate::{
     visitor::{ensure_kind, error_annotation_from_cursor, Visitor},
     CONFIG,
 };
+
 impl Visitor {
     /// 呼出し後、cursor は table_ref を指している
     pub(crate) fn visit_table_ref(
@@ -220,12 +222,32 @@ impl Visitor {
             SyntaxKind::func_table => {
                 // テーブル関数呼び出し
                 // func_table func_alias_clause
-                // - generate_series(1, 10) as g(val)
-                // - unnest(array[1, 2, 3]) as nums(n)
-                Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_table_ref(): func_table node appeared. Table function calls are not implemented yet.\n{}",
-                    error_annotation_from_cursor(cursor, src)
-                )))
+
+                // cursor -> func_table
+                let func_table = self.visit_func_table(cursor, src)?;
+                let func_call_expr = Expr::FunctionCall(Box::new(func_table));
+                let mut aligned = func_call_expr.to_aligned();
+
+                cursor.goto_next_sibling();
+                // cursor -> func_alias_clause
+                ensure_kind!(cursor, SyntaxKind::func_alias_clause, src);
+                let (as_keyword, alias_expr) = self.visit_func_alias_clause(cursor, src)?;
+
+                // as の補完はしない。as が存在し、 remove_table_as_keyword が有効ならば AS を除去
+                if let Some(as_keyword) = as_keyword {
+                    if CONFIG.read().unwrap().remove_table_as_keyword {
+                        aligned.add_rhs(None, alias_expr);
+                    } else {
+                        aligned.add_rhs(Some(convert_keyword_case(&as_keyword)), alias_expr);
+                    }
+                } else {
+                    aligned.add_rhs(None, alias_expr);
+                }
+
+                cursor.goto_parent();
+                ensure_kind!(cursor, SyntaxKind::table_ref, src);
+
+                Ok(TableRef::SimpleTable(aligned))
             }
             SyntaxKind::LATERAL_P => {
                 // LATERAL系
