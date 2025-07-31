@@ -44,6 +44,10 @@ Please install [Rust](https://www.rust-lang.org/tools/install) before installing
 cargo install --git https://github.com/future-architect/uroborosql-fmt
 ```
 
+### CLI Documentation
+
+For detailed CLI usage, options, and examples, see the [CLI documentation](crates/uroborosql-fmt-cli/README.md).
+
 ## Usage
 
 ### Command line output
