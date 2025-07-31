@@ -5,7 +5,7 @@ use crate::{
         FunctionTable, Location, PrimaryExpr, PrimaryExprKind,
     },
     error::UroboroSQLFmtError,
-    util::convert_keyword_case,
+    util::{convert_identifier_case, convert_keyword_case},
     visitor::{ensure_kind, error_annotation_from_cursor, Visitor},
 };
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
@@ -110,7 +110,7 @@ impl Visitor {
         // cursor -> ColId?
         let mut alias_loc = Location::from(cursor.node().range());
         let optional_colid = if cursor.node().kind() == SyntaxKind::ColId {
-            let col_id = cursor.node().text();
+            let col_id = convert_identifier_case(cursor.node().text());
 
             cursor.goto_next_sibling();
 

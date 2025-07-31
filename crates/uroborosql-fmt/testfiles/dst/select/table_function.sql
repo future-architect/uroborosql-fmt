@@ -34,12 +34,12 @@ from
 select
 	*
 from
-	unnest(a) with ordinality	T(i	int, v	text)
+	unnest(a) with ordinality	t(i	int, v	text)
 ;
 select
 	*
 from
-	unnest(a) with ordinality	T(i	int, v	text)
+	unnest(a) with ordinality	t(i	int, v	text)
 ;
 -- `TableFuncElementList` かつ、 as が省略不可のケース（省略すると構文上不正になりパースできない）
 select
@@ -53,8 +53,8 @@ select
 from
 	test						t1
 ,	unnest(a) with ordinality	t2
-,	unnest(b) with ordinality	T3(i	int, v	text)
-,	unnest(c) with ordinality	T4(
+,	unnest(b) with ordinality	t3(i	int, v	text)
+,	unnest(c) with ordinality	t4(
 		i	int		-- comment
 	,	v	text
 	)
@@ -71,11 +71,11 @@ from
 		i	-- comment 1
 	,	v	-- comment 2
 	)
-,	unnest(c) with ordinality	T_C(
+,	unnest(c) with ordinality	t_c(
 		i	int		-- comment 1
 	,	v	text	-- comment 2
 	)
-,	unnest(d) with ordinality	T_D(
+,	unnest(d) with ordinality	t_d(
 		i	int		-- comment 1
 	,	v	text	-- comment 2
 	)
