@@ -11,3 +11,9 @@ repository.workspace = true
 
 [dependencies]
 uroborosql-fmt = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+assert_cmd = "2"
+assert_fs = "1"
+predicates = "3"
