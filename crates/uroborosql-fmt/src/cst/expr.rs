@@ -10,6 +10,7 @@ pub(crate) mod joined_table;
 pub(crate) mod paren;
 pub(crate) mod primary;
 pub(crate) mod subquery;
+pub(crate) mod table_function_alias;
 pub(crate) mod type_cast;
 pub(crate) mod unary;
 
@@ -20,7 +21,7 @@ use crate::{error::UroboroSQLFmtError, util::to_tab_num};
 use self::{
     aligned::AlignedExpr, asterisk::AsteriskExpr, cond::CondExpr, function::FunctionCall,
     function_table::FunctionTable, paren::ParenExpr, primary::PrimaryExpr, subquery::SubExpr,
-    type_cast::TypeCast, unary::UnaryExpr,
+    table_function_alias::TableFuncAlias, type_cast::TypeCast, unary::UnaryExpr,
 };
 
 use super::{ColumnList, Comment, ExistsSubquery, ExprSeq, Location, SeparatedLines};
@@ -55,6 +56,8 @@ pub(crate) enum Expr {
     FunctionCall(Box<FunctionCall>),
     /// テーブル関数呼び出し
     FunctionTable(Box<FunctionTable>),
+    /// テーブル関数エイリアス句
+    TableFuncAlias(Box<TableFuncAlias>),
     /// N個の式の連続
     ExprSeq(Box<ExprSeq>),
     /// `::`を用いたキャスト
@@ -81,6 +84,7 @@ impl Expr {
             Expr::ExprSeq(n_expr) => n_expr.loc(),
             Expr::TypeCast(type_cast) => type_cast.loc(),
             Expr::JoinedTable(joined_table) => joined_table.loc(),
+            Expr::TableFuncAlias(table_func_alias) => table_func_alias.loc(),
         }
     }
 
@@ -105,6 +109,7 @@ impl Expr {
             Expr::ExprSeq(n_expr) => n_expr.render(depth),
             Expr::TypeCast(type_cast) => type_cast.render(depth),
             Expr::JoinedTable(joined_table) => joined_table.render(depth),
+            Expr::TableFuncAlias(table_func_alias) => table_func_alias.render(depth),
         }
     }
 
@@ -139,6 +144,7 @@ impl Expr {
             Expr::ColumnList(cols) => cols.last_line_len(acc),
             Expr::FunctionCall(func_call) => func_call.last_line_len_from_left(acc),
             Expr::FunctionTable(func_table) => func_table.last_line_len_from_left(acc),
+            Expr::TableFuncAlias(table_func_alias) => table_func_alias.last_line_len(acc),
             Expr::Boolean(_) => unimplemented!(),
             Expr::ExprSeq(n_expr) => n_expr.last_line_len_from_left(acc),
             Expr::TypeCast(type_cast) => type_cast.last_line_len_from_left(acc),
@@ -184,6 +190,12 @@ impl Expr {
             Expr::JoinedTable(joined_table) => {
                 joined_table.add_comment_to_child(comment)?;
             }
+            Expr::TableFuncAlias(_) => {
+                return Err(UroboroSQLFmtError::Unimplemented(format!(
+                    "add_comment_to_child(): unimplemented for table_func_alias\nexpr: {:?}",
+                    &self
+                )));
+            }
             _ => {
                 // todo
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
@@ -223,6 +235,7 @@ impl Expr {
             Expr::ExprSeq(n_expr) => n_expr.is_multi_line(),
             Expr::TypeCast(type_cast) => type_cast.is_multi_line(),
             Expr::JoinedTable(joined_table) => joined_table.is_multi_line(),
+            Expr::TableFuncAlias(table_func_alias) => table_func_alias.is_multi_line(),
         }
     }
 
@@ -244,7 +257,8 @@ impl Expr {
             | Expr::FunctionTable(_)
             | Expr::ExprSeq(_)
             | Expr::TypeCast(_)
-            | Expr::JoinedTable(_) => false,
+            | Expr::JoinedTable(_)
+            | Expr::TableFuncAlias(_) => false,
         }
     }
 

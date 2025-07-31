@@ -232,19 +232,10 @@ impl Visitor {
                 // cursor -> func_alias_clause
                 ensure_kind!(cursor, SyntaxKind::func_alias_clause, src);
                 let (as_keyword, alias_expr) = self.visit_func_alias_clause(cursor, src)?;
-
-                // as の補完はしない。as が存在し、 remove_table_as_keyword が有効ならば AS を除去
-                if let Some(as_keyword) = as_keyword {
-                    if CONFIG.read().unwrap().remove_table_as_keyword {
-                        aligned.add_rhs(None, alias_expr);
-                    } else {
-                        aligned.add_rhs(Some(convert_keyword_case(&as_keyword)), alias_expr);
-                    }
-                } else {
-                    aligned.add_rhs(None, alias_expr);
-                }
+                aligned.add_rhs(as_keyword, alias_expr);
 
                 cursor.goto_parent();
+                // cursor -> table_ref
                 ensure_kind!(cursor, SyntaxKind::table_ref, src);
 
                 Ok(TableRef::SimpleTable(aligned))
@@ -277,48 +268,5 @@ impl Visitor {
                 )))
             }
         }
-    }
-
-    /// alias_clause を visit し、 as キーワード (Option) と Expr を返す
-    /// 呼出し後、cursor は alias_clause を指している
-    fn visit_alias_clause(
-        &mut self,
-        cursor: &mut TreeCursor,
-        src: &str,
-    ) -> Result<(Option<String>, Expr), UroboroSQLFmtError> {
-        // alias_clause
-        // - [AS] ColId ['(' name_list ')']
-
-        // cursor -> alias_clause
-        ensure_kind!(cursor, SyntaxKind::alias_clause, src);
-
-        cursor.goto_first_child();
-        // cursor -> AS?
-        let as_keyword = if cursor.node().kind() == SyntaxKind::AS {
-            let as_keyword = cursor.node().text().to_string();
-            cursor.goto_next_sibling();
-
-            Some(as_keyword)
-        } else {
-            None
-        };
-
-        // cursor -> ColId
-        let col_id = PrimaryExpr::with_node(cursor.node(), PrimaryExprKind::Expr)?;
-        cursor.goto_next_sibling();
-
-        // cursor -> '('?
-        if cursor.node().kind() == SyntaxKind::LParen {
-            return Err(UroboroSQLFmtError::Unimplemented(format!(
-                "visit_alias_clause(): {} node appeared. Name lists are not implemented yet.\n{}",
-                cursor.node().kind(),
-                error_annotation_from_cursor(cursor, src)
-            )));
-        }
-
-        cursor.goto_parent();
-        ensure_kind!(cursor, SyntaxKind::alias_clause, src);
-
-        Ok((as_keyword, col_id.into()))
     }
 }
