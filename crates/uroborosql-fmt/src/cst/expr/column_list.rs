@@ -50,6 +50,18 @@ impl SpaceSeparatedColumnExpr {
     }
 }
 
+impl From<SpaceSeparatedColumnExpr> for AlignedExpr {
+    fn from(col: SpaceSeparatedColumnExpr) -> Self {
+        let mut aligned = AlignedExpr::new(col.left);
+
+        if let Some(right) = col.right {
+            aligned.add_rhs(col.sep, right);
+        }
+
+        aligned
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct SpaceSeparatedColumnList {
     cols: Vec<SpaceSeparatedColumnExpr>,
@@ -121,18 +133,6 @@ impl From<SpaceSeparatedColumnList> for MultiLineColumnList {
             .collect::<Vec<_>>();
 
         MultiLineColumnList::new(aligned_exprs, list.loc.clone(), vec![])
-    }
-}
-
-impl From<SpaceSeparatedColumnExpr> for AlignedExpr {
-    fn from(col: SpaceSeparatedColumnExpr) -> Self {
-        let mut aligned = AlignedExpr::new(col.left);
-
-        if let Some(right) = col.right {
-            aligned.add_rhs(col.sep, right);
-        }
-
-        aligned
     }
 }
 
