@@ -59,7 +59,7 @@ impl Visitor {
         // カラムリストが一つのみであるとき、複数行で描画する
         if rows.len() == 1 {
             rows.iter_mut().for_each(|row| {
-                row.set_force_multi_line(true);
+                row.force_multi_line();
             });
         }
 

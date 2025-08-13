@@ -1,5 +1,5 @@
 use crate::{
-    cst::{AlignedExpr, Comment, Location},
+    cst::{AlignedExpr, ColumnList, Comment, Location},
     error::UroboroSQLFmtError,
 };
 
@@ -89,5 +89,27 @@ impl ParenthesizedExprList {
             location,
             start_comments,
         }
+    }
+}
+
+impl TryFrom<ParenthesizedExprList> for ColumnList {
+    type Error = UroboroSQLFmtError;
+
+    fn try_from(list: ParenthesizedExprList) -> Result<Self, Self::Error> {
+        let mut cols = vec![];
+        for item in list.expr_list.items() {
+            if let Some(following_comment) = item.following_comments().first() {
+                return Err(UroboroSQLFmtError::Unimplemented(
+                    format!(
+                        "Comments following elements in ColumnList are not supported. Only trailing comments are supported.\ncomment: {}",
+                        following_comment.text()
+                    ),
+                ));
+            }
+
+            cols.push(item.expr().clone());
+        }
+
+        Ok(ColumnList::new(cols, list.location, list.start_comments))
     }
 }
