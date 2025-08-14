@@ -1,6 +1,6 @@
 {
   "name": "uroborosql-fmt-napi-darwin-x64",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "os": [
     "darwin"
   ],
