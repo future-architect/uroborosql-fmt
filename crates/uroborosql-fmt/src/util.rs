@@ -96,8 +96,7 @@ fn byte_to_char_index(input: &str, target_byte_index: usize) -> Result<usize, Ur
         Ok(char_index)
     } else {
         Err(UroboroSQLFmtError::Runtime(format!(
-            "byte_to_char_index: byte_index({}) is out of range",
-            target_byte_index
+            "byte_to_char_index: byte_index({target_byte_index}) is out of range"
         )))
     }
 }

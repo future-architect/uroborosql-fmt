@@ -75,7 +75,11 @@ fn default_indent_tab() -> bool {
     true
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+fn default_use_parser_error_recovery() -> bool {
+    true
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Case {
     Upper,
@@ -101,7 +105,7 @@ impl Case {
 }
 
 /// 設定を保持する構造体
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     /// デバッグモード
     #[serde(default = "default_debug")]
@@ -154,6 +158,10 @@ pub struct Config {
     /// 空白文字ではなくタブ文字でインデントする
     #[serde(default = "default_indent_tab")]
     pub(crate) indent_tab: bool,
+
+    /// パーサのエラー回復機能を使うかどうか
+    #[serde(default = "default_use_parser_error_recovery")]
+    pub(crate) use_parser_error_recovery: bool,
 }
 
 impl Config {
@@ -217,13 +225,14 @@ impl Default for Config {
             convert_double_colon_cast: default_convert_double_colon_cast(),
             unify_not_equal: default_unify_not_equal(),
             indent_tab: default_indent_tab(),
+            use_parser_error_recovery: default_use_parser_error_recovery(),
         }
     }
 }
 
 /// 引数に与えた Config 構造体をグローバル変数 CONFIG に読み込む
 pub(crate) fn load_settings(config: Config) {
-    *CONFIG.write().unwrap() = config
+    *CONFIG.write().unwrap() = config;
 }
 
 /// 補完・削除を行わない設定をロードする
@@ -244,6 +253,7 @@ pub(crate) fn load_never_complement_settings() {
         convert_double_colon_cast: false,
         unify_not_equal: false,
         indent_tab: true,
+        use_parser_error_recovery: default_use_parser_error_recovery(),
     };
 
     *CONFIG.write().unwrap() = config;

@@ -5,6 +5,6 @@ set
 where
 	price	<=	99.99
 returning
-	name
+	name	as	name
 ,	price	as	new_price
 ;

@@ -1,74 +1,91 @@
-use tree_sitter::TreeCursor;
+use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::*,
+    cst::{Clause, Comment, Statement},
     error::UroboroSQLFmtError,
-    visitor::{
-        create_clause, ensure_kind, error_annotation_from_cursor,
-        expr::{ComplementConfig, ComplementKind},
-        Visitor, COMMENT,
-    },
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
+// DeleteStmt
+// - opt_with_clause? DELETE_P FROM relation_expr_opt_alias using_clause? where_or_current_clause? returning_clause?
+//
+// opt_with_clause
+// - with_clause
+//
+// using_clause
+// - USING from_list
+
 impl Visitor {
-    /// DELETE文をStatement構造体で返す
     pub(crate) fn visit_delete_stmt(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Statement, UroboroSQLFmtError> {
+        // DeleteStmt
+        // - opt_with_clause? DELETE_P FROM relation_expr_opt_alias using_clause? where_or_current_clause? returning_clause?
         let mut statement = Statement::new();
 
         cursor.goto_first_child();
-        // cusor -> with_clause?
+        // cursor -> opt_with_clause?
 
-        if cursor.node().kind() == "with_clause" {
-            // with句を追加する
-            let mut with_clause = self.visit_with_clause(cursor, src)?;
-            cursor.goto_next_sibling();
-            // with句の後に続くコメントを消費する
-            self.consume_comment_in_clause(cursor, src, &mut with_clause)?;
-
+        if cursor.node().kind() == SyntaxKind::opt_with_clause {
+            let with_clause = self.visit_opt_with_clause(cursor, src)?;
             statement.add_clause(with_clause);
+
+            cursor.goto_next_sibling();
         }
 
-        // cursor -> delete_clause
-        ensure_kind(cursor, "DELETE", src)?;
+        // cursor -> comments?
+        while cursor.node().is_comment() {
+            let comment = Comment::new(cursor.node());
+            statement.add_comment_to_child(comment)?;
+            cursor.goto_next_sibling();
+        }
 
-        // DELETE
-        let mut clause = create_clause(cursor, src, "DELETE")?;
+        // cursor -> DELETE_P
+        ensure_kind!(cursor, SyntaxKind::DELETE_P, src);
+        let mut clause = create_clause!(cursor, SyntaxKind::DELETE_P);
+
         cursor.goto_next_sibling();
-        self.consume_or_complement_sql_id(cursor, src, &mut clause);
-        self.consume_comment_in_clause(cursor, src, &mut clause)?;
+        self.consume_or_complement_sql_id(cursor, &mut clause);
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
         statement.add_clause(clause);
 
-        // cursor -> from_clause
-        let from_clause = self.visit_from_clause(cursor, src)?;
+        // cursor -> FROM
+        let mut from_clause = create_clause!(cursor, SyntaxKind::FROM);
+        cursor.goto_next_sibling();
+
+        self.consume_comments_in_clause(cursor, &mut from_clause)?;
+
+        // cursor -> relation_expr_opt_alias
+        let body = self.visit_relation_expr_opt_alias(cursor, src)?;
+
+        from_clause.set_body(body);
         statement.add_clause(from_clause);
 
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
-                "using_table_list" => {
-                    let clause = self.visit_using_table_list(cursor, src)?;
-                    statement.add_clause(clause);
+                SyntaxKind::using_clause => {
+                    let using_clause = self.visit_using_clause(cursor, src)?;
+                    statement.add_clause(using_clause);
                 }
-                "where_clause" => {
-                    let clause = self.visit_where_clause(cursor, src)?;
-                    statement.add_clause(clause);
+                SyntaxKind::where_or_current_clause => {
+                    let where_or_current_clause =
+                        self.visit_where_or_current_clause(cursor, src)?;
+                    statement.add_clause(where_or_current_clause);
                 }
-                "returning_clause" => {
-                    let clause =
-                        self.visit_simple_clause(cursor, src, "returning_clause", "RETURNING")?;
-                    statement.add_clause(clause);
+                SyntaxKind::returning_clause => {
+                    let returning_clause = self.visit_returning_clause(cursor, src)?;
+                    statement.add_clause(returning_clause);
                 }
-                COMMENT => {
-                    let comment = Comment::new(cursor.node(), src);
+                SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
+                    let comment = Comment::new(cursor.node());
                     statement.add_comment_to_child(comment)?;
                 }
                 _ => {
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_delete_stmt(): unimplemented delete_statement\n{}",
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_delete_stmt(): unexpected node kind\n{}",
                         error_annotation_from_cursor(cursor, src)
                     )));
                 }
@@ -76,34 +93,33 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "delete_statement", src)?;
+        // cursor -> DeleteStmt
+        ensure_kind!(cursor, SyntaxKind::DeleteStmt, src);
 
         Ok(statement)
     }
 
-    pub(crate) fn visit_using_table_list(
+    fn visit_using_clause(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
-        // using_table_listは必ずUSINGを子供に持つ
+        // using_clause
+        // - USING from_list
+
         cursor.goto_first_child();
 
-        // cursor -> USING
-        let mut clause = create_clause(cursor, src, "USING")?;
+        let mut clause = create_clause!(cursor, SyntaxKind::USING);
         cursor.goto_next_sibling();
-        self.consume_comment_in_clause(cursor, src, &mut clause)?;
 
-        // ASがあれば除去する
-        // エイリアス補完は現状行わない
-        let complement_config = ComplementConfig::new(ComplementKind::TableName, true, false);
-        let body = self.visit_comma_sep_alias(cursor, src, Some(&complement_config))?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
+        let body = self.visit_from_list(cursor, src, None)?;
         clause.set_body(body);
 
-        // cursorをusing_table_listに戻す
         cursor.goto_parent();
-        ensure_kind(cursor, "using_table_list", src)?;
+        // cursor -> using_clause
+        ensure_kind!(cursor, SyntaxKind::using_clause, src);
 
         Ok(clause)
     }

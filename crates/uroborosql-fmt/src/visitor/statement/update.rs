@@ -1,94 +1,101 @@
-use tree_sitter::TreeCursor;
+use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::*,
+    cst::{Comment, Statement},
     error::UroboroSQLFmtError,
-    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor, COMMENT},
+    visitor::{create_clause, ensure_kind, error_annotation_from_cursor, Visitor},
 };
 
+// UpdateStmt:
+// - opt_with_clause? UPDATE relation_expr_opt_alias SET set_clause_list from_clause? where_or_current_clause? returning_clause?
+//
+// opt_with_clause:
+// - with_clause
+
 impl Visitor {
-    /// UPDATE文をStatement構造体で返す
     pub(crate) fn visit_update_stmt(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Statement, UroboroSQLFmtError> {
         let mut statement = Statement::new();
+
         cursor.goto_first_child();
-        // cusor -> with_clause?
+        // cursor -> opt_with_clause?
 
-        if cursor.node().kind() == "with_clause" {
-            // with句を追加する
-            let mut with_clause = self.visit_with_clause(cursor, src)?;
-            cursor.goto_next_sibling();
-            // with句の後に続くコメントを消費する
-            self.consume_comment_in_clause(cursor, src, &mut with_clause)?;
-
+        if cursor.node().kind() == SyntaxKind::opt_with_clause {
+            let with_clause = self.visit_opt_with_clause(cursor, src)?;
             statement.add_clause(with_clause);
+
+            cursor.goto_next_sibling();
         }
 
-        // cursor -> update_clause
-        ensure_kind(cursor, "UPDATE", src)?;
-
-        let mut update_clause = create_clause(cursor, src, "UPDATE")?;
-        cursor.goto_next_sibling();
-        self.consume_or_complement_sql_id(cursor, src, &mut update_clause);
-        self.consume_comment_in_clause(cursor, src, &mut update_clause)?;
-
-        // 規則上でここに現れるノードは_aliasable_identifierだが、'_'から始まっているためノードに現れない。
-        // _expression、_aliasable_expressionもノードに現れないため、
-        // _aliasable_identifierは実質的に_aliasable_expressionと同じCSTになっている
-        // update句のエイリアスはASを省略するため
-        //
-        // UPDATE句は基本的にテーブルエイリアスは書けないため、AS、エイリアス共に補完しない
-        let table_name = self.visit_aliasable_expr(cursor, src, None)?;
-
-        // update句を追加する
-        let mut sep_lines = SeparatedLines::new();
-        sep_lines.add_expr(table_name, None, vec![]);
-        update_clause.set_body(Body::SepLines(sep_lines));
-        statement.add_clause(update_clause);
-
-        cursor.goto_next_sibling();
-
-        while cursor.node().kind() == COMMENT {
-            let comment = Comment::new(cursor.node(), src);
+        // cursor -> comments?
+        while cursor.node().is_comment() {
+            let comment = Comment::new(cursor.node());
             statement.add_comment_to_child(comment)?;
             cursor.goto_next_sibling();
         }
 
-        // set句を処理する
-        ensure_kind(cursor, "set_clause", src)?;
-        let set_clause = self.visit_set_clause(cursor, src)?;
+        // cursor -> UPDATE
+        ensure_kind!(cursor, SyntaxKind::UPDATE, src);
+        let mut update_clause = create_clause!(cursor, SyntaxKind::UPDATE);
+
+        cursor.goto_next_sibling();
+        self.consume_or_complement_sql_id(cursor, &mut update_clause);
+        self.consume_comments_in_clause(cursor, &mut update_clause)?;
+
+        // cursor -> relation_expr_opt_alias
+        let body = self.visit_relation_expr_opt_alias(cursor, src)?;
+        update_clause.set_body(body);
+        statement.add_clause(update_clause);
+
+        cursor.goto_next_sibling();
+
+        // cursor -> comments?
+        while cursor.node().is_comment() {
+            let comment = Comment::new(cursor.node());
+            statement.add_comment_to_child(comment)?;
+            cursor.goto_next_sibling();
+        }
+
+        // cursor -> SET
+        ensure_kind!(cursor, SyntaxKind::SET, src);
+        let mut set_clause = create_clause!(cursor, SyntaxKind::SET);
+        cursor.goto_next_sibling();
+
+        // キーワード直後のコメントを処理
+        self.consume_comments_in_clause(cursor, &mut set_clause)?;
+
+        // cursor -> set_clause_list
+        ensure_kind!(cursor, SyntaxKind::set_clause_list, src);
+        let set_clause_list = self.visit_set_clause_list(cursor, src)?;
+
+        set_clause.set_body(set_clause_list);
         statement.add_clause(set_clause);
 
-        // from句、where句、returning句を持つ可能性がある
+        // from_clause, where_or_current_clause, returning_clause を持つ可能性がある
         while cursor.goto_next_sibling() {
             match cursor.node().kind() {
-                "from_clause" => {
+                SyntaxKind::from_clause => {
                     let clause = self.visit_from_clause(cursor, src)?;
                     statement.add_clause(clause);
                 }
-                "join_clause" => {
-                    let clause = self.visit_join_clause(cursor, src)?;
-                    statement.add_clauses(clause);
-                }
-                "where_clause" => {
-                    let clause = self.visit_where_clause(cursor, src)?;
+                SyntaxKind::where_or_current_clause => {
+                    let clause = self.visit_where_or_current_clause(cursor, src)?;
                     statement.add_clause(clause);
                 }
-                "returning_clause" => {
-                    let clause =
-                        self.visit_simple_clause(cursor, src, "returning_clause", "RETURNING")?;
+                SyntaxKind::returning_clause => {
+                    let clause = self.visit_returning_clause(cursor, src)?;
                     statement.add_clause(clause);
                 }
-                COMMENT => {
-                    let comment = Comment::new(cursor.node(), src);
+                SyntaxKind::SQL_COMMENT | SyntaxKind::C_COMMENT => {
+                    let comment = Comment::new(cursor.node());
                     statement.add_comment_to_child(comment)?;
                 }
                 _ => {
-                    return Err(UroboroSQLFmtError::Unimplemented(format!(
-                        "visit_update_stmt(): unimplemented update_statement\n{}",
+                    return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                        "visit_update_stmt(): unexpected syntax\n{}",
                         error_annotation_from_cursor(cursor, src)
                     )));
                 }
@@ -96,7 +103,8 @@ impl Visitor {
         }
 
         cursor.goto_parent();
-        ensure_kind(cursor, "update_statement", src)?;
+        // cursor -> UpdateStmt
+        ensure_kind!(cursor, SyntaxKind::UpdateStmt, src);
 
         Ok(statement)
     }

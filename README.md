@@ -21,7 +21,7 @@ The main features:
   - However, not all PostgreSQL syntax is supported.
 - Supports 2way-sql such as [uroboroSQL](https://future-architect.github.io/uroborosql-doc/) and [doma2](https://doma.readthedocs.io/en/latest/).
 - Some Auto Fix functions are available.
-- All indentation is done in tabs.
+- Uses tabs for indentation by default (configurable to use spaces).
 - **Leading comma style**, not a trailing comma style.
 
 	```sql
@@ -43,6 +43,10 @@ Please install [Rust](https://www.rust-lang.org/tools/install) before installing
 ```sh
 cargo install --git https://github.com/future-architect/uroborosql-fmt
 ```
+
+### CLI Documentation
+
+For detailed CLI usage, options, and examples, see the [CLI documentation](crates/uroborosql-fmt-cli/README.md).
 
 ## Usage
 
@@ -85,11 +89,12 @@ If there is no configuration file, the default values are used.
 | [`convert_double_colon_cast`](docs/options/convert_double_colon_cast.md)       | bool                                 | Convert casts by `X::type` to the form `CAST(X AS type)`.                                                                                                                                                                                              | true    |
 | [`unify_not_equal`](docs/options/unify_not_equal.md)                           | bool                                 | Convert comparison operator `<>` to `!=`                                                                                                                                                                                                               | true    |
 | [`indent_tab`](docs/options/indent_tab.md)                                     | bool                                 | Switch the indentation style between tabs and spaces.                                                                                                                                                                                                  | true    |
+| [`use_parser_error_recovery`](docs/options/use_parser_error_recovery.md)       | bool                                 | Enable error recovery in the SQL parser.                                                                                                                                                                                                               | true    |
 
 ## Structure
 
 - [Overview of the process flow](docs/structure/overview_of_the_process_flow.md)
-  - This tool uses [tree-sitter](https://github.com/tree-sitter/tree-sitter) and [tree-sitter-sql](https://github.com/future-architect/tree-sitter-sql) (upstream: [m-novikov/tree-sitter-sql](https://github.com/m-novikov/tree-sitter-sql)). Thanks to the developers of these tools.
+  - This tool uses [postgresql-cst-parser](https://github.com/future-architect/postgresql-cst-parser) (upstream: [tanzaku/postgresql-cst-parser](https://github.com/tanzaku/postgresql-cst-parser)). Special thanks to [tanzaku](https://github.com/tanzaku) for the original work.
 - [How to format 2way-sql](docs/structure/how_to_format_2way_sql.md)
 
 ## License

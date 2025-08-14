@@ -1,27 +1,45 @@
-use tree_sitter::TreeCursor;
+use postgresql_cst_parser::syntax_kind::SyntaxKind;
 
 use crate::{
     cst::*,
     error::UroboroSQLFmtError,
+    util::convert_keyword_case,
     visitor::{create_clause, ensure_kind, Visitor},
 };
 
 impl Visitor {
     pub(crate) fn visit_where_clause(
         &mut self,
-        cursor: &mut TreeCursor,
+        cursor: &mut postgresql_cst_parser::tree_sitter::TreeCursor,
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
-        // where_clauseは必ずWHEREを子供に持つ
         cursor.goto_first_child();
 
         // cursor -> WHERE
-        let mut clause = create_clause(cursor, src, "WHERE")?;
+        let mut clause = create_clause!(cursor, SyntaxKind::WHERE);
         cursor.goto_next_sibling();
-        self.consume_comment_in_clause(cursor, src, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
-        // cursor -> _expression
-        let expr = self.visit_expr(cursor, src)?;
+        let extra_leading_boolean_operator =
+            if cursor.node().kind() == SyntaxKind::AND || cursor.node().kind() == SyntaxKind::OR {
+                let text = convert_keyword_case(cursor.node().text());
+
+                cursor.goto_next_sibling();
+                Some(text)
+            } else {
+                None
+            };
+
+        // cursor -> a_expr
+        let mut expr = self.visit_a_expr_or_b_expr(cursor, src)?;
+
+        if let Some(sep) = extra_leading_boolean_operator {
+            if let Expr::Boolean(sep_lines) = &mut expr {
+                sep_lines.set_first_separator(sep);
+            } else {
+                unreachable!("where_clause: Found extra boolean operator but expr is not Boolean.");
+            }
+        }
 
         // 結果として得られた式をBodyに変換する
         let body = Body::from(expr);
@@ -30,7 +48,7 @@ impl Visitor {
 
         // cursorをwhere_clauseに戻す
         cursor.goto_parent();
-        ensure_kind(cursor, "where_clause", src)?;
+        ensure_kind!(cursor, SyntaxKind::where_clause, src);
 
         Ok(clause)
     }

@@ -1,11 +1,7 @@
-use tree_sitter::Node;
-
 use crate::{
     cst::{Comment, Location},
     error::UroboroSQLFmtError,
-    util::{
-        convert_identifier_case, convert_keyword_case, count_width, is_quoted, trim_bind_param,
-    },
+    util::{convert_identifier_case, convert_keyword_case, count_width, trim_bind_param},
 };
 
 /// PrimaryExprがKeywordかExprか示すEnum
@@ -34,14 +30,17 @@ impl PrimaryExpr {
         }
     }
 
-    /// tree_sitter::Node から PrimaryExpr を生成する。
-    /// キーワードをPrimaryExprとして扱う場合があり、その際はこのメソッドで生成する。
-    /// kindによって自動でキーワードの大文字小文字ルールを適用する
-    pub(crate) fn with_node(node: Node, src: &str, kind: PrimaryExprKind) -> PrimaryExpr {
-        let element = node.utf8_text(src.as_bytes()).unwrap();
+    /// NodeからPrimaryExprを生成する
+    /// キーワードを PrimaryExpr として扱う場合があり、その際はこのメソッドを使用する
+    /// kind によって自動でキーワードの大文字小文字ルールを適用する
+    pub(crate) fn with_node(
+        node: postgresql_cst_parser::tree_sitter::Node,
+        expr_kind: PrimaryExprKind,
+    ) -> Result<PrimaryExpr, UroboroSQLFmtError> {
+        let element = node.text();
 
         // PrimaryExprKindによって適用するルールを変更する
-        let converted_element = if matches!(kind, PrimaryExprKind::Keyword) {
+        let converted_element = if matches!(expr_kind, PrimaryExprKind::Keyword) {
             // キーワードの大文字小文字設定を適用した文字列
             convert_keyword_case(element)
         } else {
@@ -49,7 +48,10 @@ impl PrimaryExpr {
             convert_identifier_case(element)
         };
 
-        PrimaryExpr::new(converted_element, Location::new(node.range()))
+        Ok(PrimaryExpr::new(
+            converted_element,
+            Location::from(node.range()),
+        ))
     }
 
     pub(crate) fn loc(&self) -> Location {
@@ -70,15 +72,6 @@ impl PrimaryExpr {
 
     pub(crate) fn element(&self) -> &str {
         &self.element
-    }
-
-    /// 式が識別子であるかどうかを返す。
-    /// 識別子である場合は true そうでない場合、false を返す。
-    pub(crate) fn is_identifier(&self) -> bool {
-        let is_quoted = is_quoted(&self.element);
-        let is_num = self.element.parse::<i64>().is_ok();
-
-        !is_quoted && !is_num
     }
 
     /// バインドパラメータをセットする

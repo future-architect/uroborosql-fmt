@@ -7,7 +7,7 @@ use crate::{
     util::{add_single_space, add_space_by_range, tab_size},
 };
 
-use super::separeted_lines::SeparatedLines;
+use super::separated_lines::SeparatedLines;
 
 /// INSERT文のconflict_targetにおいてindexカラムを指定した場合
 #[derive(Debug, Clone)]
@@ -154,6 +154,7 @@ impl DoUpdate {
 }
 
 /// INSERT文におけるconflict_action
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub(crate) enum ConflictAction {
     DoNothing(DoNothing),
@@ -228,7 +229,7 @@ pub(crate) struct Values {
 }
 
 impl Values {
-    fn new(kw: &str, rows: Vec<ColumnList>) -> Values {
+    pub(crate) fn new(kw: &str, rows: Vec<ColumnList>) -> Values {
         Values {
             kw: kw.to_string(),
             rows,
@@ -239,7 +240,6 @@ impl Values {
         let mut result = String::new();
 
         // VALUES句
-        result.push(' ');
         result.push_str(&self.kw);
 
         // 要素が一つか二つ以上かでフォーマット方針が異なる
@@ -340,20 +340,9 @@ impl InsertBody {
         self.columns = Some(cols);
     }
 
-    /// VALUES句をセットする
-    pub(crate) fn set_values_clause(&mut self, kw: &str, body: Vec<ColumnList>) {
-        let values = Values::new(kw, body);
-        self.values_or_query = Some(ValuesOrQuery::Values(values));
-    }
-
-    /// SELECT文をセットする
-    pub(crate) fn set_query(&mut self, query: Statement) {
-        self.values_or_query = Some(ValuesOrQuery::Query(Query::Normal(query)))
-    }
-
-    /// 括弧付きSELECTをセットする
-    pub(crate) fn set_paren_query(&mut self, query: Expr) {
-        self.values_or_query = Some(ValuesOrQuery::Query(Query::Paren(query)))
+    /// 直接 ValuesOrQuery をセットする
+    pub(crate) fn set_values_or_query(&mut self, values_or_query: ValuesOrQuery) {
+        self.values_or_query = Some(values_or_query);
     }
 
     pub(crate) fn set_on_conflict(&mut self, on_conflict: OnConflict) {
@@ -456,6 +445,11 @@ impl InsertBody {
             result.push_str(&sep_lines.render(depth)?);
             add_indent(&mut result, depth - 1);
             result.push(')');
+
+            // ValuesOrQuery が Values なら、 ')' の後にスペース(' ')を追加する
+            if let Some(ValuesOrQuery::Values(_)) = &self.values_or_query {
+                result.push(' ');
+            }
         }
 
         if let Some(values_or_query) = &self.values_or_query {

@@ -1,5 +1,5 @@
 use crate::{
-    cst::{add_indent, Comment, Location},
+    cst::{add_indent, Comment, Location, SpaceSeparatedColumnExpr},
     error::UroboroSQLFmtError,
     util::{add_single_space, add_space_by_range, tab_size, to_tab_num},
 };
@@ -125,16 +125,19 @@ impl AlignedExpr {
     /// 最後の行のインデントからの文字列の長さを返す。
     /// 引数 acc には、自身の左側の式についてインデントからの文字列の長さを与える。
     pub(crate) fn last_line_len_from_left(&self, acc: usize) -> usize {
-        match (&self.op, &self.rhs) {
+        match &self.rhs {
             // 右辺があり、複数行ではない場合、(左辺'\t'演算子'\t'右辺) の長さを返す
-            (Some(_), Some(rhs)) if !rhs.is_multi_line() => {
-                (self.lhs.last_line_tab_num_from_left(acc) + self.op_tab_num().unwrap())
-                    * tab_size()
+            Some(rhs) if !rhs.is_multi_line() => {
+                // 演算子のタブ換算値を計算する。演算子が無い場合は0
+                let op_tab_num = self.op_tab_num().unwrap_or(0);
+
+                (self.lhs.last_line_tab_num_from_left(acc) + op_tab_num) * tab_size()
                     + rhs.last_line_len()
             }
-            // 右辺があり、複数行である場合、右辺の長さを返す
-            (Some(_), Some(rhs)) => rhs.last_line_len(),
-            _ => self.lhs.last_line_len(),
+            // 右辺があり複数行である場合、右辺の長さを返す
+            Some(rhs) => rhs.last_line_len(),
+            // 右辺が無い場合、左辺の長さを返す
+            None => self.lhs.last_line_len(),
         }
     }
 
@@ -146,20 +149,21 @@ impl AlignedExpr {
     ) -> Result<(), UroboroSQLFmtError> {
         if comment.is_block_comment() {
             // 複数行コメント
-            Err(UroboroSQLFmtError::IllegalOperation(format!(
+            return Err(UroboroSQLFmtError::IllegalOperation(format!(
                 "set_trailing_comment:{comment:?} is not trailing comment!"
-            )))
-        } else {
-            let Comment { text, loc } = comment;
-            // 1. 初めのハイフンを削除
-            // 2. 空白、スペースなどを削除
-            // 3. "--" を付与
-            let trailing_comment = format!("-- {}", text.trim_start_matches('-').trim_start());
-
-            self.trailing_comment = Some(trailing_comment);
-            self.loc.append(loc);
-            Ok(())
+            )));
         }
+
+        let Comment { text, loc } = comment;
+        // 1. 初めのハイフンを削除
+        // 2. 空白、スペースなどを削除
+        // 3. "--" を付与
+        let trailing_comment = format!("-- {}", text.trim_start_matches('-').trim_start());
+
+        self.trailing_comment = Some(trailing_comment);
+        self.loc.append(loc);
+
+        Ok(())
     }
 
     /// 左辺のtrailing_commentをセットする
@@ -471,5 +475,11 @@ impl AlignedExpr {
     /// 左辺がCASE文であればtrueを返す
     pub(crate) fn is_lhs_cond(&self) -> bool {
         matches!(&self.lhs, Expr::Cond(_))
+    }
+}
+
+impl From<AlignedExpr> for SpaceSeparatedColumnExpr {
+    fn from(expr: AlignedExpr) -> Self {
+        SpaceSeparatedColumnExpr::new(expr.lhs, expr.op, expr.rhs)
     }
 }

@@ -1,6 +1,7 @@
 select tbl.a as a -- aliased
 , tbl.b -- complement
 , 100 -- number
-, "str" -- string
+, "column" -- column
+, 'str' -- string
 , count(1) -- count()
 from tbl

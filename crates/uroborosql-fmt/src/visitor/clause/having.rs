@@ -1,35 +1,32 @@
-use tree_sitter::TreeCursor;
+use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::*,
+    cst::{Body, Clause},
     error::UroboroSQLFmtError,
     visitor::{create_clause, ensure_kind, Visitor},
 };
 
 impl Visitor {
-    /// HAVING句をClauseで返す
     pub(crate) fn visit_having_clause(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
     ) -> Result<Clause, UroboroSQLFmtError> {
+        // having_clause
+        // - HAVING a_expr
+
         cursor.goto_first_child();
 
-        let mut clause = create_clause(cursor, src, "HAVING")?;
+        let mut clause = create_clause!(cursor, SyntaxKind::HAVING);
         cursor.goto_next_sibling();
-        self.consume_comment_in_clause(cursor, src, &mut clause)?;
+        self.consume_comments_in_clause(cursor, &mut clause)?;
 
-        // cursor -> _expression
-        let expr = self.visit_expr(cursor, src)?;
-
-        // 結果として得られた式をBodyに変換する
+        let expr = self.visit_a_expr_or_b_expr(cursor, src)?;
         let body = Body::from(expr);
-
         clause.set_body(body);
 
-        // cursorを戻す
         cursor.goto_parent();
-        ensure_kind(cursor, "having_clause", src)?;
+        ensure_kind!(cursor, SyntaxKind::having_clause, src);
 
         Ok(clause)
     }

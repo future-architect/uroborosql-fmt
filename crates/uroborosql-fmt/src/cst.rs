@@ -1,11 +1,13 @@
 mod body;
 mod clause;
 mod expr;
+mod expr_list;
 mod statement;
 
 pub(crate) use body::*;
 pub(crate) use clause::*;
 pub(crate) use expr::*;
+pub(crate) use expr_list::*;
 pub(crate) use statement::*;
 
 // expr
@@ -16,18 +18,18 @@ pub(crate) use cond::*;
 pub(crate) use conflict_target::*;
 pub(crate) use expr_seq::*;
 pub(crate) use function::*;
+pub(crate) use function_table::*;
 pub(crate) use paren::*;
 pub(crate) use primary::*;
 pub(crate) use subquery::*;
 
 // body
 pub(crate) use insert::*;
-pub(crate) use separeted_lines::*;
+pub(crate) use separated_lines::*;
 pub(crate) use single_line::*;
 pub(crate) use with::*;
 
 use itertools::{repeat_n, Itertools};
-use tree_sitter::{Node, Point, Range};
 
 use crate::{config::CONFIG, error::UroboroSQLFmtError, re::RE, util::add_indent};
 
@@ -37,15 +39,6 @@ pub(crate) struct Position {
     pub(crate) col: usize,
 }
 
-impl Position {
-    pub(crate) fn new(point: Point) -> Position {
-        Position {
-            row: point.row,
-            col: point.column,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Location {
     pub(crate) start_position: Position,
@@ -53,12 +46,6 @@ pub(crate) struct Location {
 }
 
 impl Location {
-    pub(crate) fn new(range: Range) -> Location {
-        Location {
-            start_position: Position::new(range.start_point),
-            end_position: Position::new(range.end_point),
-        }
-    }
     // 隣り合っているか？
     pub(crate) fn is_next_to(&self, loc: &Location) -> bool {
         self.is_same_line(loc)
@@ -94,16 +81,19 @@ pub(crate) struct Comment {
 }
 
 impl Comment {
-    // tree_sitter::NodeオブジェクトからCommentオブジェクトを生成する
-    pub(crate) fn new(node: Node, src: &str) -> Comment {
+    pub(crate) fn new(node: postgresql_cst_parser::tree_sitter::Node) -> Comment {
         Comment {
-            text: node.utf8_text(src.as_bytes()).unwrap().to_string(),
-            loc: Location::new(node.range()),
+            text: node.text().to_string(),
+            loc: node.range().into(),
         }
     }
 
     pub(crate) fn loc(&self) -> Location {
         self.loc.clone()
+    }
+
+    pub(crate) fn text(&self) -> &str {
+        &self.text
     }
 
     /// コメントがブロックコメントであればtrueを返す
@@ -311,6 +301,28 @@ impl SqlID {
         } else {
             // 行コメント
             false
+        }
+    }
+}
+
+/*
+    postgresql-cst-parser 用
+*/
+
+impl From<postgresql_cst_parser::tree_sitter::Point> for Position {
+    fn from(point: postgresql_cst_parser::tree_sitter::Point) -> Self {
+        Position {
+            row: point.row,
+            col: point.column,
+        }
+    }
+}
+
+impl From<postgresql_cst_parser::tree_sitter::Range> for Location {
+    fn from(range: postgresql_cst_parser::tree_sitter::Range) -> Self {
+        Location {
+            start_position: range.start_position.into(),
+            end_position: range.end_position.into(),
         }
     }
 }

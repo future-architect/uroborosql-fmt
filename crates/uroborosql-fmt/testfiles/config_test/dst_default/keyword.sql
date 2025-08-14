@@ -40,5 +40,5 @@ into
 ,	'XYZ Widgets'
 )
 returning
-	did
+	did	as	did
 ;

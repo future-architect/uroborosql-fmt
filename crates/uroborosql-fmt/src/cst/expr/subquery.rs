@@ -19,8 +19,18 @@ impl SubExpr {
         self.loc.clone()
     }
 
-    pub(crate) fn add_comment_to_child(&mut self, _comment: Comment) {
-        unimplemented!()
+    pub(crate) fn add_comment_to_child(
+        &mut self,
+        comment: Comment,
+    ) -> Result<(), UroboroSQLFmtError> {
+        self.stmt.add_comment_to_child(comment)
+    }
+
+    /// 開き括弧と文の間にあるコメントを追加する
+    pub(crate) fn add_start_comment(&mut self, comment: Comment) -> Result<(), UroboroSQLFmtError> {
+        self.stmt.add_comment(comment);
+
+        Ok(())
     }
 
     pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {

@@ -50,5 +50,5 @@ from
 order by
 	tbl1.column2	desc
 limit	/*$hoge*/100	+	1
-offset	5
+offset	/*fuga*/5
 ;

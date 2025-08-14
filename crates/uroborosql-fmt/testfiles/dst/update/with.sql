@@ -51,7 +51,7 @@ with /* _SQL_ID_ */
 			default
 		)
 		returning
-			did
+			did	as	did
 	)
 update
 	table1	tbl1	-- テーブル1
@@ -73,7 +73,7 @@ with recursive
 			default
 		)
 		returning
-			did	-- test
+			did	as	did	-- test
 	)	-- comment
 update
 	table1	tbl1	-- テーブル1
