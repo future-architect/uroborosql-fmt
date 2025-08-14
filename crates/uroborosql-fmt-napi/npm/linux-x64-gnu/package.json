@@ -11,7 +11,7 @@
   "files": [
     "uroborosql-fmt-napi.linux-x64-gnu.node"
   ],
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "engines": {
     "node": ">= 10"
   },
