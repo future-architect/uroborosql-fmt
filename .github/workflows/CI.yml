@@ -186,27 +186,27 @@ jobs:
       # *.node のダウンロード
       # TODO: まとめてダウンロードできないか？
       - name: Download .node file for aarch64-apple-darwin
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bindings-aarch64-apple-darwin
           path: ./${{ env.WORKING_DIR }}
       - name: Download .node file for x86_64-apple-darwin
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bindings-x86_64-apple-darwin
           path: ./${{ env.WORKING_DIR }}
       - name: Download .node file for aarch64_pc_windows_msvc
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bindings-aarch64-pc-windows-msvc
           path: ./${{ env.WORKING_DIR }}
       - name: Download .node file for x86_64_pc_windows_msvc
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bindings-x86_64-pc-windows-msvc
           path: ./${{ env.WORKING_DIR }}
       - name: Download .node file for x86_64_unknown-linux-gnu
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: ./${{ env.WORKING_DIR }}
@@ -227,13 +227,13 @@ jobs:
           mv ${{ env.WORKING_DIR }}/repo/*.tgz ./wasm
 
       - name: Download wasm
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: wasm-and-js
           path: ./wasm
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./wasm
