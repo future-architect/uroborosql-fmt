@@ -5,6 +5,6 @@ from
 where
 	tbl./*$targetColumnName1*/col1	
 	is	null
-and  		schema1. tbl./*$targetColumnName2*/col2
+and  		schema1. tbl./*$targetColumnName2*/col2 is not null
 and /*$targetColumnName1*/col1 + tbl.   /*$targetColumnName2*/col2 = 10
-is not null;
+;
