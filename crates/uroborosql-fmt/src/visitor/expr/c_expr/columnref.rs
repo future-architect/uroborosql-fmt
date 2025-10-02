@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{AsteriskExpr, Comment, Expr, Location, PrimaryExpr, PrimaryExprKind},
+    cst::{AsteriskExpr, Comment, Expr, Location, PrimaryExpr},
     error::UroboroSQLFmtError,
     util::convert_identifier_case,
     visitor::{ensure_kind, error_annotation_from_cursor},
@@ -23,6 +23,9 @@ impl Visitor {
         cursor.goto_first_child();
 
         ensure_kind!(cursor, SyntaxKind::ColId, src);
+
+        // ColId、indirectionで出現するノードを大文字小文字変換済みの文字列として順にpushしていく
+        // 途中で出現するバインドパラメータは大文字小文字変換を行わずそのまま文字列としてpushする
         let mut columnref_text = convert_identifier_case(cursor.node().text());
 
         if cursor.goto_next_sibling() {
@@ -42,9 +45,7 @@ impl Visitor {
 
             loop {
                 ensure_kind!(cursor, SyntaxKind::indirection_el, src);
-
                 cursor.goto_first_child();
-
                 match cursor.node().kind() {
                     SyntaxKind::Dot => {
                         //    - `.` attr_name
@@ -53,33 +54,32 @@ impl Visitor {
 
                         cursor.goto_next_sibling();
 
-                        let comment = if cursor.node().is_comment() {
+                        if cursor.node().is_comment() {
                             let comment = Comment::new(cursor.node());
                             cursor.goto_next_sibling();
-                            Some(comment)
-                        } else {
-                            None
-                        };
 
-                        if let Some(comment) = comment {
-                            if !comment.is_block_comment()
-                                || !comment
+                            if comment.is_block_comment()
+                                && comment
                                     .loc()
                                     .is_next_to(&Location::from(cursor.node().range()))
                             {
-                                // コメントが置換文字列ではない場合はエラー
+                                // バインドパラメータの場合
+                                columnref_text.push_str(comment.text());
+                            } else {
+                                // コメントがバインドパラメータではない場合はエラー
                                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                                     "visit_columnref(): unexpected comment node appeared.\n{}",
                                     error_annotation_from_cursor(cursor, src)
                                 )));
                             }
-
-                            columnref_text.push_str(comment.text());
                         }
 
                         columnref_text.push_str(&convert_identifier_case(cursor.node().text()));
                     }
                     _ => {
+                        //    - `[` a_expr `]`
+                        //    - `[` opt_slice_bound `:` opt_slice_bound `]`
+
                         // 配列アクセスは unimplemented
                         return Err(UroboroSQLFmtError::Unimplemented(format!(
                             "visit_columnref(): array access is not implemented\n{}",
@@ -89,6 +89,7 @@ impl Visitor {
                 }
 
                 cursor.goto_parent();
+                ensure_kind!(cursor, SyntaxKind::indirection_el, src);
 
                 if !cursor.goto_next_sibling() {
                     break;
@@ -100,6 +101,7 @@ impl Visitor {
         }
 
         // アスタリスクが含まれる場合はAsteriskExprに変換する
+        // columnref_textは既にcase変換済みなため、ここでは行わない
         let expr = if columnref_text == "*" || columnref_text.contains(".*") {
             AsteriskExpr::new(&columnref_text, cursor.node().range().into()).into()
         } else {
