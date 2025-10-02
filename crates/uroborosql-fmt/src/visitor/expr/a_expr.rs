@@ -1,6 +1,7 @@
 mod all_some_any_subquery;
 mod arithmetic;
 mod between;
+mod collate_expr;
 mod comparison;
 mod in_expr;
 mod is_expr;
@@ -126,14 +127,16 @@ impl Visitor {
                 let expr = self.handle_typecast_nodes(cursor, src, lhs)?;
                 Ok(expr)
             }
-            // 属性関連
-            SyntaxKind::COLLATE | SyntaxKind::AT => {
-                Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "handle_nodes_after_a_expr(): {} is not implemented.\n{}",
-                    cursor.node().kind(),
-                    error_annotation_from_cursor(cursor, src)
-                )))
+            // COLLATE
+            SyntaxKind::COLLATE => {
+                let aligned = self.handle_collate_expr_nodes(cursor, src, lhs)?;
+                Ok(Expr::Aligned(Box::new(aligned)))
             }
+            SyntaxKind::AT => Err(UroboroSQLFmtError::Unimplemented(format!(
+                "handle_nodes_after_a_expr(): {} is not implemented.\n{}",
+                cursor.node().kind(),
+                error_annotation_from_cursor(cursor, src)
+            ))),
             SyntaxKind::LIKE | SyntaxKind::ILIKE => {
                 // LIKE, ILIKE は同じ構造
                 let aligned = self.handle_like_expr_nodes(cursor, src, lhs, None)?;
