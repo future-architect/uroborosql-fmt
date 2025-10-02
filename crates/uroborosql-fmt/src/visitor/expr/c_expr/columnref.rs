@@ -1,7 +1,7 @@
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
 use crate::{
-    cst::{AsteriskExpr, Expr, PrimaryExpr},
+    cst::{AsteriskExpr, Comment, Expr, Location, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
     util::convert_identifier_case,
     visitor::{ensure_kind, error_annotation_from_cursor},
@@ -23,7 +23,7 @@ impl Visitor {
         cursor.goto_first_child();
 
         ensure_kind!(cursor, SyntaxKind::ColId, src);
-        let mut columnref_text = cursor.node().text().to_string();
+        let mut columnref_text = convert_identifier_case(cursor.node().text());
 
         if cursor.goto_next_sibling() {
             // cursor -> indirection
@@ -38,37 +38,72 @@ impl Visitor {
             //
             // indirection はフラット化されている: https://github.com/future-architect/postgresql-cst-parser/pull/7
 
-            let indirection_text = cursor.node().text();
+            cursor.goto_first_child();
 
-            // 配列アクセスは unimplemented
-            if indirection_text.contains('[') {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_columnref(): array access is not implemented\n{}",
-                    error_annotation_from_cursor(cursor, src)
-                )));
+            loop {
+                ensure_kind!(cursor, SyntaxKind::indirection_el, src);
+
+                cursor.goto_first_child();
+
+                match cursor.node().kind() {
+                    SyntaxKind::Dot => {
+                        //    - `.` attr_name
+                        //    - `.` `*`
+                        columnref_text.push('.');
+
+                        cursor.goto_next_sibling();
+
+                        let comment = if cursor.node().is_comment() {
+                            let comment = Comment::new(cursor.node());
+                            cursor.goto_next_sibling();
+                            Some(comment)
+                        } else {
+                            None
+                        };
+
+                        if let Some(comment) = comment {
+                            if !comment.is_block_comment()
+                                || !comment
+                                    .loc()
+                                    .is_next_to(&Location::from(cursor.node().range()))
+                            {
+                                // コメントが置換文字列ではない場合はエラー
+                                return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
+                                    "visit_columnref(): unexpected comment node appeared.\n{}",
+                                    error_annotation_from_cursor(cursor, src)
+                                )));
+                            }
+
+                            columnref_text.push_str(comment.text());
+                        }
+
+                        columnref_text.push_str(&convert_identifier_case(cursor.node().text()));
+                    }
+                    _ => {
+                        // 配列アクセスは unimplemented
+                        return Err(UroboroSQLFmtError::Unimplemented(format!(
+                            "visit_columnref(): array access is not implemented\n{}",
+                            error_annotation_from_cursor(cursor, src)
+                        )));
+                    }
+                }
+
+                cursor.goto_parent();
+
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
             }
 
-            // indirection にあたるテキストから空白文字を除去し、そのまま追加している
-            let whitespace_removed = indirection_text
-                .chars()
-                .filter(|c| !c.is_whitespace())
-                .collect::<String>();
-            columnref_text.push_str(&whitespace_removed);
+            cursor.goto_parent();
+            ensure_kind!(cursor, SyntaxKind::indirection, src);
         }
 
         // アスタリスクが含まれる場合はAsteriskExprに変換する
-        let expr = if columnref_text.contains('*') {
-            AsteriskExpr::new(
-                convert_identifier_case(&columnref_text),
-                cursor.node().range().into(),
-            )
-            .into()
+        let expr = if columnref_text == "*" || columnref_text.contains(".*") {
+            AsteriskExpr::new(&columnref_text, cursor.node().range().into()).into()
         } else {
-            PrimaryExpr::new(
-                convert_identifier_case(&columnref_text),
-                cursor.node().range().into(),
-            )
-            .into()
+            PrimaryExpr::new(&columnref_text, cursor.node().range().into()).into()
         };
 
         cursor.goto_parent();
