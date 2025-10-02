@@ -101,7 +101,8 @@ impl Visitor {
         }
 
         // アスタリスクが含まれる場合はAsteriskExprに変換する
-        // columnref_textは既にcase変換済みなため、ここでは行わない
+        // 単純に*が含まれるかどうかで判定すると、途中にバインドパラメータが含まれる場合もtrueとなるため、「*と完全一致」または「.*が含まれる」の場合にAsteriskExprに変換する
+        // また、columnref_textは既にcase変換済みなため、ここでは行わない
         let expr = if columnref_text == "*" || columnref_text.contains(".*") {
             AsteriskExpr::new(&columnref_text, cursor.node().range().into()).into()
         } else {
