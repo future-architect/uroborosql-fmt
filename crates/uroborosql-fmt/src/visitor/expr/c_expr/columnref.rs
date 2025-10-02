@@ -25,7 +25,7 @@ impl Visitor {
         ensure_kind!(cursor, SyntaxKind::ColId, src);
 
         // ColId、indirectionで出現するノードを大文字小文字変換済みの文字列として順にpushしていく
-        // 途中で出現するバインドパラメータは大文字小文字変換を行わずそのまま文字列としてpushする
+        // 途中で出現する置換文字列は大文字小文字変換を行わずそのまま文字列としてpushする
         let mut columnref_text = convert_identifier_case(cursor.node().text());
 
         if cursor.goto_next_sibling() {
@@ -63,10 +63,10 @@ impl Visitor {
                                     .loc()
                                     .is_next_to(&Location::from(cursor.node().range()))
                             {
-                                // バインドパラメータの場合
+                                // 置換文字列の場合
                                 columnref_text.push_str(comment.text());
                             } else {
-                                // コメントがバインドパラメータではない場合はエラー
+                                // コメントが置換文字列ではない場合はエラー
                                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
                                     "visit_columnref(): unexpected comment node appeared.\n{}",
                                     error_annotation_from_cursor(cursor, src)
@@ -101,7 +101,7 @@ impl Visitor {
         }
 
         // アスタリスクが含まれる場合はAsteriskExprに変換する
-        // 単純に*が含まれるかどうかで判定すると、途中にバインドパラメータが含まれる場合もtrueとなるため、「*と完全一致」または「.*が含まれる」の場合にAsteriskExprに変換する
+        // 単純に*が含まれるかどうかで判定すると、途中に置換文字列が含まれる場合もtrueとなるため、「*と完全一致」または「.*が含まれる」の場合にAsteriskExprに変換する
         // また、columnref_textは既にcase変換済みなため、ここでは行わない
         let expr = if columnref_text == "*" || columnref_text.contains(".*") {
             AsteriskExpr::new(&columnref_text, cursor.node().range().into()).into()
