@@ -138,7 +138,16 @@ impl Visitor {
                 }
 
                 // cursor -> table_ref
-                let right = self.visit_table_ref(cursor, src)?;
+                let mut right = self.visit_table_ref(cursor, src)?;
+
+                // comments_after_join_keywordの最後の要素がバインドパラメータかどうか調べ、
+                // バインドパラメータであればrightにセットする
+                if let Some(comment) = comments_after_join_keyword.last() {
+                    if comment.is_block_comment() && comment.loc().is_next_to(&right.loc()) {
+                        // last()がSome()であるため、pop().unwrap()は必ず成功する
+                        right.set_head_comment(comments_after_join_keyword.pop().unwrap());
+                    }
+                }
 
                 cursor.goto_next_sibling();
 
