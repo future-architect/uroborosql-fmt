@@ -20,18 +20,18 @@ impl Visitor {
         lhs: Expr,
         not_keyword: Option<&str>,
     ) -> Result<AlignedExpr, UroboroSQLFmtError> {
-        // a_expr NOT? LIKE a_expr (ESCAPE a_expr)?
-        // ^      ^         ^    ^              ^
-        // lhs    |         │    │              └ 呼出後(pattern 2)
-        //        |         │    └ 呼出後(pattern 1)
+        // a_expr NOT? (LIKE|ILIKE) a_expr (ESCAPE a_expr)?
+        // ^      ^         ^           ^              ^
+        // lhs    |         │           │              └ 呼出後(pattern 2)
+        //        |         │           └ 呼出後(pattern 1)
         //        |         └ 呼出時
         //        |
         //        └ not_keyword
 
-        // cursor -> LIKE
-        ensure_kind!(cursor, SyntaxKind::LIKE, src);
+        // cursor -> (LIKE|ILIKE)
+        ensure_kind!(cursor, SyntaxKind::LIKE | SyntaxKind::ILIKE, src);
 
-        // op_text: NOT LIKE or LIKE
+        // op_text: NOT (LIKE|ILIKE) or (LIKE|ILIKE)
         let op_text = if let Some(not_keyword) = not_keyword {
             let mut op_text = String::from(not_keyword);
             op_text.push(' ');
