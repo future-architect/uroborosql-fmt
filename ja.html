@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <title>uroborosql-fmt wasm demo page</title>
+  <link href="style.css" rel="stylesheet" />
+</head>
+
+<body>
+  <table width="100%">
+    <tr>
+      <td>
+        <h1>uroborosql-fmt</h1>
+      </td>
+      <td style="text-align: right;">
+        <a href="./">
+          <h2>English<h2>
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p>
+    左側にフォーマットしたいSQLソースを入力し「format」ボタンを押すと、
+    右側にフォーマット結果が出力されます。
+  </p>
+  <p>サポート</p>
+  <ul>
+    <li><a href="https://www.postgresql.org/">PostgreSQL</a>構文</li>
+    <li>
+      2WaySQL(
+      <a href="https://future-architect.github.io/uroborosql-doc/background/">uroboroSQL</a>, <a
+        href="https://doma.readthedocs.io/en/2.54.0/">Doma 2</a>,
+      <a href="https://github.com/future-architect/go-twowaysql">go-twowaysql</a>
+      )
+    </li>
+    <li>
+      <a
+        href="https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html">SQLコーディング規約（PostgreSQL）
+        | Future Enterprise Coding
+        Standards</a>
+      準拠
+    </li>
+  </ul>
+  <details>
+    <summary>オプション (<a href="https://github.com/future-architect/uroborosql-fmt#configuration-options">詳細</a>)</summary>
+    <div class="button_parent">
+      <!-- defaultボタン -->
+      <input type="button" value="default" id="default" class="small_button" />
+      <!-- select allボタン -->
+      <input type="button" value="select all" id="select_all" class="small_button" />
+      <!-- clear allボタン -->
+      <input type="button" value="clear all" id="clear_all" class="small_button" />
+    </div>
+    <!-- complement_alias -->
+    <div class="option">
+      <input type="checkbox" id="complement_alias" name="complement_alias" checked />
+      <label for="complement_alias">カラムのエイリアス名を補完する</label>
+      <span class="option_balloon">カラムのエイリアスを同じ名前で自動補完する。</br>例: <code>COL1</code> → <code>COL1 AS COL1</code></span>
+    </div>
+
+    <!-- trim_bind_param -->
+    <div class="option">
+      <input type="checkbox" id="trim_bind_param" name="trim_bind_param" />
+      <label for="trim_bind_param">バインドパラメータの空白をトリムする</label>
+      <span class="option_balloon">例: <code>/* foo */</code> → <code>/*foo*/</code></span>
+    </div>
+
+    <!-- complement_outer_keyword -->
+    <div class="option">
+      <input type="checkbox" id="complement_outer_keyword" name="complement_outer_keyword" checked />
+      <label for="complement_outer_keyword">RIGHT/LEFT JOINのOUTERを補完する</label>
+      <span class="option_balloon">例: <code>LEFT JOIN</code> → <code>LEFT OUTER JOIN</code></span>
+    </div>
+
+    <!-- complement_column_as_keyword	 -->
+    <div class="option">
+      <input type="checkbox" id="complement_column_as_keyword" name="complement_column_as_keyword" checked />
+      <label for="complement_column_as_keyword">カラムエイリアスのASを補完する</label>
+      <span class="option_balloon">例: <code>SELECT COLUMN1 COL1</code> → <code>SELECT COLUMN1 AS COL1</code> </span>
+    </div>
+
+    <!-- remove_table_as_keyword -->
+    <div class="option">
+      <input type="checkbox" id="remove_table_as_keyword" name="remove_table_as_keyword" checked />
+      <label for="remove_table_as_keyword">テーブルエイリアスのASを除去する</label>
+      <span class="option_balloon">例: <code>FROM TABLE1 AS TBL1</code> → <code>FROM TABLE1 TBL1</code></span>
+    </div>
+
+    <!-- remove_redundant_nest -->
+    <div class="option">
+      <input type="checkbox" id="remove_redundant_nest" name="remove_redundant_nest" checked />
+      <label for="remove_redundant_nest">冗長な括弧を削除する</label>
+      <span class="option_balloon">例: <code>(((1 = 1)))</code> → <code>(1 = 1)</code> </span>
+    </div>
+
+    <!-- complement_sql_id -->
+    <div class="option">
+      <input type="checkbox" id="complement_sql_id" name="complement_sql_id" />
+      <label for="complement_sql_id"><a
+          href="https://palette-doc.rtfa.as/coding-standards/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88uroboroSQL%EF%BC%89.html#sql-%E8%AD%98%E5%88%A5%E5%AD%90">SQL_ID</a>を補完する</label>
+      <span class="option_balloon">例: <code>SELECT COL1</code> → <code>SELECT /* _SQL_ID_ */ COL1</code></span>
+    </div>
+
+    <!-- convert_double_colon_cast -->
+    <div class="option">
+      <input type="checkbox" id="convert_double_colon_cast" name="convert_double_colon_cast" checked />
+      <label for="convert_double_colon_cast">COL1::typeをCAST(COL1 AS type)に変換する</label>
+      <span class="option_balloon">例: <code>SELECT ''::JSONB</code> → <code>SELECT CAST('' AS JSONB)</code> </span>
+    </div>
+
+    <!-- unify_not_equal -->
+    <div class="option">
+      <input type="checkbox" id="unify_not_equal" name="unify_not_equal" checked />
+      <label for="unify_not_equal">&lt;&gt;を!=に変換する</label>
+      <span class="option_balloon">例: <code>STUDENT_ID &lt;&gt; 2</code> → <code>STUDENT_ID != 2</code></span>
+    </div>
+
+    <!-- indent_tab -->
+    <div class="option">
+      <input type="checkbox" id="indent_tab" name="indent_tab" checked />
+      <label for="indent_tab">タブ文字でインデントする</label>
+      <span class="option_balloon">空白文字ではなくタブ文字 (\t) でインデントする</span>
+    </div>
+
+    <!-- use_parser_error_recovery -->
+    <div class="option">
+      <input type="checkbox" id="use_parser_error_recovery" name="use_parser_error_recovery" checked />
+      <label for="use_parser_error_recovery">パーサのエラー回復機能を有効にする</label>
+      <span class="option_balloon">SQL パーサーが構文エラーから回復してフォーマットを継続する</span>
+    </div>
+
+    <table>
+      <!-- tab_size -->
+      <tr>
+        <td>
+          <div class="option">
+            タブのサイズ:
+            <span class="option_balloon">1つのタブ文字のサイズを指定</span>
+          </div>
+        </td>
+        <td>
+          <input type="number" id="tab_size" name="tab_size" value="4" style="width: 60px;" />
+        </td>
+      </tr>
+      <!-- keyword_case -->
+      <tr>
+        <td>
+          <div class="option">
+            予約語:
+            <span class="option_balloon">upper: 大文字に統一<br>lower: 小文字に統一<br>preserve: 大文字小文字を保持</span>
+          </div>
+        </td>
+        <td>
+          <select id="keyword_case">
+            <option value="upper">upper</option>
+            <option value="lower" selected>lower</option>
+            <option value="preserve">preserve</option>
+          </select>
+        </td>
+      </tr>
+      <!-- identifier_case -->
+      <tr>
+        <td>
+          <div class="option">
+            テーブル・カラム名:
+            <span class="option_balloon">upper: 大文字に統一<br>lower: 小文字に統一<br>preserve: 大文字小文字を保持</span>
+          </div>
+        </td>
+        <td>
+          <select id="identifier_case">
+            <option value="upper">upper</option>
+            <option value="lower" selected>lower</option>
+            <option value="preserve">preserve</option>
+          </select>
+        </td>
+      </tr>
+
+      <!-- max_char_per_line -->
+      <tr>
+        <td>
+          <div class="option">
+            1行の最大文字数:
+            <span class="option_balloon">関数名と引数の合計文字数がこの数値を超える場合は引数が改行して出力される</span>
+          </div>
+        </td>
+        <td>
+          <input type="number" id="max_char_per_line" name="max_char_per_line" value="50" style="width: 60px;" />
+        </td>
+      </tr>
+    </table>
+  </details>
+
+  <!-- エディタ -->
+  <div class="editor_parent">
+    <div class="editor" id="src_editor"></div>
+    <div class="editor" id="dst_editor"></div>
+  </div>
+
+
+  <div class="button_parent_center">
+    <!-- formatボタン -->
+    <div class="format_btn">
+      <input type="button" value="format" id="format" class="button" />
+      <span class="format_balloon">Ctrl+Shift+F</span>
+  </div>
+    <!-- copyボタン -->
+    <div class="copy_btn">
+      <input type="button" value="copy" id="copy" class="button" />
+    </div>
+  </div>
+
+  <pre><code id="error_msg" style="color: red;"></code></pre>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.43.0/min/vs/loader.min.js"></script>
+  <script type="module" src="main.js"></script>
+</body>
+
+</html>
