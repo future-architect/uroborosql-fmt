@@ -44,27 +44,19 @@ Please install [Rust](https://www.rust-lang.org/tools/install) before installing
 cargo install --git https://github.com/future-architect/uroborosql-fmt
 ```
 
-### CLI Documentation
+## Usage
+
+```sh
+# Print formatted SQL to STDOUT (does not modify the file)
+uroborosql-fmt-cli input.sql
+
+# Format the file
+uroborosql-fmt-cli -w input.sql
+```
 
 For detailed CLI usage, options, and examples, see the [CLI documentation](crates/uroborosql-fmt-cli/README.md).
 
-## Usage
-
-### Command line output
-
-```sh
-uroborosql-fmt-cli input.sql
-```
-
-The formatting result of `input.sql` will output to the command line.
-
-### File output
-
-```sh
-uroborosql-fmt-cli input.sql result.sql
-```
-
-The formatting result of `input.sql` will output to `result.sql`.
+You can try uroborosql-fmt in your browser with our [WebAssembly demo](https://future-architect.github.io/uroborosql-fmt/), which requires no installation.
 
 ### Configuration options
 
