@@ -4,7 +4,7 @@ members = [
     "crates/uroborosql-fmt-cli",
     "crates/uroborosql-fmt-napi",
     "crates/uroborosql-fmt-wasm"
-]
+, "crates/uroborosql-lint"]
 resolver = "2"
 
 [workspace.package]

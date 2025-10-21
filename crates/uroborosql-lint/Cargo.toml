@@ -1,0 +1,10 @@
+[package]
+name = "uroborosql-lint"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+postgresql-cst-parser = { path = "../../../postgresql-cst-parser/crates/postgresql-cst-parser" }
