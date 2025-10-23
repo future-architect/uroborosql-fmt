@@ -1,0 +1,10 @@
+[package]
+name = "uroborosql-lint-cli"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+uroborosql-lint = { path = "../uroborosql-lint" }
