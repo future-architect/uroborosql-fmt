@@ -959,6 +959,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "uroborosql-lint-cli"
+version = "0.1.0"
+dependencies = [
+ "uroborosql-lint",
+]
+
+[[package]]
 name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
