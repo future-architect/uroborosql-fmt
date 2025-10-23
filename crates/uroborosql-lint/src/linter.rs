@@ -1,16 +1,49 @@
 use crate::{
-    context::LintContext, diagnostic::Diagnostic, rule::Rule, rules::NoDistinct,
+    context::LintContext,
+    diagnostic::{Diagnostic, Severity},
+    rule::Rule,
+    rules::{NoDistinct, NoUnionDistinct},
     tree::collect_preorder,
 };
 use postgresql_cst_parser::tree_sitter;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum LintError {
     ParseError(String),
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct LintOptions {
+    severity_overrides: HashMap<String, Severity>,
+}
+
+impl LintOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn severity_for(&self, rule_id: &str) -> Option<Severity> {
+        self.severity_overrides.get(rule_id).copied()
+    }
+
+    pub fn set_severity_override(&mut self, rule_id: impl Into<String>, severity: Severity) {
+        self.severity_overrides.insert(rule_id.into(), severity);
+    }
+
+    pub fn with_severity_override(
+        mut self,
+        rule_id: impl Into<String>,
+        severity: Severity,
+    ) -> Self {
+        self.set_severity_override(rule_id, severity);
+        self
+    }
+}
+
 pub struct Linter {
     rules: Vec<Box<dyn Rule>>,
+    options: LintOptions,
 }
 
 impl Default for Linter {
@@ -21,8 +54,19 @@ impl Default for Linter {
 
 impl Linter {
     pub fn new() -> Self {
-        let rules: Vec<Box<dyn Rule>> = vec![Box::new(NoDistinct)];
-        Self { rules }
+        Self::with_options(LintOptions::default())
+    }
+
+    pub fn with_options(options: LintOptions) -> Self {
+        Self::with_rules_and_options(default_rules(), options)
+    }
+
+    pub fn with_rules(rules: Vec<Box<dyn Rule>>) -> Self {
+        Self::with_rules_and_options(rules, LintOptions::default())
+    }
+
+    pub fn with_rules_and_options(rules: Vec<Box<dyn Rule>>, options: LintOptions) -> Self {
+        Self { rules, options }
     }
 
     pub fn run(&self, sql: &str) -> Result<Vec<Diagnostic>, LintError> {
@@ -33,17 +77,22 @@ impl Linter {
         let mut ctx = LintContext::new(sql);
 
         for rule in &self.rules {
-            rule.run_once(&root, &mut ctx);
+            let severity = self
+                .options
+                .severity_for(rule.name())
+                .unwrap_or_else(|| rule.default_severity());
+
+            rule.run_once(&root, &mut ctx, severity);
 
             let targets = rule.target_kinds();
             if targets.is_empty() {
                 for node in &nodes {
-                    rule.run_on_node(node, &mut ctx);
+                    rule.run_on_node(node, &mut ctx, severity);
                 }
             } else {
                 for node in &nodes {
                     if targets.iter().any(|kind| node.kind() == *kind) {
-                        rule.run_on_node(node, &mut ctx);
+                        rule.run_on_node(node, &mut ctx, severity);
                     }
                 }
             }
@@ -53,29 +102,27 @@ impl Linter {
     }
 }
 
+fn default_rules() -> Vec<Box<dyn Rule>> {
+    vec![Box::new(NoDistinct), Box::new(NoUnionDistinct)]
+}
+
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::diagnostic::Severity;
 
-    #[test]
-    fn detects_distinct_keyword() {
-        let linter = Linter::new();
-        let sql = "SELECT DISTINCT id FROM users;";
-        let diagnostics = linter.run(sql).expect("lint ok");
-        assert_eq!(diagnostics.len(), 1);
-        let diagnostic = &diagnostics[0];
-        assert_eq!(diagnostic.rule_id, "no-distinct");
-        assert_eq!(diagnostic.severity, Severity::Warning);
-        assert!(sql[diagnostic.span.start.byte..diagnostic.span.end.byte]
-            .eq_ignore_ascii_case("distinct"));
+    pub fn run_with_rules(sql: &str, rules: Vec<Box<dyn Rule>>) -> Vec<Diagnostic> {
+        Linter::with_rules(rules).run(sql).expect("lint ok")
     }
 
     #[test]
-    fn no_diagnostics_without_distinct() {
-        let linter = Linter::new();
-        let sql = "SELECT id FROM users;";
+    fn applies_severity_override() {
+        let options = LintOptions::default().with_severity_override("no-distinct", Severity::Error);
+        let linter = Linter::with_options(options);
+        let sql = "SELECT DISTINCT id FROM users;";
         let diagnostics = linter.run(sql).expect("lint ok");
-        assert!(diagnostics.is_empty());
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].severity, Severity::Error);
     }
 }
