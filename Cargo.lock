@@ -586,6 +586,7 @@ dependencies = [
 [[package]]
 name = "postgresql-cst-parser"
 version = "0.2.0"
+source = "git+https://github.com/future-architect/postgresql-cst-parser?branch=feat%2Fnew-apis-for-linter#07a3eac6ba4c5bfb0097caf225701b342d85c53c"
 dependencies = [
  "cstree",
 ]
@@ -954,7 +955,7 @@ dependencies = [
 name = "uroborosql-lint"
 version = "0.1.0"
 dependencies = [
- "postgresql-cst-parser 0.2.0",
+ "postgresql-cst-parser 0.2.0 (git+https://github.com/future-architect/postgresql-cst-parser?branch=feat%2Fnew-apis-for-linter)",
 ]
 
 [[package]]
