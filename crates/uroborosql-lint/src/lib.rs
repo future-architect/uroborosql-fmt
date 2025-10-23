@@ -6,4 +6,4 @@ mod rules;
 mod tree;
 
 pub use diagnostic::{Diagnostic, Severity, SqlSpan};
-pub use linter::{LintError, Linter};
+pub use linter::{LintError, LintOptions, Linter};
