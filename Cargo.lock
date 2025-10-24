@@ -586,6 +586,14 @@ dependencies = [
 [[package]]
 name = "postgresql-cst-parser"
 version = "0.2.0"
+source = "git+https://github.com/future-architect/postgresql-cst-parser?branch=feat%2Fnew-apis-for-linter#07a3eac6ba4c5bfb0097caf225701b342d85c53c"
+dependencies = [
+ "cstree",
+]
+
+[[package]]
+name = "postgresql-cst-parser"
+version = "0.2.0"
 source = "git+https://github.com/future-architect/postgresql-cst-parser#449673d07f016f97a0769461cfc340c94e66f955"
 dependencies = [
  "cstree",
@@ -905,7 +913,7 @@ dependencies = [
  "indexmap 1.9.3",
  "itertools",
  "once_cell",
- "postgresql-cst-parser",
+ "postgresql-cst-parser 0.2.0 (git+https://github.com/future-architect/postgresql-cst-parser)",
  "regex",
  "serde",
  "serde_json",
@@ -941,6 +949,20 @@ dependencies = [
  "console_error_panic_hook",
  "uroborosql-fmt",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "uroborosql-lint"
+version = "0.1.0"
+dependencies = [
+ "postgresql-cst-parser 0.2.0 (git+https://github.com/future-architect/postgresql-cst-parser?branch=feat%2Fnew-apis-for-linter)",
+]
+
+[[package]]
+name = "uroborosql-lint-cli"
+version = "0.1.0"
+dependencies = [
+ "uroborosql-lint",
 ]
 
 [[package]]

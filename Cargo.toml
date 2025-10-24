@@ -3,7 +3,9 @@ members = [
     "crates/uroborosql-fmt",
     "crates/uroborosql-fmt-cli",
     "crates/uroborosql-fmt-napi",
-    "crates/uroborosql-fmt-wasm"
+    "crates/uroborosql-fmt-wasm",
+    "crates/uroborosql-lint",
+    "crates/uroborosql-lint-cli"
 ]
 resolver = "2"
 
