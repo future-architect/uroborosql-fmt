@@ -1,0 +1,12 @@
+[package]
+name = "uroborosql-language-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "time"] }
+tower-lsp-server = "0.22.1"
+uroborosql-lint = { path = "../uroborosql-lint" }
+
+[dev-dependencies]
+serde_json = "1.0"
