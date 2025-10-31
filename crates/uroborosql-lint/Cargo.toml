@@ -7,4 +7,4 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-postgresql-cst-parser = { git = "https://github.com/future-architect/postgresql-cst-parser", branch = "feat/new-apis-for-linter" }
+postgresql-cst-parser = { workspace = true }
