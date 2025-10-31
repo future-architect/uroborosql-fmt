@@ -8,6 +8,7 @@ use postgresql_cst_parser::{
     tree_sitter::{Node, Range},
 };
 
+// source: https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html#not-in-%E5%8F%A5%EF%BC%89%E3%80%82
 pub struct NoNotIn;
 
 impl Rule for NoNotIn {
@@ -39,7 +40,8 @@ impl Rule for NoNotIn {
 }
 
 fn detect_not_in(node: &Node<'_>) -> Option<Range> {
-    // detect `NOT_LA IN_P in_expr` sequense
+    // Detects `NOT_LA IN_P in_expr` sequense.
+    // We traverse siblings backwards, so the expected order is `in_expr`, `IN_P`, `NOT_LA`.
 
     let in_expr_node = node;
     if in_expr_node.kind() != SyntaxKind::in_expr {
