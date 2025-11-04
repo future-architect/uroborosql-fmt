@@ -2,6 +2,7 @@ use crate::{
     context::LintContext,
     diagnostic::{Diagnostic, Severity},
     rule::Rule,
+    tree::prev_node_skipping_comments,
 };
 use postgresql_cst_parser::{
     syntax_kind::SyntaxKind,
@@ -62,17 +63,6 @@ fn detect_not_in(node: &Node<'_>) -> Option<Range> {
     }
 
     Some(not_node.range().extended_by(&in_expr_node.range()))
-}
-
-fn prev_node_skipping_comments<'a>(node: &Node<'a>) -> Option<Node<'a>> {
-    let mut current = node.clone();
-    loop {
-        let prev = current.prev_sibling()?;
-        if !prev.is_comment() {
-            return Some(prev);
-        }
-        current = prev;
-    }
 }
 
 #[cfg(test)]

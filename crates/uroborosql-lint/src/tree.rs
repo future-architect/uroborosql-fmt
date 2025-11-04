@@ -32,3 +32,16 @@ fn walk_preorder<'tree, T>(
         }
     }
 }
+
+/// Returns the previous sibling node, skipping comment nodes.
+/// Returns `None` if no non-comment sibling is found.
+pub fn prev_node_skipping_comments<'a>(node: &Node<'a>) -> Option<Node<'a>> {
+    let mut current = node.clone();
+    loop {
+        let prev = current.prev_sibling()?;
+        if !prev.is_comment() {
+            return Some(prev);
+        }
+        current = prev;
+    }
+}
