@@ -42,84 +42,15 @@ impl Rule for NoWildcardProjection {
 
 fn detect_wildcard(target_el_node: &Node<'_>) -> Option<Range> {
     assert_eq!(target_el_node.kind(), SyntaxKind::target_el);
-    // target_el:
-    // - '*'
-    //   ^^^ Wildcard
-    // - a_expr AS ColLabel
-    // - a_expr BareColLabel
-    // - a_expr
-    //   ^^^^^^ If a_expr contains a columnref, a wildcard may appear
-    //
-    // source: https://github.com/postgres/postgres/blob/65f4976189b6cbe9aa93fc5f4b1eb7a2040b6301/src/backend/parser/gram.y#L17364-L17401
 
-    let mut cursor = target_el_node.walk();
-    cursor.goto_first_child();
+    // If the last node (including the entire subtree) under target_el is '*', it is considered a wildcard.
+    let last_node = target_el_node.last_node()?;
 
-    match cursor.node().kind() {
-        SyntaxKind::Star => Some(cursor.node().range()),
-        SyntaxKind::a_expr => {
-            let a_expr = cursor.node();
-            let columnref = get_columnref_from_a_expr(&a_expr)?;
-
-            // columnref:
-            // - ColId
-            // - ColId indirection
-            //   - e.g.: `a.field`, `a.field[1]`, `a.*`
-            //
-            // source: https://github.com/postgres/postgres/blob/65f4976189b6cbe9aa93fc5f4b1eb7a2040b6301/src/backend/parser/gram.y#L17041-L17049
-
-            let indirection = columnref
-                .children()
-                .iter()
-                .find(|child| child.kind() == SyntaxKind::indirection)
-                .cloned()?;
-
-            // indirection: list of indirection_el
-            let last_indirection_el = indirection.children().last()?.clone();
-
-            // indirection_el:
-            // - '.' attr_name
-            // - '.' '*'
-            // - '[' a_expr ']'
-            // - '[' opt_slice_bound ':' opt_slice_bound ']'
-            //
-            // source: https://github.com/postgres/postgres/blob/65f4976189b6cbe9aa93fc5f4b1eb7a2040b6301/src/backend/parser/gram.y#L17051-L17078
-            let last_child = last_indirection_el.children().last().cloned()?;
-
-            // possible: attr_name, '*', ']'
-            if last_child.kind() == SyntaxKind::Star {
-                Some(last_indirection_el.range())
-            } else {
-                None
-            }
-        }
-        _ => None,
+    if last_node.kind() == SyntaxKind::Star {
+        return Some(last_node.range());
     }
-}
 
-/// Retrieves the `columnref` node from an `a_expr` node if it exists.
-fn get_columnref_from_a_expr<'a>(a_expr: &'a Node<'a>) -> Option<Node<'a>> {
-    // current: a_expr
-    //
-    // possible structure:
-    // - a_expr
-    //   - c_expr
-    //     - columnref
-
-    let mut cursor = a_expr.walk();
-    cursor.goto_first_child();
-
-    match cursor.node().kind() {
-        SyntaxKind::c_expr => {
-            cursor.goto_first_child();
-            if cursor.node().kind() == SyntaxKind::columnref {
-                return Some(cursor.node());
-            }
-
-            None
-        }
-        _ => None,
-    }
+    None
 }
 
 #[cfg(test)]
@@ -166,10 +97,23 @@ mod tests {
         let diagnostic = diagnostics
             .iter()
             .find(|diag| diag.rule_id == "no-wildcard-projection")
-            .expect("should detect .*");
+            .expect("should detect *");
 
         let SqlSpan { start, end } = diagnostic.span;
-        assert_eq!(&sql[start.byte..end.byte], ".*");
+        assert_eq!(&sql[start.byte..end.byte], "*");
+    }
+
+    #[test]
+    fn detects_parenthesized_star() {
+        let sql = "SELECT (u).* FROM users u;";
+        let diagnostics = run(sql);
+        let diagnostic = diagnostics
+            .iter()
+            .find(|diag| diag.rule_id == "no-wildcard-projection")
+            .expect("should detect *");
+
+        let SqlSpan { start, end } = diagnostic.span;
+        assert_eq!(&sql[start.byte..end.byte], "*");
     }
 
     #[test]
