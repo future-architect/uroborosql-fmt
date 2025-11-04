@@ -2,7 +2,7 @@ use crate::{
     context::LintContext,
     diagnostic::{Diagnostic, Severity},
     rule::Rule,
-    rules::{NoDistinct, NoNotIn, NoUnionDistinct, TooLargeInList},
+    rules::{NoDistinct, NoNotIn, NoUnionDistinct, NoWildcardProjection, TooLargeInList},
     tree::collect_preorder,
 };
 use postgresql_cst_parser::tree_sitter;
@@ -107,6 +107,7 @@ fn default_rules() -> Vec<Box<dyn Rule>> {
         Box::new(NoDistinct),
         Box::new(NoNotIn),
         Box::new(NoUnionDistinct),
+        Box::new(NoWildcardProjection),
         Box::new(TooLargeInList),
     ]
 }
