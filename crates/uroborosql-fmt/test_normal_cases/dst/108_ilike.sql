@@ -3,5 +3,5 @@ select
 from
 	users
 where
-	name	ILIKE	'test%'
+	name	ilike	'test%'
 ;

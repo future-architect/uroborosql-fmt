@@ -3,6 +3,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 use crate::{
     cst::{AlignedExpr, Comment, Expr, ExprSeq, PrimaryExpr, PrimaryExprKind},
     error::UroboroSQLFmtError,
+    util::convert_keyword_case,
     visitor::ensure_kind,
 };
 
@@ -36,9 +37,9 @@ impl Visitor {
             let mut op_text = String::from(not_keyword);
             op_text.push(' ');
             op_text.push_str(cursor.node().text());
-            op_text
+            convert_keyword_case(&op_text)
         } else {
-            cursor.node().text().to_string()
+            convert_keyword_case(cursor.node().text())
         };
 
         cursor.goto_next_sibling();
