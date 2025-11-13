@@ -2,7 +2,7 @@ use crate::{
     context::LintContext,
     diagnostic::{Diagnostic, Severity},
     rule::Rule,
-    rules::{NoDistinct, NoUnionDistinct, TooLargeInList},
+    rules::{NoDistinct, NoNotIn, NoUnionDistinct, NoWildcardProjection, TooLargeInList},
     tree::collect_preorder,
 };
 use postgresql_cst_parser::tree_sitter;
@@ -105,7 +105,9 @@ impl Linter {
 fn default_rules() -> Vec<Box<dyn Rule>> {
     vec![
         Box::new(NoDistinct),
+        Box::new(NoNotIn),
         Box::new(NoUnionDistinct),
+        Box::new(NoWildcardProjection),
         Box::new(TooLargeInList),
     ]
 }
