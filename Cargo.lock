@@ -586,7 +586,7 @@ dependencies = [
 [[package]]
 name = "postgresql-cst-parser"
 version = "0.2.0"
-source = "git+https://github.com/future-architect/postgresql-cst-parser?branch=feat%2Fnew-apis-for-linter#4b36aef5c17b4ac1930a07fb05630642831f79be"
+source = "git+https://github.com/future-architect/postgresql-cst-parser?branch=feat%2Fnew-apis-for-linter#806581958421abc2f0a43f200d8a5e45a6a171cd"
 dependencies = [
  "cstree",
 ]
