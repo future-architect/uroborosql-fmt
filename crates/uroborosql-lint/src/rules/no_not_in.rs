@@ -42,7 +42,7 @@ impl Rule for NoNotIn {
 }
 
 fn detect_not_in(node: &Node<'_>) -> Option<Range> {
-    // Detects `NOT_LA IN_P in_expr` sequense.
+    // Detects `NOT_LA IN_P in_expr` sequence.
     // We traverse siblings backwards, so the expected order is `in_expr`, `IN_P`, `NOT_LA`.
 
     let in_expr_node = node;
