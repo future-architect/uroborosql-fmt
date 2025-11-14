@@ -46,7 +46,7 @@ impl Rule for MissingTwoWaySample {
         let diagnostic = Diagnostic::new(
             self.name(),
             severity,
-            "sample value for bind parameter is missing.",
+            "Sample value for bind parameter is missing.",
             &next_token.range(),
         );
         ctx.report(diagnostic);
