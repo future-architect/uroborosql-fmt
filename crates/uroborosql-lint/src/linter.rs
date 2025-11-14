@@ -2,7 +2,10 @@ use crate::{
     context::LintContext,
     diagnostic::{Diagnostic, Severity},
     rule::Rule,
-    rules::{NoDistinct, NoNotIn, NoUnionDistinct, NoWildcardProjection, TooLargeInList},
+    rules::{
+        MissingTwoWaySample, NoDistinct, NoNotIn, NoUnionDistinct, NoWildcardProjection,
+        TooLargeInList,
+    },
     tree::collect_preorder,
 };
 use postgresql_cst_parser::tree_sitter;
@@ -70,8 +73,8 @@ impl Linter {
     }
 
     pub fn run(&self, sql: &str) -> Result<Vec<Diagnostic>, LintError> {
-        let tree =
-            tree_sitter::parse(sql).map_err(|err| LintError::ParseError(format!("{err:?}")))?;
+        let tree = tree_sitter::parse_2way(sql)
+            .map_err(|err| LintError::ParseError(format!("{err:?}")))?;
         let root = tree.root_node();
         let nodes = collect_preorder(root.clone());
         let mut ctx = LintContext::new(sql);
@@ -108,6 +111,7 @@ fn default_rules() -> Vec<Box<dyn Rule>> {
         Box::new(NoNotIn),
         Box::new(NoUnionDistinct),
         Box::new(NoWildcardProjection),
+        Box::new(MissingTwoWaySample),
         Box::new(TooLargeInList),
     ]
 }
