@@ -103,6 +103,38 @@ mod tests {
     }
 
     #[test]
+    fn detects_missing_sample_in_select_multiple() {
+        let sql = "SELECT /*col*/ , /*col2*/ FROM t;";
+        let diagnostics = run(sql);
+        assert!(diagnostics
+            .iter()
+            .all(|diag| diag.rule_id == "missing-two-way-sample"));
+
+        assert_eq!(diagnostics.len(), 2);
+
+        assert!(diagnostics.iter().all(|diagnostic| {
+            let SqlSpan { start, end } = diagnostic.span;
+            &sql[start.byte..end.byte] == ""
+        }));
+    }
+
+    #[test]
+    fn detects_missing_sample_in_where_clause() {
+        let sql = "SELECT * FROM t WHERE col = /*col*/ AND col2 = /*col2*/ ;";
+        let diagnostics = run(sql);
+        assert!(diagnostics
+            .iter()
+            .all(|diag| diag.rule_id == "missing-two-way-sample"));
+
+        assert_eq!(diagnostics.len(), 2);
+
+        assert!(diagnostics.iter().all(|diagnostic| {
+            let SqlSpan { start, end } = diagnostic.span;
+            &sql[start.byte..end.byte] == ""
+        }));
+    }
+
+    #[test]
     fn ignores_control_comment() {
         let sql = r#"SELECT 1 from t 
         where id = 1
