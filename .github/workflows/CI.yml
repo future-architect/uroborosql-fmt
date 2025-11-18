@@ -50,7 +50,9 @@ jobs:
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
-            build: |-
+            build: |
+              rustup install 1.86.0 &&
+              rustup default 1.86.0 &&
               set -e &&
               yarn build --target x86_64-unknown-linux-gnu &&
               strip *.node
