@@ -15,6 +15,7 @@ struct TestServer {
     req_stream: DuplexStream,
     res_stream: DuplexStream,
     responses: VecDeque<String>,
+    notifications: VecDeque<String>,
 }
 
 impl TestServer {
@@ -37,6 +38,7 @@ impl TestServer {
             req_stream: req_client,
             res_stream: res_client,
             responses: VecDeque::new(),
+            notifications: VecDeque::new(),
         }
     }
 
@@ -77,31 +79,36 @@ impl TestServer {
     }
 
     async fn receive_response(&mut self) -> Response {
-        if let Some(buffer) = self.responses.pop_back() {
-            return serde_json::from_str(&buffer).unwrap();
-        }
+        loop {
+            if let Some(buffer) = self.responses.pop_back() {
+                return serde_json::from_str(&buffer).unwrap();
+            }
 
-        let mut buf = vec![0u8; 4096];
-        let n = self.res_stream.read(&mut buf).await.unwrap();
-        for frame in Self::decode(&buf[..n]) {
-            self.responses.push_front(frame);
+            self.read_into_queues().await;
         }
-        let msg = self.responses.pop_back().unwrap();
-        serde_json::from_str(&msg).unwrap()
     }
 
     async fn receive_notification(&mut self) -> Request {
-        if let Some(buffer) = self.responses.pop_back() {
-            return serde_json::from_str(&buffer).unwrap();
-        }
+        loop {
+            if let Some(buffer) = self.notifications.pop_back() {
+                return serde_json::from_str(&buffer).unwrap();
+            }
 
+            self.read_into_queues().await;
+        }
+    }
+
+    async fn read_into_queues(&mut self) {
         let mut buf = vec![0u8; 4096];
         let n = self.res_stream.read(&mut buf).await.unwrap();
         for frame in Self::decode(&buf[..n]) {
-            self.responses.push_front(frame);
+            let value: serde_json::Value = serde_json::from_str(&frame).unwrap();
+            if value.get("id").is_some() {
+                self.responses.push_front(frame);
+            } else {
+                self.notifications.push_front(frame);
+            }
         }
-        let msg = self.responses.pop_back().unwrap();
-        serde_json::from_str(&msg).unwrap()
     }
 
     async fn receive_notification_timeout(&mut self, dur: Duration) -> Option<Request> {
@@ -166,8 +173,41 @@ fn build_did_save(uri: &Uri, text: &str) -> Request {
         .finish()
 }
 
+fn build_formatting(uri: &Uri, id: i64) -> Request {
+    let params = DocumentFormattingParams {
+        text_document: TextDocumentIdentifier { uri: uri.clone() },
+        options: FormattingOptions {
+            tab_size: 2,
+            insert_spaces: true,
+            ..FormattingOptions::default()
+        },
+        work_done_progress_params: WorkDoneProgressParams::default(),
+    };
+    Request::build("textDocument/formatting")
+        .params(json!(params))
+        .id(id)
+        .finish()
+}
+
+fn build_range_formatting(uri: &Uri, range: Range, id: i64) -> Request {
+    let params = DocumentRangeFormattingParams {
+        text_document: TextDocumentIdentifier { uri: uri.clone() },
+        range,
+        options: FormattingOptions {
+            tab_size: 2,
+            insert_spaces: true,
+            ..FormattingOptions::default()
+        },
+        work_done_progress_params: WorkDoneProgressParams::default(),
+    };
+    Request::build("textDocument/rangeFormatting")
+        .params(json!(params))
+        .id(id)
+        .finish()
+}
+
 #[tokio::test]
-async fn diagnostics_publish_on_save_only() {
+async fn diagnostics_publish_on_open_and_save() {
     let mut server = TestServer::new(Backend::new);
     let uri = Uri::from_str("file:///test.sql").unwrap();
 
@@ -218,5 +258,69 @@ async fn diagnostics_publish_on_save_only() {
     assert_eq!(
         save_notification.method(),
         "textDocument/publishDiagnostics"
+    );
+}
+
+#[tokio::test]
+async fn document_formatting_returns_edit() {
+    let mut server = TestServer::new(Backend::new);
+    let uri = Uri::from_str("file:///fmt.sql").unwrap();
+
+    server.send_request(build_initialize(1)).await;
+    assert!(server.receive_response().await.is_ok());
+    server.send_request(build_initialized()).await;
+    let _ = server.receive_notification().await;
+
+    let original = "select A from B";
+    server.send_request(build_did_open(&uri, original, 1)).await;
+    let _ = server.receive_notification().await;
+
+    server.send_request(build_formatting(&uri, 2)).await;
+    let response = server.receive_response().await;
+    assert!(response.is_ok());
+    let value = serde_json::to_value(&response).unwrap();
+    let edits = value["result"]
+        .as_array()
+        .expect("formatting result should be array");
+    assert_eq!(edits.len(), 1);
+    let new_text = edits[0]["newText"].as_str().unwrap();
+    assert_ne!(
+        new_text, original,
+        "formatted text should differ from original"
+    );
+}
+
+#[tokio::test]
+async fn range_formatting_returns_edit() {
+    let mut server = TestServer::new(Backend::new);
+    let uri = Uri::from_str("file:///range.sql").unwrap();
+
+    server.send_request(build_initialize(1)).await;
+    assert!(server.receive_response().await.is_ok());
+    server.send_request(build_initialized()).await;
+    let _ = server.receive_notification().await;
+
+    let original = "select a from b;";
+    server.send_request(build_did_open(&uri, original, 1)).await;
+    let _ = server.receive_notification().await;
+
+    let range = Range {
+        start: Position::new(0, 0),
+        end: Position::new(0, original.len() as u32),
+    };
+    server
+        .send_request(build_range_formatting(&uri, range, 2))
+        .await;
+    let response = server.receive_response().await;
+    assert!(response.is_ok());
+    let value = serde_json::to_value(&response).unwrap();
+    let edits = value["result"]
+        .as_array()
+        .expect("range formatting should return edits");
+    assert_eq!(edits.len(), 1);
+    assert_ne!(
+        edits[0]["newText"].as_str().unwrap(),
+        original,
+        "range formatting should rewrite selection"
     );
 }

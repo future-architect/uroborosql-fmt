@@ -19,6 +19,7 @@ repository = "https://github.com/future-architect/uroborosql-fmt"
 [workspace.dependencies]
 # Internal crates
 uroborosql-fmt = { path = "./crates/uroborosql-fmt" }
+uroborosql-language-server = { path = "./crates/uroborosql-language-server", default-features = false }
 postgresql-cst-parser = { git = "https://github.com/future-architect/postgresql-cst-parser", branch = "feat/new-apis-for-linter" }
 
 [profile.release]
