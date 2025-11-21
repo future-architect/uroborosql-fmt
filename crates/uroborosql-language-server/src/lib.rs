@@ -3,7 +3,10 @@ use std::sync::Arc;
 use tower_lsp_server::jsonrpc::Result;
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::lsp_types::*;
-use tower_lsp_server::{Client, LanguageServer, LspService, Server};
+use tower_lsp_server::{Client, LanguageServer, LspService};
+#[cfg(any(feature = "runtime-tokio", feature = "runtime-agnostic"))]
+use tower_lsp_server::Server;
+pub use tower_lsp_server::ClientSocket;
 use uroborosql_lint::{Diagnostic as SqlDiagnostic, LintError, Linter, Severity as SqlSeverity};
 
 #[derive(Clone)]
@@ -146,9 +149,24 @@ fn to_parse_error(err: LintError) -> Diagnostic {
 }
 
 pub async fn run_stdio() {
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
+    #[cfg(not(feature = "runtime-tokio"))]
+    {
+        // 実行時に気づけるようにパニックを発生させる
+        panic!("run_stdio is only available with the `runtime-tokio` feature");
+    }
 
-    let (service, socket) = LspService::new(Backend::new);
-    Server::new(stdin, stdout, socket).serve(service).await;
+    #[cfg(feature = "runtime-tokio")]
+    {
+        let stdin = tokio::io::stdin();
+        let stdout = tokio::io::stdout();
+
+        let (service, socket) = LspService::new(Backend::new);
+        Server::new(stdin, stdout, socket).serve(service).await;
+    }
+}
+
+/// runtime 依存のない LSP サービスとクライアントソケットを組み立てる。
+/// wasm 側で独自の Read/Write を噛ませる場合に利用することを想定。
+pub fn build_service() -> (LspService<Backend>, ClientSocket) {
+    LspService::new(Backend::new)
 }
