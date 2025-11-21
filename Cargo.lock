@@ -1261,7 +1261,9 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "tokio",
  "uroborosql-fmt",
+ "uroborosql-language-server",
 ]
 
 [[package]]
