@@ -1,6 +1,6 @@
 import test from 'ava'
 
-import { runfmtWithSettings } from '../index.js'
+import { runfmtWithSettings, runLanguageServer } from '../index.js'
 
 test('format with settings', (t) => {
   const src = 'select A from B'
@@ -11,4 +11,8 @@ test('format with settings', (t) => {
   }
   const dst = runfmtWithSettings(src, JSON.stringify(settings), null)
   t.is(dst, 'SELECT\n\ta\nFROM\n\tb\n')
+})
+
+test('language server entrypoint is exposed', (t) => {
+  t.is(typeof runLanguageServer, 'function')
 })
