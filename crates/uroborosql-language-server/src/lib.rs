@@ -3,10 +3,10 @@ use std::sync::Arc;
 use tower_lsp_server::jsonrpc::Result;
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::lsp_types::*;
-use tower_lsp_server::{Client, LanguageServer, LspService};
+pub use tower_lsp_server::ClientSocket;
 #[cfg(any(feature = "runtime-tokio", feature = "runtime-agnostic"))]
 use tower_lsp_server::Server;
-pub use tower_lsp_server::ClientSocket;
+use tower_lsp_server::{Client, LanguageServer, LspService};
 use uroborosql_lint::{Diagnostic as SqlDiagnostic, LintError, Linter, Severity as SqlSeverity};
 
 #[derive(Clone)]
