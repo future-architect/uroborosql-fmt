@@ -207,7 +207,7 @@ fn build_range_formatting(uri: &Uri, range: Range, id: i64) -> Request {
 }
 
 #[tokio::test]
-async fn diagnostics_publish_on_save_only() {
+async fn diagnostics_publish_on_open_and_save() {
     let mut server = TestServer::new(Backend::new);
     let uri = Uri::from_str("file:///test.sql").unwrap();
 
