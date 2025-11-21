@@ -167,10 +167,8 @@ jobs:
             crates/uroborosql-fmt-wasm/pkg/uroborosql_fmt_wasm_bg.wasm
           if-no-files-found: error
 
-  deploy-to-gh-pages:
-    if: github.repository == 'future-architect/uroborosql-fmt' &&
-      contains('refs/heads/main', github.ref) && github.event_name == 'push'
-    needs: [build-wasm, build-napi]
+  package-napi:
+    needs: build-napi
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -186,7 +184,6 @@ jobs:
         run: yarn install
 
       # *.node のダウンロード
-      # TODO: まとめてダウンロードできないか？
       - name: Download .node file for aarch64-apple-darwin
         uses: actions/download-artifact@v4
         with:
@@ -224,9 +221,28 @@ jobs:
           cd repo
           npm pack
           cd ..
-          cd ..
-          cd ..
-          mv ${{ env.WORKING_DIR }}/repo/*.tgz ./wasm
+          mv repo/*.tgz ./
+
+      - name: Upload npm pack artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: napi-package
+          path: ${{ env.WORKING_DIR }}/*.tgz
+          if-no-files-found: error
+
+  deploy-to-gh-pages:
+    if: github.repository == 'future-architect/uroborosql-fmt' &&
+      contains('refs/heads/main', github.ref) && github.event_name == 'push'
+    needs: [build-wasm, package-napi]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download npm pack artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: napi-package
+          path: ./wasm
 
       - name: Download wasm
         uses: actions/download-artifact@v4

@@ -1,15 +1,31 @@
-use std::sync::Arc;
+mod server;
+mod text;
 
-use tower_lsp_server::jsonrpc::Result;
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+
+use ropey::Rope;
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::lsp_types::*;
-use tower_lsp_server::{Client, LanguageServer, LspService, Server};
+pub use tower_lsp_server::ClientSocket;
+#[cfg(feature = "runtime-tokio")]
+use tower_lsp_server::Server;
+use tower_lsp_server::{Client, LspService};
 use uroborosql_lint::{Diagnostic as SqlDiagnostic, LintError, Linter, Severity as SqlSeverity};
+
+use crate::text::rope_range_to_char_range;
 
 #[derive(Clone)]
 pub struct Backend {
     client: Client,
     linter: Arc<Linter>,
+    documents: Arc<RwLock<HashMap<Uri, DocumentState>>>,
+}
+
+#[derive(Clone)]
+struct DocumentState {
+    rope: Rope,
+    version: i32,
 }
 
 impl Backend {
@@ -17,6 +33,7 @@ impl Backend {
         Self {
             client,
             linter: Arc::new(Linter::new()),
+            documents: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -30,83 +47,71 @@ impl Backend {
             .publish_diagnostics(uri.clone(), diagnostics, version)
             .await;
     }
+
+    fn upsert_document(&self, uri: &Uri, text: &str, version: Option<i32>) {
+        let resolved_version = version.or_else(|| {
+            self.documents
+                .read()
+                .ok()
+                .and_then(|docs| docs.get(uri).map(|doc| doc.version))
+        });
+        let version = resolved_version.unwrap_or_default();
+
+        if let Ok(mut docs) = self.documents.write() {
+            docs.insert(
+                uri.clone(),
+                DocumentState {
+                    rope: Rope::from_str(text),
+                    version,
+                },
+            );
+        }
+    }
+
+    fn apply_change(&self, uri: &Uri, change: TextDocumentContentChangeEvent, version: i32) {
+        if let Ok(mut docs) = self.documents.write() {
+            if let Some(doc) = docs.get_mut(uri) {
+                if version < doc.version {
+                    return;
+                }
+                doc.version = version;
+                if let Some(range) = change.range {
+                    if let Some((start, end)) = rope_range_to_char_range(&doc.rope, &range) {
+                        doc.rope.remove(start..end);
+                        doc.rope.insert(start, &change.text);
+                    }
+                } else {
+                    doc.rope = Rope::from_str(&change.text);
+                }
+            }
+        }
+    }
+
+    fn remove_document(&self, uri: &Uri) {
+        if let Ok(mut docs) = self.documents.write() {
+            docs.remove(uri);
+        }
+    }
+
+    fn document_rope(&self, uri: &Uri) -> Option<Rope> {
+        self.documents
+            .read()
+            .ok()
+            .and_then(|docs| docs.get(uri).map(|doc| doc.rope.clone()))
+    }
+
+    fn document_text(&self, uri: &Uri) -> Option<String> {
+        self.document_rope(uri).map(|rope| rope.to_string())
+    }
 }
 
-impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
-        let sync_options = TextDocumentSyncOptions {
-            open_close: Some(true),
-            change: Some(TextDocumentSyncKind::FULL),
-            save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
-                include_text: Some(true),
-            })),
-            ..TextDocumentSyncOptions::default()
-        };
+#[cfg(feature = "runtime-tokio")]
+pub async fn run_stdio() {
+    let stdin = tokio::io::stdin();
+    let stdout = tokio::io::stdout();
 
-        let capabilities = ServerCapabilities {
-            text_document_sync: Some(TextDocumentSyncCapability::Options(sync_options)),
-            ..ServerCapabilities::default()
-        };
-
-        Ok(InitializeResult {
-            capabilities,
-            server_info: Some(ServerInfo {
-                name: "uroborosql-language-server".into(),
-                version: None,
-            }),
-        })
-    }
-
-    async fn initialized(&self, _: InitializedParams) {
-        self.client
-            .log_message(MessageType::INFO, "uroborosql-language-server initialized")
-            .await;
-    }
-
-    async fn shutdown(&self) -> Result<()> {
-        Ok(())
-    }
-
-    async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        let text_document = params.text_document;
-        let uri = text_document.uri;
-        let version = text_document.version;
-        let text = text_document.text;
-
-        self.lint_and_publish(&uri, &text, Some(version)).await;
-    }
-
-    async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        if params.content_changes.is_empty() {
-            return;
-        }
-
-        // FULL sync だが、現段階では保存時にのみ診断を実行する。
-        let _ = params;
-    }
-
-    async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        let uri = params.text_document.uri;
-        self.client.publish_diagnostics(uri, vec![], None).await;
-    }
-
-    async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        let uri = params.text_document.uri;
-        if let Some(text) = params.text {
-            self.lint_and_publish(&uri, &text, None).await;
-        } else {
-            self.client
-                .log_message(
-                    MessageType::WARNING,
-                    "didSave received without text; skipping lint",
-                )
-                .await;
-        }
-    }
-
-    async fn code_action(&self, _: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        Ok(None)
-    }
+    let (service, socket) = LspService::new(Backend::new);
+    Server::new(stdin, stdout, socket).serve(service).await;
 }
 
 fn to_lsp_diagnostic(diag: SqlDiagnostic) -> Diagnostic {
@@ -143,12 +148,4 @@ fn to_parse_error(err: LintError) -> Diagnostic {
         message,
         ..Diagnostic::default()
     }
-}
-
-pub async fn run_stdio() {
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
-
-    let (service, socket) = LspService::new(Backend::new);
-    Server::new(stdin, stdout, socket).serve(service).await;
 }
