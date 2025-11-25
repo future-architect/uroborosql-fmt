@@ -5,3 +5,4 @@
 
 export function runfmt(input: string, configPath?: string | undefined | null): string
 export function runfmtWithSettings(input: string, settingsJson: string, configPath?: string | undefined | null): string
+export function runLanguageServer(): void
