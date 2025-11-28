@@ -8,13 +8,13 @@ use postgresql_cst_parser::{
     tree_sitter::{Node, Range},
 };
 
-/// Detects functions use  in JOIN or WHERE conditions.
+/// Detects functions use on columns in JOIN or WHERE conditions.
 /// source: https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html#:~:text=1-,%E3%82%A4%E3%83%B3%E3%83%87%E3%83%83%E3%82%AF%E3%82%B9%E3%82%AB%E3%83%A9%E3%83%A0%E3%81%AB%E9%96%A2%E6%95%B0,-%E3%82%92%E9%80%9A%E3%81%97%E3%81%9F
-pub struct NoFunctionInJoinOrWhere;
+pub struct NoFunctionOnColumnInJoinOrWhere;
 
-impl Rule for NoFunctionInJoinOrWhere {
+impl Rule for NoFunctionOnColumnInJoinOrWhere {
     fn name(&self) -> &'static str {
-        "no-function-in-join-or-where"
+        "no-function-on-column-in-join-or-where"
     }
 
     fn default_severity(&self) -> Severity {
@@ -22,50 +22,37 @@ impl Rule for NoFunctionInJoinOrWhere {
     }
 
     fn target_kinds(&self) -> &'static [SyntaxKind] {
-        &[SyntaxKind::join_qual, SyntaxKind::where_clause]
+        &[SyntaxKind::func_expr]
     }
 
     fn run_on_node<'tree>(&self, node: &Node<'tree>, ctx: &mut LintContext, severity: Severity) {
-        assert!(matches!(
-            node.kind(),
-            SyntaxKind::join_qual | SyntaxKind::where_clause
-        ));
-
-        let Some(top_expr) = find_top_expr(node) else {
+        assert_eq!(node.kind(), SyntaxKind::func_expr);
+        let func_expr = node;
+        
+        // 親を参照し、 join_qual か where_clause があるかをチェックする
+        // その途中で select_no_parens があれば探索を停止する
+        if !is_in_detection_range(func_expr) {
             return;
-        };
-
-        let ranges = detect_column_function_calls(&top_expr);
-
-        for range in ranges {
-            let diagnostic = Diagnostic::new(
-                self.name(),
-                severity,
-                "Functions in JOIN or WHERE conditions can prevent index usage; rewrite without wrapping the column.",
-                &range,
-            );
-            ctx.report(diagnostic);
         }
-    }
-}
+        
+        // func_expr の最初の子供は func_application, json_aggregate_func, または func_expr_common_subexpr のいずれかである
+        let function_body = func_expr.first_child().expect("func_expr should have one of func_application, json_aggregate_func, or func_expr_common_subexpr as its first child.");
+        
+        // 引数にカラムがあるか判定
+        
+        // 警告範囲には filter や over を含めない
+        // func_expr の最初の子供の範囲とする
+        
 
-/// Finds the top `a_expr` in a JOIN or WHERE clause.
-fn find_top_expr<'a>(join_qual_or_where_clause: &'a Node<'a>) -> Option<Node<'a>> {
-    // join_qual:
-    // - ON a_expr
-    // - USING '(' name_list ')' opt_alias_clause_for_joiln_using
-    //
-    // where_clause:
-    // - a_expr
+        unimplemented!()
 
-    let last_child = join_qual_or_where_clause
-        .last_child()
-        .expect("join_qual or where_clause must have a last child.");
-
-    if last_child.kind() == SyntaxKind::a_expr {
-        Some(last_child)
-    } else {
-        None
+        let diagnostic = Diagnostic::new(
+            self.name(),
+            severity,
+            "Functions in JOIN or WHERE conditions can prevent index usage; rewrite without wrapping the column.",
+            &range,
+        );
+        ctx.report(diagnostic);
     }
 }
 
@@ -79,6 +66,13 @@ fn find_top_expr<'a>(join_qual_or_where_clause: &'a Node<'a>) -> Option<Node<'a>
 //
 // - func_application
 //   - カラムが出現しうる箇所は子供のうち func_arg_list か func_arg_expr を見れば良さそう
+//   - func_name '(' ')'
+//   - func_name '(' func_arg_list opt_sort_clause ')'
+//   - func_name '(' VARIADIC func_arg_expr opt_sort_clause ')'
+//   - func_name '(' func_arg_list ',' VARIADIC func_arg_expr opt_sort_clause ')'
+//   - func_name '(' ALL func_arg_list opt_sort_clause ')'
+//   - func_name '(' DISTINCT func_arg_list opt_sort_clause ')'
+//   - func_name '(' '*' ')'
 //
 // - json_aggregate_func
 //   - JSON_ARRAY_AGG '(' json_value_expr_list json_array_constructor_null_clause_opt json_returning_clause_opt
@@ -91,6 +85,34 @@ fn find_top_expr<'a>(join_qual_or_where_clause: &'a Node<'a>) -> Option<Node<'a>
 //       - a_expr ':' json_value_expr
 //
 // - func_expr_common_subexpr
+//   - nothing
+//   - a_expr
+//   - extract_list (EXTRACT '(' extract_list ')')
+//   - overlay_list (OVERLAY '(' overlay_list ')')
+//   - func_arg_list_opt (func_name '(' func_arg_list_opt ')')
+//   - func_arg_list
+//   - position_list (POSITION '(' position_list ')')
+//   - substr_list (SUBSTRING '(' substr_list ')')
+//   - trim_list (TRIM '(' trim_list ')')
+//   - expr_list
+//   - xmlexists_argument (XMLEXISTS '(' c_expr xmlexists_argument ')')
+//   - c_expr
+//   - xml_attribute_list (XMLFOREST '(' xml_attribute_list ')')
+
+
+
+//   - JSON_OBJECT '(' json_name_and_value_list json_object_constructor_null_clause_opt json_key_uniqueness_constraint_opt json_returning_clause_opt ')'
+//   - JSON_OBJECT '(' json_returning_clause_opt ')'
+//   - JSON_ARRAY '(' json_value_expr_list json_array_constructor_null_clause_opt json_returning_clause_opt ')'
+//   - JSON_ARRAY '(' select_no_parens json_format_clause_opt json_returning_clause_opt ')'
+//   - JSON_ARRAY '(' json_returning_clause_opt ')'
+//   - JSON '(' json_value_expr json_key_uniqueness_constraint_opt ')'
+//   - JSON_SERIALIZE '(' json_value_expr json_returning_clause_opt ')'
+//   - JSON_QUERY '(' json_value_expr ',' a_expr json_passing_clause_opt json_returning_clause_opt json_wrapper_behavior json_quotes_clause_opt json_behavior_clause_opt ')'
+//   - JSON_EXISTS '(' json_value_expr ',' a_expr json_passing_clause_opt json_on_error_clause_opt ')'
+//   - JSON_VALUE '(' json_value_expr ',' a_expr json_passing_clause_opt json_returning_clause_opt json_behavior_clause_opt ')'
+
+
 //
 // a_expr の子孫で func_expr が現れるまでの最短ルート
 // a_expr
@@ -103,57 +125,25 @@ const FUNCTION_KINDS: &[SyntaxKind] = &[
     SyntaxKind::json_aggregate_func,
 ];
 
-// SELECT サブクエリ以下は JOIN / WHERE の外側なので探索対象外。
-const SUBQUERY_KINDS: &[SyntaxKind] =
-    &[SyntaxKind::select_with_parens, SyntaxKind::select_no_parens];
+fn is_in_detection_range(func_expr: &Node) -> bool {
+    // 親を辿り、 join_qual か where_clause があるかを検証する
+    // その途中で select_no_parens があれば探索を停止する
 
-fn detect_column_function_calls(a_expr: &Node<'_>) -> Vec<Range> {
-    let mut ranges = Vec::new();
-    let mut stack = vec![a_expr.clone()];
-
-    while let Some(current) = stack.pop() {
-        // 対象となる関数ノードを見つけたら、直下に列参照があるかを判定する。
-        // ネストしている場合は「列に最も近い（内側の）関数だけ」を診断対象にする。
-        if FUNCTION_KINDS.contains(&current.kind())
-            && contains_columnref_excluding_nested_functions(&current)
-        {
-            ranges.push(current.range());
+    let mut node = func_expr.parent();
+    while let Some(current) = node {
+        match current.kind() {
+            SyntaxKind::join_qual | SyntaxKind::where_clause => return true,
+            SyntaxKind::select_no_parens => return false,
+            _ => (),
         }
-        push_child_nodes(&mut stack, &current);
+        node = current.parent();
     }
-
-    ranges
-}
-
-fn contains_columnref_excluding_nested_functions(node: &Node<'_>) -> bool {
-    let mut stack = Vec::new();
-    push_child_nodes(&mut stack, node);
-
-    while let Some(current) = stack.pop() {
-        if current.kind() == SyntaxKind::columnref {
-            return true;
-        }
-        // 内側に別の関数が現れたら、そちらで改めて判定するためここでは追わない。
-        if FUNCTION_KINDS.contains(&current.kind()) {
-            continue;
-        }
-        push_child_nodes(&mut stack, &current);
-    }
-
     false
 }
 
-fn push_child_nodes<'tree>(stack: &mut Vec<Node<'tree>>, node: &Node<'tree>) {
-    if SUBQUERY_KINDS.contains(&node.kind()) {
-        return;
-    }
-
-    for child in node.children() {
-        if child.child_count() == 0 {
-            continue;
-        }
-        stack.push(child);
-    }
+// 引数にカラムを含むかどうか
+fn has_column_argument(func_expr: &Node) -> bool {
+    unimplemented!()
 }
 
 #[cfg(test)]
@@ -162,7 +152,7 @@ mod tests {
     use crate::{linter::tests::run_with_rules, Diagnostic, SqlSpan};
 
     fn run(sql: &str) -> Vec<Diagnostic> {
-        run_with_rules(sql, vec![Box::new(NoFunctionInJoinOrWhere)])
+        run_with_rules(sql, vec![Box::new(NoFunctionOnColumnInJoinOrWhere)])
     }
 
     mod where_clause {
@@ -192,7 +182,7 @@ mod tests {
 
             assert!(diagnostics
                 .iter()
-                .any(|diag| diag.rule_id == "no-function-in-join-or-where"),);
+                .any(|diag| diag.rule_id == "no-function-on-column-in-join-or-where"),);
 
             assert_eq!(diagnostics.len(), 1);
 
@@ -248,7 +238,7 @@ mod tests {
 
             assert!(diagnostics
                 .iter()
-                .all(|diag| diag.rule_id == "no-function-in-join-or-where"),);
+                .all(|diag| diag.rule_id == "no-function-on-column-in-join-or-where"),);
 
             assert_eq!(
                 diagnostics.len(),
@@ -291,7 +281,7 @@ mod tests {
 
             assert!(diagnostics
                 .iter()
-                .any(|diag| diag.rule_id == "no-function-in-join-or-where"),);
+                .any(|diag| diag.rule_id == "no-function-on-column-in-join-or-where"),);
 
             assert_eq!(diagnostics.len(), 1);
 
@@ -306,7 +296,7 @@ mod tests {
 
             assert!(diagnostics
                 .iter()
-                .all(|diag| diag.rule_id == "no-function-in-join-or-where"),);
+                .all(|diag| diag.rule_id == "no-function-on-column-in-join-or-where"),);
 
             assert_eq!(diagnostics.len(), 2,);
 
