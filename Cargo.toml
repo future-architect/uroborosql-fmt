@@ -3,7 +3,9 @@ members = [
     "crates/uroborosql-fmt",
     "crates/uroborosql-fmt-cli",
     "crates/uroborosql-fmt-napi",
-    "crates/uroborosql-fmt-wasm"
+    "crates/uroborosql-fmt-wasm",
+    "crates/uroborosql-lint",
+    "crates/uroborosql-lint-cli"
 ]
 resolver = "2"
 
@@ -16,6 +18,7 @@ repository = "https://github.com/future-architect/uroborosql-fmt"
 [workspace.dependencies]
 # Internal crates
 uroborosql-fmt = { path = "./crates/uroborosql-fmt" }
+postgresql-cst-parser = { git = "https://github.com/future-architect/postgresql-cst-parser", branch = "feat/new-apis-for-linter" }
 
 [profile.release]
 lto = true

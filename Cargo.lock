@@ -586,7 +586,7 @@ dependencies = [
 [[package]]
 name = "postgresql-cst-parser"
 version = "0.2.0"
-source = "git+https://github.com/future-architect/postgresql-cst-parser#449673d07f016f97a0769461cfc340c94e66f955"
+source = "git+https://github.com/future-architect/postgresql-cst-parser?branch=feat%2Fnew-apis-for-linter#cb10defcfea42f68db98e6b0c67a6fc54d88b58b"
 dependencies = [
  "cstree",
 ]
@@ -941,6 +941,20 @@ dependencies = [
  "console_error_panic_hook",
  "uroborosql-fmt",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "uroborosql-lint"
+version = "0.1.0"
+dependencies = [
+ "postgresql-cst-parser",
+]
+
+[[package]]
+name = "uroborosql-lint-cli"
+version = "0.1.0"
+dependencies = [
+ "uroborosql-lint",
 ]
 
 [[package]]

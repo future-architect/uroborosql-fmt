@@ -21,7 +21,7 @@ serde_json = "1.0.91"
 thiserror = "1.0.38"
 
 # git config --global core.longpaths true を管理者権限で実行しないとけない
-postgresql-cst-parser = { git = "https://github.com/future-architect/postgresql-cst-parser" }
+postgresql-cst-parser = { workspace = true }
 
 [dev-dependencies]
 console = "0.15.10"
