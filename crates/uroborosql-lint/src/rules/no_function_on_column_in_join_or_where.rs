@@ -12,6 +12,11 @@ use postgresql_cst_parser::{
 /// source: https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html#:~:text=1-,%E3%82%A4%E3%83%B3%E3%83%87%E3%83%83%E3%82%AF%E3%82%B9%E3%82%AB%E3%83%A9%E3%83%A0%E3%81%AB%E9%96%A2%E6%95%B0,-%E3%82%92%E9%80%9A%E3%81%97%E3%81%9F
 pub struct NoFunctionOnColumnInJoinOrWhere;
 
+struct Report<'a> {
+    func_expr_range: Range,
+    columnref_text: &'a str,
+}
+
 impl Rule for NoFunctionOnColumnInJoinOrWhere {
     fn name(&self) -> &'static str {
         "no-function-on-column-in-join-or-where"
@@ -22,43 +27,61 @@ impl Rule for NoFunctionOnColumnInJoinOrWhere {
     }
 
     fn target_kinds(&self) -> &'static [SyntaxKind] {
-        &[SyntaxKind::func_expr]
+        &[SyntaxKind::columnref]
     }
 
     fn run_on_node<'tree>(&self, node: &Node<'tree>, ctx: &mut LintContext, severity: Severity) {
-        assert_eq!(node.kind(), SyntaxKind::func_expr);
+        assert_eq!(node.kind(), SyntaxKind::columnref);
 
-        let Some(range) = detect_wrapping_column(node) else {
+        let Some(report) = detect(node) else {
             return;
         };
 
-        let diagnostic = Diagnostic::new(
-            self.name(),
-            severity,
-            "Functions in JOIN or WHERE conditions can prevent index usage; rewrite without wrapping the column.",
-            &range,
-        );
+        let Report {
+            func_expr_range,
+            columnref_text,
+        } = report;
+
+        let message = format!("Functions in JOIN or WHERE conditions can prevent index usage; rewrite without wrapping the column. {}", columnref_text);
+
+        let diagnostic = Diagnostic::new(self.name(), severity, message, &func_expr_range);
         ctx.report(diagnostic);
     }
 }
 
-fn detect_wrapping_column(func_expr: &Node) -> Option<Range> {
-    if !is_in_detection_range(func_expr) {
+fn detect<'a>(columnref: &'a Node) -> Option<Report<'a>> {
+    let func_expr = get_wrapping_func_expr(columnref)?;
+
+    if !is_in_detection_range(&func_expr) {
         return None;
     }
 
-    // Exclude over clause and filter clause
-    let function_body = func_expr
-        .first_child()
-        .expect("func_expr must have a first child");
+    Some(Report {
+        func_expr_range: func_expr.range(),
+        columnref_text: columnref.text(),
+    })
+}
 
-    // Check if there is a direct column reference
-    if !contains_column_for_current_func_expr(&function_body) {
-        return None;
+/// Returns the nearest ancestor `func_expr` that directly wraps the given `columnref`.
+/// The traversal stops when clauses that cannot appear inside JOIN/WHERE conditions are encountered.
+fn get_wrapping_func_expr<'a>(columnref: &'a Node) -> Option<Node<'a>> {
+    let mut node = columnref.parent();
+    while let Some(current) = node {
+        match current.kind() {
+            SyntaxKind::func_expr => return Some(current),
+            // Stop if we enter a SELECT body before finding a wrapping func_expr.
+            SyntaxKind::select_no_parens
+            | SyntaxKind::filter_clause
+            | SyntaxKind::over_clause
+            // FILTER/OVER/WITHIN GROUP never appear inside JOIN/WHERE predicates.
+            | SyntaxKind::within_group_clause => return None,
+            _ => (),
+        }
+
+        node = current.parent();
     }
 
-    // Exclude sibling clauses like OVER() or FILTER() from the diagnostic range
-    Some(function_body.range())
+    None
 }
 
 fn is_in_detection_range(func_expr: &Node) -> bool {
@@ -76,36 +99,6 @@ fn is_in_detection_range(func_expr: &Node) -> bool {
     }
 
     false
-}
-
-fn contains_column_for_current_func_expr(function_body: &Node) -> bool {
-    assert!(
-        matches!(
-            function_body.kind(),
-            SyntaxKind::func_application | SyntaxKind::json_aggregate_func | SyntaxKind::func_expr_common_subexpr
-        ),
-        "function_body should be func_application, json_aggregate_func, or func_expr_common_subexpr"
-    );
-
-    let func_expr = function_body
-        .parent()
-        .expect("function_body should always have func_expr as its parent");
-
-    // Returns true if the current `func_expr` directly wraps any column reference.
-    function_body
-        .descendants()
-        .filter(|node| node.kind() == SyntaxKind::columnref)
-        .any(|column_ref| {
-            // Traverse upward from columnref and check if the first encountered func_expr is the current function.
-            let mut parent = column_ref.parent();
-            while let Some(ancestor) = parent {
-                if ancestor.kind() == SyntaxKind::func_expr {
-                    return ancestor == func_expr;
-                }
-                parent = ancestor.parent();
-            }
-            false
-        })
 }
 
 #[cfg(test)]
@@ -157,13 +150,12 @@ mod tests {
             let sql = "SELECT * FROM users WHERE coalesce(users.deleted_at, users.updated_at) IS NOT NULL;";
             let diagnostics = run(sql);
 
-            assert_eq!(diagnostics.len(), 1);
+            assert_eq!(diagnostics.len(), 2);
 
-            let SqlSpan { start, end } = diagnostics[0].span;
-            assert_eq!(
-                &sql[start.byte..end.byte],
-                "coalesce(users.deleted_at, users.updated_at)"
-            );
+            assert!(diagnostics.iter().all(|diag| {
+                let SqlSpan { start, end } = diag.span;
+                &sql[start.byte..end.byte] == "coalesce(users.deleted_at, users.updated_at)"
+            }));
         }
 
         #[test]
@@ -183,14 +175,12 @@ mod tests {
                 .collect();
 
             assert!(
-                spans.iter().any(|span| span == &"trim(users.name)"),
+                spans.contains(&"trim(users.name)"),
                 "trim should be reported"
             );
 
             assert!(
-                spans
-                    .iter()
-                    .any(|span| span == &"coalesce(users.deleted_at, trim(users.name))"),
+                spans.contains(&"coalesce(users.deleted_at, trim(users.name))"),
                 "outer coalesce should still be reported"
             );
         }
