@@ -3,8 +3,8 @@ use crate::{
     diagnostic::{Diagnostic, Severity},
     rule::Rule,
     rules::{
-        MissingTwoWaySample, NoDistinct, NoNotIn, NoUnionDistinct, NoWildcardProjection,
-        TooLargeInList,
+        MissingTwoWaySample, NoDistinct, NoFunctionOnColumnInJoinOrWhere, NoNotIn, NoUnionDistinct,
+        NoWildcardProjection, TooLargeInList,
     },
     tree::collect_preorder,
 };
@@ -110,6 +110,7 @@ fn default_rules() -> Vec<Box<dyn Rule>> {
         Box::new(NoDistinct),
         Box::new(NoNotIn),
         Box::new(NoUnionDistinct),
+        Box::new(NoFunctionOnColumnInJoinOrWhere),
         Box::new(NoWildcardProjection),
         Box::new(MissingTwoWaySample),
         Box::new(TooLargeInList),
