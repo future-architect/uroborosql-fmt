@@ -7,11 +7,7 @@ use std::sync::{Arc, RwLock};
 use ropey::Rope;
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::lsp_types::*;
-// Assuming UriExt is available in tower_lsp_server or needs to be imported if suggested?
-// Actually the suggestion says `use tower_lsp_server::UriExt`. Let's assume it exists or check imports.
-// But wait, standard Url from `url` crate has `to_file_path`.
-// If `Uri` is `lsp_types::Url`, it should have it.
-// use tower_lsp_server::ClientSocket;
+
 #[cfg(feature = "runtime-tokio")]
 use tower_lsp_server::Server;
 use tower_lsp_server::{Client, LspService, UriExt};

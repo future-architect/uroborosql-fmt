@@ -25,11 +25,11 @@ pub struct LintOptions {
 
 impl From<LintOptions> for crate::config::Configuration {
     fn from(opts: LintOptions) -> Self {
-        // Convert overrides to Configuration
-        // Map RuleOverride::Enabled(s) to RuleLevel::Error/Warn?
-        // This is lossy if strict.
-        // But for tests usually Error/Warn.
-        // Let's implement minimal conversion or just use ConfigStore::new in Linter::new for defaults.
+        // overrides を Configuration に変換する
+        // RuleOverride::Enabled(s) を RuleLevel::Error/Warn にマップする
+        // 厳密には不可逆な変換になる可能性がある。
+        // しかしテスト用としては通常 Error/Warn で十分。
+        // 最低限の変換を実装するか、あるいは Linter::new で ConfigStore::new を使ってデフォルトにする。
 
         let mut rules = HashMap::new();
         for (k, v) in opts.overrides {
@@ -45,7 +45,7 @@ impl From<LintOptions> for crate::config::Configuration {
                 }
                 RuleOverride::Enabled(Severity::Info) => {
                     rules.insert(k, crate::config::RuleLevel::Warn);
-                } // Info maps to Warn for config? Or shouldn't exist in overrides yet.
+                } // Info は config では Warn にマップする？ あるいは overrides にはまだ存在すべきではないかも。
             }
         }
 
@@ -108,10 +108,10 @@ impl Linter {
         }
     }
 
-    // Deprecated / compat
+    // 非推奨 / 互換性のため維持
     pub fn with_rules(rules: Vec<Box<dyn Rule>>) -> Self {
         let config = Configuration::default();
-        // Use the passed rules as the available registry
+        // 渡されたルールを利用可能なレジストリとして使用する
         Self {
             store: Arc::new(ConfigStore::new(config, HashMap::new(), rules)),
         }

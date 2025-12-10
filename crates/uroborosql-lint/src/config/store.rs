@@ -51,7 +51,7 @@ impl ConfigStore {
         }
     }
 
-    // New constructor for default rules
+    // デフォルトルールを使用するための新しいコンストラクタ
     pub fn new_with_defaults(
         base: Configuration,
         nested_configs: HashMap<PathBuf, Configuration>,
@@ -94,12 +94,12 @@ impl ConfigStore {
     ) -> Vec<(&dyn Rule, Severity)> {
         let mut effective_severities: HashMap<String, Severity> = HashMap::new();
 
-        // 1. Initialize with default severity for ALL available rules
+        // 1. 利用可能なすべてのルールについて、デフォルトの重要度で初期化する
         for rule in &self.available_rules {
             effective_severities.insert(rule.name().to_string(), rule.default_severity());
         }
 
-        // 2. Apply global rules from config
+        // 2. 設定からグローバルルールを適用する
         if let Some(rules_config) = &config.rules {
             for (rule_id, level) in rules_config {
                 let override_val: RuleOverride = (*level).into();
@@ -116,7 +116,7 @@ impl ConfigStore {
             }
         }
 
-        // 3. Apply overrides
+        // 3. overrides を適用する
         if let Some(overrides) = &config.overrides {
             for override_config in overrides {
                 let mut builder = GlobSetBuilder::new();
@@ -158,7 +158,7 @@ impl ConfigStore {
             }
         }
 
-        // 4. Match names back to rule instances
+        // 4. 名前をルールインスタンスに戻す
         let mut result = Vec::new();
         for rule in &self.available_rules {
             if let Some(severity) = effective_severities.get(rule.name()) {
@@ -208,10 +208,10 @@ mod tests {
         let nested_path = PathBuf::from("src/subdir");
         nested_map.insert(nested_path.clone(), nested_config);
 
-        // Ensure path exists in logic (mocking path existence not needed as we pass paths)
+        // パスがロジック内に存在することを確認します（パスを渡すため、モックされたパスの存在は必要ありません）
         let store = ConfigStore::new_with_defaults(base_config, nested_map);
 
-        // File inside subdir should pick up nested config
+        // サブディレクトリ内のファイルはネストされた設定を取得する必要があります
         let resolved = store.resolve(Path::new("src/subdir/query.sql"));
         assert!(resolved
             .rules
@@ -233,14 +233,14 @@ mod tests {
 
         let store = ConfigStore::new_with_defaults(config, HashMap::new());
 
-        // src/test.sql matches "src/*.sql" -> Rule should be Off (removed)
+        // src/test.sql は "src/*.sql" に一致 -> ルールは Off (削除) になるべき
         let resolved = store.resolve(Path::new("src/test.sql"));
         assert!(!resolved
             .rules
             .iter()
             .any(|(r, _)| r.name() == "no-distinct"));
 
-        // other.sql -> Rule should be present (default)
+        // other.sql -> ルールは存在するべき (デフォルト)
         let resolved_other = store.resolve(Path::new("other.sql"));
         assert!(resolved_other
             .rules

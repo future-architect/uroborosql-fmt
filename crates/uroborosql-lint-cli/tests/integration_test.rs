@@ -74,3 +74,47 @@ fn test_cli_directory_recursion() {
     let sub_has_distinct = sub_lines.iter().any(|l| l.contains("[no-distinct]"));
     assert!(sub_has_distinct, "sub.sql should match no-distinct");
 }
+
+#[test]
+fn test_cli_relative_paths_use_ancestor_config() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    let root_config = r#"{
+        "rules": {
+            "no-distinct": "error"
+        }
+    }"#;
+    fs::write(root.join(".uroborosql-lintrc.json"), root_config).unwrap();
+
+    let subdir = root.join("relative");
+    fs::create_dir(&subdir).unwrap();
+    fs::write(
+        subdir.join("relative.sql"),
+        "SELECT DISTINCT * FROM sample_table;",
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_uroborosql-lint-cli"))
+        .current_dir(root)
+        .arg("relative")
+        .output()
+        .expect("failed to execute process");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        !output.status.success(),
+        "lint should fail due to root config\nSTDOUT:\n{}\nSTDERR:\n{}",
+        stdout,
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line.contains("relative.sql") && line.contains("[no-distinct]")),
+        "relative.sql should report no-distinct when invoked with relative path.\nSTDOUT:\n{}",
+        stdout
+    );
+}
