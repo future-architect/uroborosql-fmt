@@ -35,8 +35,8 @@ fn main() {
 fn run(args: Args) -> Result<(), String> {
     // 設定フェーズ: lint 対象パスからコンフィグを収集し、CWD の設定を base として選択
     let nested_configs = collect_nested_configs(&args.paths)?;
-    let base_config = determine_base_config(&nested_configs);
-    let store = ConfigStore::new_with_defaults(base_config, nested_configs);
+    let (base_config, base_path) = determine_base_config(&nested_configs);
+    let store = ConfigStore::new_with_defaults(base_config, base_path, nested_configs);
     let linter = Linter::with_store(store);
 
     // Lint フェーズ: WalkBuilder で指定パスを再帰探索し、SQL ファイルに対して Linter を実行
@@ -92,7 +92,7 @@ fn scan_for_configs(
     for result in walker {
         let entry = result.map_err(|err| format!("Error walking directory: {}", err))?;
 
-        if !entry.file_type().map_or(false, |ft| ft.is_file())
+        if !entry.file_type().is_some_and(|ft| ft.is_file())
             || entry.file_name() != CONFIG_FILE_NAME
         {
             continue;
@@ -140,15 +140,17 @@ fn add_ancestor_configs(
     Ok(())
 }
 
-fn determine_base_config(nested_configs: &HashMap<PathBuf, Configuration>) -> Configuration {
-    if let Ok(cwd) = std::env::current_dir() {
-        let canonical_cwd = fs::canonicalize(&cwd).unwrap_or(cwd);
-        if let Some(cfg) = nested_configs.get(&canonical_cwd) {
-            return cfg.clone();
-        }
+fn determine_base_config(
+    nested_configs: &HashMap<PathBuf, Configuration>,
+) -> (Configuration, PathBuf) {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let canonical_cwd = fs::canonicalize(&cwd).unwrap_or(cwd);
+
+    if let Some(cfg) = nested_configs.get(&canonical_cwd) {
+        return (cfg.clone(), canonical_cwd);
     }
 
-    Configuration::default()
+    (Configuration::default(), canonical_cwd)
 }
 
 // すべての入力パスを WalkBuilder で展開し、SQL ファイルに対して lint を実行する
@@ -180,8 +182,8 @@ fn lint_targets(linter: &Linter, paths: Vec<PathBuf>) -> Result<bool, String> {
 }
 
 fn is_sql_file(entry: &ignore::DirEntry) -> bool {
-    entry.file_type().map_or(false, |ft| ft.is_file())
-        && entry.path().extension().map_or(false, |ext| ext == "sql")
+    entry.file_type().is_some_and(|ft| ft.is_file())
+        && entry.path().extension().is_some_and(|ext| ext == "sql")
 }
 
 // 単一ファイルを読み込み、Linter を実行して診断を出力する（エラー有無は呼び出し元で集約）
@@ -304,8 +306,9 @@ mod tests {
 
         let _guard = DirGuard::change_to(root);
 
-        let base = determine_base_config(&nested_configs);
+        let (base, base_path) = determine_base_config(&nested_configs);
 
+        assert_eq!(base_path, canonical_root);
         assert_eq!(
             base.rules.unwrap().get("no-distinct"),
             Some(&RuleLevel::Error)

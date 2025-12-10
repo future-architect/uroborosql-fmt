@@ -77,7 +77,7 @@ impl LintOptions {
 
 use crate::config::store::ConfigStore;
 use crate::config::Configuration;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub struct Linter {
@@ -97,8 +97,13 @@ impl Linter {
 
     pub fn with_options(options: LintOptions) -> Self {
         let config: Configuration = options.into();
+        let base_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         Self {
-            store: Arc::new(ConfigStore::new_with_defaults(config, HashMap::new())),
+            store: Arc::new(ConfigStore::new_with_defaults(
+                config,
+                base_path,
+                HashMap::new(),
+            )),
         }
     }
 
@@ -112,8 +117,9 @@ impl Linter {
     pub fn with_rules(rules: Vec<Box<dyn Rule>>) -> Self {
         let config = Configuration::default();
         // 渡されたルールを利用可能なレジストリとして使用する
+        let base_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         Self {
-            store: Arc::new(ConfigStore::new(config, HashMap::new(), rules)),
+            store: Arc::new(ConfigStore::new(config, base_path, HashMap::new(), rules)),
         }
     }
 

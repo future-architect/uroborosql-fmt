@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -19,6 +20,7 @@ pub struct ResolvedConfig<'a> {
 
 pub struct ConfigStore {
     base: Arc<Configuration>,
+    base_path: PathBuf,
     nested_configs: HashMap<PathBuf, Arc<Configuration>>,
     available_rules: Vec<Box<dyn Rule>>,
 }
@@ -27,6 +29,7 @@ impl fmt::Debug for ConfigStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ConfigStore")
             .field("base", &self.base)
+            .field("base_path", &self.base_path)
             .field("nested_configs", &self.nested_configs)
             .field("available_rules_count", &self.available_rules.len())
             .finish()
@@ -36,6 +39,7 @@ impl fmt::Debug for ConfigStore {
 impl ConfigStore {
     pub fn new(
         base: Configuration,
+        base_path: PathBuf,
         nested_configs: HashMap<PathBuf, Configuration>,
         rules: Vec<Box<dyn Rule>>,
     ) -> Self {
@@ -46,25 +50,27 @@ impl ConfigStore {
 
         Self {
             base: Arc::new(base),
+            base_path,
             nested_configs,
             available_rules: rules,
         }
     }
 
-    // デフォルトルールを使用するための新しいコンストラクタ
     pub fn new_with_defaults(
         base: Configuration,
+        base_path: PathBuf,
         nested_configs: HashMap<PathBuf, Configuration>,
     ) -> Self {
-        Self::new(base, nested_configs, all_rules())
+        Self::new(base, base_path, nested_configs, all_rules())
     }
 
     pub fn resolve(&self, path: &Path) -> ResolvedConfig<'_> {
         let (config, base_path) = self
             .get_nearest_config(path)
-            .unwrap_or((&self.base, Path::new(".")));
+            .map(|(cfg, cfg_base)| (cfg, Cow::Owned(cfg_base)))
+            .unwrap_or_else(|| (&self.base, Cow::Borrowed(self.base_path.as_path())));
 
-        let rules = self.resolve_rules(config, path, base_path);
+        let rules = self.resolve_rules(config, path, &base_path);
 
         ResolvedConfig {
             rules,
@@ -72,14 +78,11 @@ impl ConfigStore {
         }
     }
 
-    fn get_nearest_config<'a, 'b>(
-        &'a self,
-        path: &'b Path,
-    ) -> Option<(&'a Arc<Configuration>, &'b Path)> {
+    fn get_nearest_config<'a>(&'a self, path: &Path) -> Option<(&'a Arc<Configuration>, PathBuf)> {
         let mut current = path.parent();
         while let Some(dir) = current {
             if let Some(config) = self.nested_configs.get(dir) {
-                return Some((config, dir));
+                return Some((config, dir.to_path_buf()));
             }
             current = dir.parent();
         }
@@ -131,13 +134,9 @@ impl ConfigStore {
                     Err(_) => continue,
                 };
 
-                let relative_target = if config_base == Path::new(".") {
-                    target_path
-                } else {
-                    match target_path.strip_prefix(config_base) {
-                        Ok(p) => p,
-                        Err(_) => continue,
-                    }
+                let relative_target = match target_path.strip_prefix(config_base) {
+                    Ok(p) => p,
+                    Err(_) => continue,
                 };
 
                 if glob_set.is_match(relative_target) {
@@ -183,8 +182,9 @@ mod tests {
             ..Default::default()
         };
 
-        let store = ConfigStore::new_with_defaults(base_config, HashMap::new());
-        let resolved = store.resolve(Path::new("src/main.sql"));
+        let base_path = PathBuf::from("/project");
+        let store = ConfigStore::new_with_defaults(base_config, base_path.clone(), HashMap::new());
+        let resolved = store.resolve(Path::new("/project/src/main.sql"));
 
         assert!(resolved
             .rules
@@ -204,15 +204,16 @@ mod tests {
             ..Default::default()
         };
 
+        let base_path = PathBuf::from("/project");
         let mut nested_map = HashMap::new();
-        let nested_path = PathBuf::from("src/subdir");
+        let nested_path = base_path.join("src/subdir");
         nested_map.insert(nested_path.clone(), nested_config);
 
         // パスがロジック内に存在することを確認します（パスを渡すため、モックされたパスの存在は必要ありません）
-        let store = ConfigStore::new_with_defaults(base_config, nested_map);
+        let store = ConfigStore::new_with_defaults(base_config, base_path, nested_map);
 
         // サブディレクトリ内のファイルはネストされた設定を取得する必要があります
-        let resolved = store.resolve(Path::new("src/subdir/query.sql"));
+        let resolved = store.resolve(Path::new("/project/src/subdir/query.sql"));
         assert!(resolved
             .rules
             .iter()
@@ -231,17 +232,18 @@ mod tests {
             ..Default::default()
         };
 
-        let store = ConfigStore::new_with_defaults(config, HashMap::new());
+        let base_path = PathBuf::from("/project");
+        let store = ConfigStore::new_with_defaults(config, base_path, HashMap::new());
 
         // src/test.sql は "src/*.sql" に一致 -> ルールは Off (削除) になるべき
-        let resolved = store.resolve(Path::new("src/test.sql"));
+        let resolved = store.resolve(Path::new("/project/src/test.sql"));
         assert!(!resolved
             .rules
             .iter()
             .any(|(r, _)| r.name() == "no-distinct"));
 
         // other.sql -> ルールは存在するべき (デフォルト)
-        let resolved_other = store.resolve(Path::new("other.sql"));
+        let resolved_other = store.resolve(Path::new("/project/other.sql"));
         assert!(resolved_other
             .rules
             .iter()
