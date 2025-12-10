@@ -51,7 +51,9 @@ impl LanguageServer for Backend {
 
         self.upsert_document(&uri, &text, Some(version));
 
-        self.lint_and_publish(&uri, &text, Some(version)).await;
+        if let Err(err) = self.lint_and_publish(&uri, &text, Some(version)).await {
+            self.client.log_message(MessageType::WARNING, err).await;
+        }
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -80,9 +82,13 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         if let Some(text) = params.text {
             self.upsert_document(&uri, &text, None);
-            self.lint_and_publish(&uri, &text, None).await;
+            if let Err(err) = self.lint_and_publish(&uri, &text, None).await {
+                self.client.log_message(MessageType::WARNING, err).await;
+            }
         } else if let Some(text) = self.document_text(&uri) {
-            self.lint_and_publish(&uri, &text, None).await;
+            if let Err(err) = self.lint_and_publish(&uri, &text, None).await {
+                self.client.log_message(MessageType::WARNING, err).await;
+            }
         } else {
             self.client
                 .log_message(

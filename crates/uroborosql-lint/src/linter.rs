@@ -2,10 +2,6 @@ use crate::{
     context::LintContext,
     diagnostic::{Diagnostic, Severity},
     rule::Rule,
-    rules::{
-        MissingTwoWaySample, NoDistinct, NoNotIn, NoUnionDistinct, NoWildcardProjection,
-        TooLargeInList,
-    },
     tree::collect_preorder,
 };
 use postgresql_cst_parser::tree_sitter;
@@ -16,9 +12,48 @@ pub enum LintError {
     ParseError(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleOverride {
+    Enabled(Severity),
+    Disabled,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct LintOptions {
-    severity_overrides: HashMap<String, Severity>,
+    overrides: HashMap<String, RuleOverride>,
+}
+
+impl From<LintOptions> for crate::config::Configuration {
+    fn from(opts: LintOptions) -> Self {
+        // overrides を Configuration に変換する
+        // RuleOverride::Enabled(s) を RuleLevel::Error/Warn にマップする
+        // 厳密には不可逆な変換になる可能性がある。
+        // しかしテスト用としては通常 Error/Warn で十分。
+        // 最低限の変換を実装するか、あるいは Linter::new で ConfigStore::new を使ってデフォルトにする。
+
+        let mut rules = HashMap::new();
+        for (k, v) in opts.overrides {
+            match v {
+                RuleOverride::Disabled => {
+                    rules.insert(k, crate::config::RuleLevel::Off);
+                }
+                RuleOverride::Enabled(Severity::Error) => {
+                    rules.insert(k, crate::config::RuleLevel::Error);
+                }
+                RuleOverride::Enabled(Severity::Warning) => {
+                    rules.insert(k, crate::config::RuleLevel::Warn);
+                }
+                RuleOverride::Enabled(Severity::Info) => {
+                    rules.insert(k, crate::config::RuleLevel::Warn);
+                } // Info は config では Warn にマップする？ あるいは overrides にはまだ存在すべきではないかも。
+            }
+        }
+
+        crate::config::Configuration {
+            rules: Some(rules),
+            ..Default::default()
+        }
+    }
 }
 
 impl LintOptions {
@@ -26,27 +61,27 @@ impl LintOptions {
         Self::default()
     }
 
-    pub fn severity_for(&self, rule_id: &str) -> Option<Severity> {
-        self.severity_overrides.get(rule_id).copied()
+    pub fn get_override(&self, rule_id: &str) -> Option<RuleOverride> {
+        self.overrides.get(rule_id).copied()
     }
 
-    pub fn set_severity_override(&mut self, rule_id: impl Into<String>, severity: Severity) {
-        self.severity_overrides.insert(rule_id.into(), severity);
+    pub fn set_override(&mut self, rule_id: impl Into<String>, override_val: RuleOverride) {
+        self.overrides.insert(rule_id.into(), override_val);
     }
 
-    pub fn with_severity_override(
-        mut self,
-        rule_id: impl Into<String>,
-        severity: Severity,
-    ) -> Self {
-        self.set_severity_override(rule_id, severity);
+    pub fn with_override(mut self, rule_id: impl Into<String>, override_val: RuleOverride) -> Self {
+        self.set_override(rule_id, override_val);
         self
     }
 }
 
+use crate::config::store::ConfigStore;
+use crate::config::Configuration;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 pub struct Linter {
-    rules: Vec<Box<dyn Rule>>,
-    options: LintOptions,
+    store: Arc<ConfigStore>,
 }
 
 impl Default for Linter {
@@ -61,30 +96,43 @@ impl Linter {
     }
 
     pub fn with_options(options: LintOptions) -> Self {
-        Self::with_rules_and_options(default_rules(), options)
+        let config: Configuration = options.into();
+        let base_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        Self {
+            store: Arc::new(ConfigStore::new_with_defaults(
+                config,
+                base_path,
+                HashMap::new(),
+            )),
+        }
     }
 
+    pub fn with_store(store: ConfigStore) -> Self {
+        Self {
+            store: Arc::new(store),
+        }
+    }
+
+    // 非推奨 / 互換性のため維持
     pub fn with_rules(rules: Vec<Box<dyn Rule>>) -> Self {
-        Self::with_rules_and_options(rules, LintOptions::default())
+        let config = Configuration::default();
+        // 渡されたルールを利用可能なレジストリとして使用する
+        let base_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        Self {
+            store: Arc::new(ConfigStore::new(config, base_path, HashMap::new(), rules)),
+        }
     }
 
-    pub fn with_rules_and_options(rules: Vec<Box<dyn Rule>>, options: LintOptions) -> Self {
-        Self { rules, options }
-    }
-
-    pub fn run(&self, sql: &str) -> Result<Vec<Diagnostic>, LintError> {
+    pub fn run(&self, path: &Path, sql: &str) -> Result<Vec<Diagnostic>, LintError> {
         let tree = tree_sitter::parse_2way(sql)
             .map_err(|err| LintError::ParseError(format!("{err:?}")))?;
         let root = tree.root_node();
         let nodes = collect_preorder(root.clone());
         let mut ctx = LintContext::new(sql);
 
-        for rule in &self.rules {
-            let severity = self
-                .options
-                .severity_for(rule.name())
-                .unwrap_or_else(|| rule.default_severity());
+        let resolved = self.store.resolve(path);
 
+        for (rule, severity) in resolved.rules {
             rule.run_once(&root, &mut ctx, severity);
 
             let targets = rule.target_kinds();
@@ -105,32 +153,24 @@ impl Linter {
     }
 }
 
-fn default_rules() -> Vec<Box<dyn Rule>> {
-    vec![
-        Box::new(NoDistinct),
-        Box::new(NoNotIn),
-        Box::new(NoUnionDistinct),
-        Box::new(NoWildcardProjection),
-        Box::new(MissingTwoWaySample),
-        Box::new(TooLargeInList),
-    ]
-}
-
 #[cfg(test)]
 pub mod tests {
     use super::*;
     use crate::diagnostic::Severity;
 
     pub fn run_with_rules(sql: &str, rules: Vec<Box<dyn Rule>>) -> Vec<Diagnostic> {
-        Linter::with_rules(rules).run(sql).expect("lint ok")
+        Linter::with_rules(rules)
+            .run(Path::new("test.sql"), sql)
+            .expect("lint ok")
     }
 
     #[test]
     fn applies_severity_override() {
-        let options = LintOptions::default().with_severity_override("no-distinct", Severity::Error);
+        let options = LintOptions::default()
+            .with_override("no-distinct", RuleOverride::Enabled(Severity::Error));
         let linter = Linter::with_options(options);
         let sql = "SELECT DISTINCT id FROM users;";
-        let diagnostics = linter.run(sql).expect("lint ok");
+        let diagnostics = linter.run(Path::new("test.sql"), sql).expect("lint ok");
 
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].severity, Severity::Error);

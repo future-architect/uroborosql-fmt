@@ -1,10 +1,12 @@
 [package]
 name = "uroborosql-lint-cli"
 version = "0.1.0"
-authors.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+edition = "2021"
 
 [dependencies]
 uroborosql-lint = { path = "../uroborosql-lint" }
+clap = { version = "4.5", features = ["derive"] }
+ignore = "0.4.25"
+
+[dev-dependencies]
+tempfile = "3.23.0"
