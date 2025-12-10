@@ -1,0 +1,326 @@
+use std::collections::VecDeque;
+use std::str::FromStr;
+use std::time::Duration;
+
+use serde_json::json;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
+use tokio::time;
+use tower_lsp_server::jsonrpc::{Request, Response};
+use tower_lsp_server::lsp_types::Uri;
+use tower_lsp_server::lsp_types::*;
+use tower_lsp_server::{Client, LanguageServer, LspService, Server};
+use uroborosql_language_server::Backend;
+
+struct TestServer {
+    req_stream: DuplexStream,
+    res_stream: DuplexStream,
+    responses: VecDeque<String>,
+    notifications: VecDeque<String>,
+}
+
+impl TestServer {
+    fn new<F, S>(init: F) -> Self
+    where
+        F: FnOnce(Client) -> S,
+        S: LanguageServer,
+    {
+        let (req_client, req_server) = tokio::io::duplex(2048);
+        let (res_server, res_client) = tokio::io::duplex(2048);
+
+        let (service, socket) = LspService::new(init);
+        tokio::spawn(async move {
+            Server::new(req_server, res_server, socket)
+                .serve(service)
+                .await
+        });
+
+        Self {
+            req_stream: req_client,
+            res_stream: res_client,
+            responses: VecDeque::new(),
+            notifications: VecDeque::new(),
+        }
+    }
+
+    fn encode(payload: &str) -> Vec<u8> {
+        format!("Content-Length: {}\r\n\r\n{}", payload.len(), payload).into_bytes()
+    }
+
+    fn decode(buffer: &[u8]) -> Vec<String> {
+        let mut remainder = buffer;
+        let mut frames = Vec::new();
+        while !remainder.is_empty() {
+            let sep = match remainder.windows(4).position(|w| w == b"\r\n\r\n") {
+                Some(idx) => idx + 4,
+                None => break,
+            };
+            let (header, body) = remainder.split_at(sep);
+            let len = std::str::from_utf8(header)
+                .unwrap()
+                .strip_prefix("Content-Length: ")
+                .unwrap()
+                .strip_suffix("\r\n\r\n")
+                .unwrap()
+                .parse::<usize>()
+                .unwrap();
+            let (payload, rest) = body.split_at(len);
+            frames.push(String::from_utf8(payload.to_vec()).unwrap());
+            remainder = rest;
+        }
+        frames
+    }
+
+    async fn send_request(&mut self, req: Request) {
+        let payload = serde_json::to_string(&req).unwrap();
+        self.req_stream
+            .write_all(&Self::encode(&payload))
+            .await
+            .unwrap();
+    }
+
+    async fn receive_response(&mut self) -> Response {
+        loop {
+            if let Some(buffer) = self.responses.pop_back() {
+                return serde_json::from_str(&buffer).unwrap();
+            }
+
+            self.read_into_queues().await;
+        }
+    }
+
+    async fn receive_notification(&mut self) -> Request {
+        loop {
+            if let Some(buffer) = self.notifications.pop_back() {
+                return serde_json::from_str(&buffer).unwrap();
+            }
+
+            self.read_into_queues().await;
+        }
+    }
+
+    async fn read_into_queues(&mut self) {
+        let mut buf = vec![0u8; 4096];
+        let n = self.res_stream.read(&mut buf).await.unwrap();
+        for frame in Self::decode(&buf[..n]) {
+            let value: serde_json::Value = serde_json::from_str(&frame).unwrap();
+            if value.get("id").is_some() {
+                self.responses.push_front(frame);
+            } else {
+                self.notifications.push_front(frame);
+            }
+        }
+    }
+
+    async fn receive_notification_timeout(&mut self, dur: Duration) -> Option<Request> {
+        match time::timeout(dur, self.receive_notification()).await {
+            Ok(req) => Some(req),
+            Err(_) => None,
+        }
+    }
+}
+
+fn build_initialize(id: i64) -> Request {
+    Request::build("initialize")
+        .params(json!(InitializeParams::default()))
+        .id(id)
+        .finish()
+}
+
+fn build_initialized() -> Request {
+    Request::build("initialized")
+        .params(json!(InitializedParams {}))
+        .finish()
+}
+
+fn build_did_open(uri: &Uri, text: &str, version: i32) -> Request {
+    let params = DidOpenTextDocumentParams {
+        text_document: TextDocumentItem {
+            uri: uri.clone(),
+            language_id: "sql".into(),
+            version,
+            text: text.into(),
+        },
+    };
+    Request::build("textDocument/didOpen")
+        .params(json!(params))
+        .finish()
+}
+
+fn build_did_change(uri: &Uri, version: i32, text: &str) -> Request {
+    let params = DidChangeTextDocumentParams {
+        text_document: VersionedTextDocumentIdentifier {
+            uri: uri.clone(),
+            version,
+        },
+        content_changes: vec![TextDocumentContentChangeEvent {
+            range: None,
+            range_length: None,
+            text: text.into(),
+        }],
+    };
+    Request::build("textDocument/didChange")
+        .params(json!(params))
+        .finish()
+}
+
+fn build_did_save(uri: &Uri, text: &str) -> Request {
+    let params = DidSaveTextDocumentParams {
+        text_document: TextDocumentIdentifier { uri: uri.clone() },
+        text: Some(text.into()),
+    };
+    Request::build("textDocument/didSave")
+        .params(json!(params))
+        .finish()
+}
+
+fn build_formatting(uri: &Uri, id: i64) -> Request {
+    let params = DocumentFormattingParams {
+        text_document: TextDocumentIdentifier { uri: uri.clone() },
+        options: FormattingOptions {
+            tab_size: 2,
+            insert_spaces: true,
+            ..FormattingOptions::default()
+        },
+        work_done_progress_params: WorkDoneProgressParams::default(),
+    };
+    Request::build("textDocument/formatting")
+        .params(json!(params))
+        .id(id)
+        .finish()
+}
+
+fn build_range_formatting(uri: &Uri, range: Range, id: i64) -> Request {
+    let params = DocumentRangeFormattingParams {
+        text_document: TextDocumentIdentifier { uri: uri.clone() },
+        range,
+        options: FormattingOptions {
+            tab_size: 2,
+            insert_spaces: true,
+            ..FormattingOptions::default()
+        },
+        work_done_progress_params: WorkDoneProgressParams::default(),
+    };
+    Request::build("textDocument/rangeFormatting")
+        .params(json!(params))
+        .id(id)
+        .finish()
+}
+
+#[tokio::test]
+async fn diagnostics_publish_on_open_and_save() {
+    let mut server = TestServer::new(Backend::new);
+    let uri = Uri::from_str("file:///test.sql").unwrap();
+
+    // initialize handshake
+    server.send_request(build_initialize(1)).await;
+    let init_res = server.receive_response().await;
+    assert!(init_res.is_ok());
+
+    server.send_request(build_initialized()).await;
+    let init_notification = server.receive_notification().await;
+    assert_eq!(init_notification.method(), "window/logMessage");
+
+    // didOpen triggers lint (initial diagnostics)
+    server
+        .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let diag_notification = server.receive_notification().await;
+    assert_eq!(
+        diag_notification.method(),
+        "textDocument/publishDiagnostics"
+    );
+    let diagnostics = diag_notification.params().unwrap()["diagnostics"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert!(
+        !diagnostics.is_empty(),
+        "expected diagnostics on didOpen, got none"
+    );
+
+    // didChange should not emit diagnostics
+    server
+        .send_request(build_did_change(&uri, 2, "SELECT DISTINCT id FROM users;"))
+        .await;
+    let change_notification = server
+        .receive_notification_timeout(Duration::from_millis(100))
+        .await;
+    assert!(
+        change_notification.is_none(),
+        "didChange should not publish diagnostics"
+    );
+
+    // didSave should emit diagnostics again
+    server
+        .send_request(build_did_save(&uri, "SELECT DISTINCT id FROM users;"))
+        .await;
+    let save_notification = server.receive_notification().await;
+    assert_eq!(
+        save_notification.method(),
+        "textDocument/publishDiagnostics"
+    );
+}
+
+#[tokio::test]
+async fn document_formatting_returns_edit() {
+    let mut server = TestServer::new(Backend::new);
+    let uri = Uri::from_str("file:///fmt.sql").unwrap();
+
+    server.send_request(build_initialize(1)).await;
+    assert!(server.receive_response().await.is_ok());
+    server.send_request(build_initialized()).await;
+    let _ = server.receive_notification().await;
+
+    let original = "select A from B";
+    server.send_request(build_did_open(&uri, original, 1)).await;
+    let _ = server.receive_notification().await;
+
+    server.send_request(build_formatting(&uri, 2)).await;
+    let response = server.receive_response().await;
+    assert!(response.is_ok());
+    let value = serde_json::to_value(&response).unwrap();
+    let edits = value["result"]
+        .as_array()
+        .expect("formatting result should be array");
+    assert_eq!(edits.len(), 1);
+    let new_text = edits[0]["newText"].as_str().unwrap();
+    assert_ne!(
+        new_text, original,
+        "formatted text should differ from original"
+    );
+}
+
+#[tokio::test]
+async fn range_formatting_returns_edit() {
+    let mut server = TestServer::new(Backend::new);
+    let uri = Uri::from_str("file:///range.sql").unwrap();
+
+    server.send_request(build_initialize(1)).await;
+    assert!(server.receive_response().await.is_ok());
+    server.send_request(build_initialized()).await;
+    let _ = server.receive_notification().await;
+
+    let original = "select a from b;";
+    server.send_request(build_did_open(&uri, original, 1)).await;
+    let _ = server.receive_notification().await;
+
+    let range = Range {
+        start: Position::new(0, 0),
+        end: Position::new(0, original.len() as u32),
+    };
+    server
+        .send_request(build_range_formatting(&uri, range, 2))
+        .await;
+    let response = server.receive_response().await;
+    assert!(response.is_ok());
+    let value = serde_json::to_value(&response).unwrap();
+    let edits = value["result"]
+        .as_array()
+        .expect("range formatting should return edits");
+    assert_eq!(edits.len(), 1);
+    assert_ne!(
+        edits[0]["newText"].as_str().unwrap(),
+        original,
+        "range formatting should rewrite selection"
+    );
+}
