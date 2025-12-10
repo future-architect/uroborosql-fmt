@@ -1,6 +1,7 @@
+pub mod config;
 mod context;
 mod diagnostic;
-mod linter;
+pub mod linter;
 mod rule;
 mod rules;
 mod tree;

@@ -7,10 +7,14 @@ use std::sync::{Arc, RwLock};
 use ropey::Rope;
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::lsp_types::*;
-pub use tower_lsp_server::ClientSocket;
+// Assuming UriExt is available in tower_lsp_server or needs to be imported if suggested?
+// Actually the suggestion says `use tower_lsp_server::UriExt`. Let's assume it exists or check imports.
+// But wait, standard Url from `url` crate has `to_file_path`.
+// If `Uri` is `lsp_types::Url`, it should have it.
+// use tower_lsp_server::ClientSocket;
 #[cfg(feature = "runtime-tokio")]
 use tower_lsp_server::Server;
-use tower_lsp_server::{Client, LspService};
+use tower_lsp_server::{Client, LspService, UriExt};
 use uroborosql_lint::{Diagnostic as SqlDiagnostic, LintError, Linter, Severity as SqlSeverity};
 
 use crate::text::rope_range_to_char_range;
@@ -37,8 +41,16 @@ impl Backend {
         }
     }
 
-    async fn lint_and_publish(&self, uri: &Uri, text: &str, version: Option<i32>) {
-        let diagnostics = match self.linter.run(text) {
+    async fn lint_and_publish(
+        &self,
+        uri: &Uri,
+        text: &str,
+        version: Option<i32>,
+    ) -> Result<(), String> {
+        let path = uri
+            .to_file_path()
+            .ok_or_else(|| format!("Invalid file URI: {}", uri.as_str()))?;
+        let diagnostics = match self.linter.run(&path, text) {
             Ok(diags) => diags.into_iter().map(to_lsp_diagnostic).collect(),
             Err(err) => vec![to_parse_error(err)],
         };
@@ -46,6 +58,7 @@ impl Backend {
         self.client
             .publish_diagnostics(uri.clone(), diagnostics, version)
             .await;
+        Ok(())
     }
 
     fn upsert_document(&self, uri: &Uri, text: &str, version: Option<i32>) {
