@@ -8,6 +8,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::Node};
 const MAX_IN_ELEMENTS: usize = 100;
 
 /// Rule source: https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html#in-%E5%8F%A5-1
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct TooLargeInList;
 
 impl Rule for TooLargeInList {
