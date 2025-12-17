@@ -14,6 +14,7 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub enum LintError {
     ParseError(String),
+    ConfigurationError(String),
 }
 
 #[derive(Debug, Clone, Default)]
