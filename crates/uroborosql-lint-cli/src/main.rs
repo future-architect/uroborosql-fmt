@@ -1,7 +1,7 @@
 use std::{env, fs, path::PathBuf, process};
 
 use clap::Parser;
-use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter};
+use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, Severity};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -50,7 +50,7 @@ fn run() -> Result<(), String> {
             }
         }
         Err(LintError::ParseError(message)) => {
-            eprintln!("{}: failed to parse SQL: {}", display, message);
+            eprintln!("{}: error: failed to parse SQL: {}", display, message);
             exit_with_error = true;
         }
     }
@@ -67,7 +67,20 @@ fn print_diagnostic(file: &str, diagnostic: &Diagnostic) {
     let column = diagnostic.span.start.column + 1;
 
     println!(
-        "{}:{}:{}: {}: {}",
-        file, line, column, diagnostic.rule_id, diagnostic.message
+        "{}:{}:{}: {}: {}: {}",
+        file,
+        line,
+        column,
+        severity_label(diagnostic.severity),
+        diagnostic.rule_id,
+        diagnostic.message
     );
+}
+
+fn severity_label(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Error => "error",
+        Severity::Warning => "warning",
+        Severity::Info => "info",
+    }
 }
