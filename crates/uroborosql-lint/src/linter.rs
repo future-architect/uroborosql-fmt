@@ -1,13 +1,5 @@
 use crate::{
-    context::LintContext,
-    diagnostic::Diagnostic,
-    rule::Rule,
-    rules::{
-        MissingTwoWaySample, NoDistinct, NoFunctionOnColumnInJoinOrWhere, NoNotIn, NoUnionDistinct,
-        NoWildcardProjection, TooLargeInList,
-    },
-    tree::collect_preorder,
-    ResolvedLintConfig,
+    context::LintContext, diagnostic::Diagnostic, tree::collect_preorder, ResolvedLintConfig,
 };
 use postgresql_cst_parser::tree_sitter;
 
@@ -54,18 +46,6 @@ impl Linter {
 
         Ok(ctx.into_diagnostics())
     }
-}
-
-fn default_rules() -> Vec<Box<dyn Rule>> {
-    vec![
-        Box::new(NoDistinct),
-        Box::new(NoNotIn),
-        Box::new(NoUnionDistinct),
-        Box::new(NoFunctionOnColumnInJoinOrWhere),
-        Box::new(NoWildcardProjection),
-        Box::new(MissingTwoWaySample),
-        Box::new(TooLargeInList),
-    ]
 }
 
 #[cfg(test)]

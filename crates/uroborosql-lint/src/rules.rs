@@ -26,6 +26,7 @@ pub fn all_rules() -> Vec<RuleEnum> {
         RuleEnum::NoWildcardProjection(NoWildcardProjection),
         RuleEnum::MissingTwoWaySample(MissingTwoWaySample),
         RuleEnum::TooLargeInList(TooLargeInList),
+        RuleEnum::NoFunctionOnColumnInJoinOrWhere(NoFunctionOnColumnInJoinOrWhere),
     ]
 }
 
@@ -47,6 +48,7 @@ pub enum RuleEnum {
     NoWildcardProjection(NoWildcardProjection),
     MissingTwoWaySample(MissingTwoWaySample),
     TooLargeInList(TooLargeInList),
+    NoFunctionOnColumnInJoinOrWhere(NoFunctionOnColumnInJoinOrWhere),
 }
 
 impl RuleEnum {
@@ -83,6 +85,9 @@ impl RuleEnum {
             "no-wildcard-projection" => Some(Self::NoWildcardProjection(NoWildcardProjection)),
             "missing-two-way-sample" => Some(Self::MissingTwoWaySample(MissingTwoWaySample)),
             "too-large-in-list" => Some(Self::TooLargeInList(TooLargeInList)),
+            "no-function-on-column-in-join-or-where" => Some(
+                Self::NoFunctionOnColumnInJoinOrWhere(NoFunctionOnColumnInJoinOrWhere),
+            ),
             _ => None,
         }
     }
@@ -95,6 +100,7 @@ impl RuleEnum {
             Self::NoWildcardProjection(rule) => rule,
             Self::MissingTwoWaySample(rule) => rule,
             Self::TooLargeInList(rule) => rule,
+            Self::NoFunctionOnColumnInJoinOrWhere(rule) => rule,
         }
     }
 }
