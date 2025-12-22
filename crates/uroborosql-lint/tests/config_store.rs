@@ -1,9 +1,7 @@
 use std::fs;
 
 use tempfile::tempdir;
-use uroborosql_lint::{
-    ConfigStore, ResolvedLintConfig, Severity, DEFAULT_CONFIG_FILENAME,
-};
+use uroborosql_lint::{ConfigStore, ResolvedLintConfig, Severity, DEFAULT_CONFIG_FILENAME};
 
 fn write_config(root: &std::path::Path, contents: &str) {
     let path = root.join(DEFAULT_CONFIG_FILENAME);

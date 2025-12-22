@@ -6,6 +6,7 @@ use std::{
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde_json::Value;
+use thiserror::Error;
 
 use crate::{
     diagnostic::Severity,
@@ -64,30 +65,17 @@ pub struct ConfigStore {
     base: LintConfig,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ConfigError {
-    Io(PathBuf, std::io::Error),
-    Json(PathBuf, serde_json::Error),
-    Glob(String, globset::Error),
+    #[error("failed to read {0}: {1}")]
+    Io(PathBuf, #[source] std::io::Error),
+    #[error("failed to parse {0}: {1}")]
+    Json(PathBuf, #[source] serde_json::Error),
+    #[error("invalid glob pattern {0}: {1}")]
+    Glob(String, #[source] globset::Error),
+    #[error("invalid rule setting for {rule}: {value}")]
     InvalidRuleSetting { rule: String, value: Value },
 }
-
-impl std::fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Io(path, err) => write!(f, "failed to read {}: {}", path.display(), err),
-            Self::Json(path, err) => write!(f, "failed to parse {}: {}", path.display(), err),
-            Self::Glob(pattern, err) => {
-                write!(f, "invalid glob pattern {}: {}", pattern, err)
-            }
-            Self::InvalidRuleSetting { rule, value } => {
-                write!(f, "invalid rule setting for {}: {}", rule, value)
-            }
-        }
-    }
-}
-
-impl std::error::Error for ConfigError {}
 
 impl ConfigStore {
     pub fn new(
@@ -105,6 +93,7 @@ impl ConfigStore {
         let rel_path = file.strip_prefix(&self.root_dir).unwrap_or(file);
         let mut rules = self.base.rules.clone();
 
+        // override を順番に適用（後勝ち）
         for override_config in &self.base.overrides {
             if override_config.files.is_match(rel_path) {
                 for (name, setting) in &override_config.rules {
@@ -113,6 +102,7 @@ impl ConfigStore {
             }
         }
 
+        // rule と severity のペアを作成
         let mut resolved_rules = Vec::new();
         for rule in all_rules() {
             let name = rule.name();
