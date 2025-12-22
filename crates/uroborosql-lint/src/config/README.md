@@ -1,19 +1,17 @@
-# uroborosql-lint config アーキテクチャ
+# uroborosql-lint config の構成について
 
 このモジュールは lint 設定のロードと解決を担当します。
 lint コアは設定を直接パースせず、解決済みの状態だけを受け取り実行します。
 
 ## モジュール構成
-- `config.rs`
-  - 公開エントリ（re-export と `DEFAULT_CONFIG_FILENAME`）
 - `lint_config.rs`
-  - JSON のワイヤ形式（`LintConfigObject`, `LintOverride`, `DbConfig`）
+  - JSON のワイヤ形式を定義（`LintConfigObject`）
 - `types.rs`
-  - ルール設定の内部型（`RuleLevel`, `RuleSetting`）
+  - ルール設定の内部型を定義（`RuleLevel`, `RuleSetting`）
 - `overrides.rs`
-  - override のコンパイル済み表現（`ResolvedOverride`）
+  - override のコンパイル済み表現を定義（`ResolvedOverride`）
 - `config_store.rs`
-  - ローダ + リゾルバ（`ConfigStore`, `ResolvedLintConfig`, `ResolvedDbConfig`）
+  - ローダ + リゾルバ を定義（`ConfigStore`, `ResolvedLintConfig`, `ResolvedDbConfig`）
 
 ## データフロー
 1) `{root_dir}/.uroborosqllintrc.json`（または `--config`）を読み込む
