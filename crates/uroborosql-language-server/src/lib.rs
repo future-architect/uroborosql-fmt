@@ -11,7 +11,9 @@ pub use tower_lsp_server::ClientSocket;
 #[cfg(feature = "runtime-tokio")]
 use tower_lsp_server::Server;
 use tower_lsp_server::{Client, LspService};
-use uroborosql_lint::{Diagnostic as SqlDiagnostic, LintError, Linter, Severity as SqlSeverity};
+use uroborosql_lint::{
+    Diagnostic as SqlDiagnostic, LintError, Linter, ResolvedLintConfig, Severity as SqlSeverity,
+};
 
 use crate::text::rope_range_to_char_range;
 
@@ -38,7 +40,8 @@ impl Backend {
     }
 
     async fn lint_and_publish(&self, uri: &Uri, text: &str, version: Option<i32>) {
-        let diagnostics = match self.linter.run(text) {
+        let state = ResolvedLintConfig::default();
+        let diagnostics = match self.linter.run(text, &state) {
             Ok(diags) => diags.into_iter().map(to_lsp_diagnostic).collect(),
             Err(err) => vec![to_parse_error(err)],
         };
