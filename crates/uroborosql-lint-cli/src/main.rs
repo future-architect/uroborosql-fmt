@@ -41,9 +41,9 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
 
-    let state = config_store.resolve(&path);
+    let resolved_config = config_store.resolve(&path);
 
-    match linter.run(&sql, &state) {
+    match linter.run(&sql, &resolved_config) {
         Ok(diagnostics) => {
             for diagnostic in diagnostics {
                 print_diagnostic(&display, &diagnostic);

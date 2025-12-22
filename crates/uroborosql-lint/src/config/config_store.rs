@@ -37,7 +37,6 @@ pub enum ResolvedDbConfig {
 pub struct ResolvedLintConfig {
     pub rules: Vec<(RuleEnum, Severity)>,
     pub db: Option<ResolvedDbConfig>,
-    pub origin: Option<PathBuf>,
 }
 
 impl Default for ResolvedLintConfig {
@@ -45,7 +44,6 @@ impl Default for ResolvedLintConfig {
         Self {
             rules: default_rules(),
             db: None,
-            origin: None,
         }
     }
 }
@@ -56,7 +54,6 @@ struct LintConfig {
     overrides: Vec<ResolvedOverride>,
     ignore: GlobSet,
     db: Option<ResolvedDbConfig>,
-    origin: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -123,7 +120,6 @@ impl ConfigStore {
         ResolvedLintConfig {
             rules: resolved_rules,
             db: self.base.db.clone(),
-            origin: self.base.origin.clone(),
         }
     }
 
@@ -147,7 +143,7 @@ impl LintConfig {
         let overrides = lint_config_object
             .overrides
             .into_iter()
-            .map(|ov| resolve_override(ov))
+            .map(resolve_override)
             .collect::<Result<Vec<_>, _>>()?;
         let ignore = build_globset(&lint_config_object.ignore)?;
         let db = resolve_db_config(lint_config_object.db, root_dir, origin.as_deref());
@@ -157,7 +153,6 @@ impl LintConfig {
             overrides,
             ignore,
             db,
-            origin,
         })
     }
 }

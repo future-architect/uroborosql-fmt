@@ -24,14 +24,18 @@ impl Linter {
         Self
     }
 
-    pub fn run(&self, sql: &str, state: &ResolvedLintConfig) -> Result<Vec<Diagnostic>, LintError> {
+    pub fn run(
+        &self,
+        sql: &str,
+        resolved_config: &ResolvedLintConfig,
+    ) -> Result<Vec<Diagnostic>, LintError> {
         let tree = tree_sitter::parse_2way(sql)
             .map_err(|err| LintError::ParseError(format!("{err:?}")))?;
         let root = tree.root_node();
         let nodes = collect_preorder(root.clone());
         let mut ctx = LintContext::new(sql);
 
-        for (rule, severity) in &state.rules {
+        for (rule, severity) in &resolved_config.rules {
             rule.run_once(&root, &mut ctx, *severity);
 
             let targets = rule.target_kinds();
@@ -73,11 +77,7 @@ pub mod tests {
     };
 
     fn state_from_rules(rules: Vec<(RuleEnum, Severity)>) -> ResolvedLintConfig {
-        ResolvedLintConfig {
-            rules,
-            db: None,
-            origin: None,
-        }
+        ResolvedLintConfig { rules, db: None }
     }
 
     pub fn run_with_rules(sql: &str, rules: Vec<RuleEnum>) -> Vec<Diagnostic> {
