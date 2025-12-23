@@ -40,7 +40,7 @@ pub fn default_rules() -> Vec<(RuleEnum, Severity)> {
         .collect()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum RuleEnum {
     NoDistinct(NoDistinct),
     NoNotIn(NoNotIn),
