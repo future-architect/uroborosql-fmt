@@ -19,7 +19,7 @@ pub use no_wildcard_projection::NoWildcardProjection;
 pub use too_large_in_list::TooLargeInList;
 
 pub fn all_rules() -> impl Iterator<Item = RuleEnum> {
-    vec![
+    [
         RuleEnum::NoDistinct(NoDistinct),
         RuleEnum::NoNotIn(NoNotIn),
         RuleEnum::NoUnionDistinct(NoUnionDistinct),
