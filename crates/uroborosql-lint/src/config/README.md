@@ -31,6 +31,7 @@ ignore のフィルタは `resolve` の前に `ConfigStore::is_ignored` で行�
 ## 構造体の関係
 ```
 LintConfigObject (serde JSON)
+  ├─ db: Option<DbConfig>
   ├─ rules: HashMap<String, Value>
   ├─ overrides: Vec<LintOverride>
   └─ ignore: Vec<String>
