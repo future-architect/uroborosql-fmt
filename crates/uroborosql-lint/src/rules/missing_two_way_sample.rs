@@ -7,6 +7,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::Node};
 
 /// Detects 2WaySQL bind parameter without sample values (e.g. `/*param*/`).
 /// Rule source: https://future-architect.github.io/uroborosql-doc/background/#バインドパラメータ
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MissingTwoWaySample;
 
 impl Rule for MissingTwoWaySample {
@@ -56,10 +57,13 @@ impl Rule for MissingTwoWaySample {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{linter::tests::run_with_rules, SqlSpan};
+    use crate::{linter::tests::run_with_rules, rules::RuleEnum, SqlSpan};
 
     fn run(sql: &str) -> Vec<Diagnostic> {
-        run_with_rules(sql, vec![Box::new(MissingTwoWaySample)])
+        run_with_rules(
+            sql,
+            vec![RuleEnum::MissingTwoWaySample(MissingTwoWaySample)],
+        )
     }
 
     #[test]
