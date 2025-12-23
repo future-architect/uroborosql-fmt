@@ -56,7 +56,7 @@ pub mod tests {
         rules::{NoDistinct, RuleEnum},
     };
 
-    fn state_from_rules(rules: Vec<(RuleEnum, Severity)>) -> ResolvedLintConfig {
+    fn resolve_from_rules(rules: Vec<(RuleEnum, Severity)>) -> ResolvedLintConfig {
         ResolvedLintConfig { rules, db: None }
     }
 
@@ -68,16 +68,17 @@ pub mod tests {
                 (rule, severity)
             })
             .collect();
-        let state = state_from_rules(resolved_rules);
+        let state = resolve_from_rules(resolved_rules);
 
         Linter::new().run(sql, &state).expect("lint ok")
     }
 
     #[test]
     fn applies_severity_override() {
-        let state = state_from_rules(vec![(RuleEnum::NoDistinct(NoDistinct), Severity::Error)]);
+        let resolved_config =
+            resolve_from_rules(vec![(RuleEnum::NoDistinct(NoDistinct), Severity::Error)]);
         let sql = "SELECT DISTINCT id FROM users;";
-        let diagnostics = Linter::new().run(sql, &state).expect("lint ok");
+        let diagnostics = Linter::new().run(sql, &resolved_config).expect("lint ok");
 
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].severity, Severity::Error);
