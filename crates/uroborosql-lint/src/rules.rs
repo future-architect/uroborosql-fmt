@@ -78,18 +78,7 @@ impl RuleEnum {
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
-        match name {
-            "no-distinct" => Some(Self::NoDistinct(NoDistinct)),
-            "no-not-in" => Some(Self::NoNotIn(NoNotIn)),
-            "no-union-distinct" => Some(Self::NoUnionDistinct(NoUnionDistinct)),
-            "no-wildcard-projection" => Some(Self::NoWildcardProjection(NoWildcardProjection)),
-            "missing-two-way-sample" => Some(Self::MissingTwoWaySample(MissingTwoWaySample)),
-            "too-large-in-list" => Some(Self::TooLargeInList(TooLargeInList)),
-            "no-function-on-column-in-join-or-where" => Some(
-                Self::NoFunctionOnColumnInJoinOrWhere(NoFunctionOnColumnInJoinOrWhere),
-            ),
-            _ => None,
-        }
+        all_rules().find(|rule| rule.name() == name)
     }
 
     fn as_rule(&self) -> &dyn Rule {
