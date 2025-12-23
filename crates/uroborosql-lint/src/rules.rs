@@ -18,7 +18,7 @@ pub use no_union_distinct::NoUnionDistinct;
 pub use no_wildcard_projection::NoWildcardProjection;
 pub use too_large_in_list::TooLargeInList;
 
-pub fn all_rules() -> Vec<RuleEnum> {
+pub fn all_rules() -> impl Iterator<Item = RuleEnum> {
     vec![
         RuleEnum::NoDistinct(NoDistinct),
         RuleEnum::NoNotIn(NoNotIn),
@@ -28,11 +28,11 @@ pub fn all_rules() -> Vec<RuleEnum> {
         RuleEnum::TooLargeInList(TooLargeInList),
         RuleEnum::NoFunctionOnColumnInJoinOrWhere(NoFunctionOnColumnInJoinOrWhere),
     ]
+    .into_iter()
 }
 
 pub fn default_rules() -> Vec<(RuleEnum, Severity)> {
     all_rules()
-        .into_iter()
         .map(|rule| {
             let severity = rule.default_severity();
             (rule, severity)
