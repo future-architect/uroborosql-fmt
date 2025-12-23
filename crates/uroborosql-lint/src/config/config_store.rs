@@ -59,7 +59,7 @@ struct LintConfig {
 #[derive(Debug)]
 pub struct ConfigStore {
     root_dir: PathBuf,
-    base: LintConfig,
+    unresolved_config: LintConfig,
 }
 
 #[derive(Debug, Error)]
@@ -81,17 +81,20 @@ impl ConfigStore {
     ) -> Result<Self, ConfigError> {
         let root_dir = root_dir.into();
         let (lint_config_object, origin) = load_config(&root_dir, config_path)?;
-        let base =
+        let unresolved_config =
             LintConfig::from_lint_config_object(lint_config_object, &root_dir, origin.clone())?;
-        Ok(Self { root_dir, base })
+        Ok(Self {
+            root_dir,
+            unresolved_config,
+        })
     }
 
     pub fn resolve(&self, file: &Path) -> ResolvedLintConfig {
         let rel_path = file.strip_prefix(&self.root_dir).unwrap_or(file);
-        let mut rules = self.base.rules.clone();
+        let mut rules = self.unresolved_config.rules.clone();
 
         // override を順番に適用（後勝ち）
-        for override_config in &self.base.overrides {
+        for override_config in &self.unresolved_config.overrides {
             if override_config.files.is_match(rel_path) {
                 for (name, setting) in &override_config.rules {
                     rules.insert(name.clone(), setting.clone());
@@ -119,13 +122,13 @@ impl ConfigStore {
 
         ResolvedLintConfig {
             rules: resolved_rules,
-            db: self.base.db.clone(),
+            db: self.unresolved_config.db.clone(),
         }
     }
 
     pub fn is_ignored(&self, file: &Path) -> bool {
         let rel_path = file.strip_prefix(&self.root_dir).unwrap_or(file);
-        self.base.ignore.is_match(rel_path)
+        self.unresolved_config.ignore.is_match(rel_path)
     }
 
     pub fn root_dir(&self) -> &Path {
