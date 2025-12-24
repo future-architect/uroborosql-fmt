@@ -84,20 +84,21 @@ impl Backend {
         version: i32,
     ) {
         if let Ok(mut docs) = self.documents.write()
-            && let Some(doc) = docs.get_mut(uri) {
-                if version < doc.version {
-                    return;
-                }
-                doc.version = version;
-                if let Some(range) = change.range {
-                    if let Some((start, end)) = rope_range_to_char_range(&doc.rope, &range) {
-                        doc.rope.remove(start..end);
-                        doc.rope.insert(start, &change.text);
-                    }
-                } else {
-                    doc.rope = Rope::from_str(&change.text);
-                }
+            && let Some(doc) = docs.get_mut(uri)
+        {
+            if version < doc.version {
+                return;
             }
+            doc.version = version;
+            if let Some(range) = change.range {
+                if let Some((start, end)) = rope_range_to_char_range(&doc.rope, &range) {
+                    doc.rope.remove(start..end);
+                    doc.rope.insert(start, &change.text);
+                }
+            } else {
+                doc.rope = Rope::from_str(&change.text);
+            }
+        }
     }
 
     pub(crate) fn remove_document(&self, uri: &Uri) {
