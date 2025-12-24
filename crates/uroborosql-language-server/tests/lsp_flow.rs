@@ -16,6 +16,7 @@ struct TestServer {
     res_stream: DuplexStream,
     responses: VecDeque<String>,
     notifications: VecDeque<String>,
+    server_requests: VecDeque<String>,
 }
 
 impl TestServer {
@@ -39,6 +40,7 @@ impl TestServer {
             res_stream: res_client,
             responses: VecDeque::new(),
             notifications: VecDeque::new(),
+            server_requests: VecDeque::new(),
         }
     }
 
@@ -98,12 +100,50 @@ impl TestServer {
         }
     }
 
+    async fn receive_server_request(&mut self) -> Request {
+        loop {
+            if let Some(buffer) = self.server_requests.pop_back() {
+                return serde_json::from_str(&buffer).unwrap();
+            }
+
+            self.read_into_queues().await;
+        }
+    }
+
+    async fn send_response(&mut self, res: Response) {
+        let payload = serde_json::to_string(&res).unwrap();
+        self.req_stream
+            .write_all(&Self::encode(&payload))
+            .await
+            .unwrap();
+    }
+
+    async fn handle_server_request(&mut self, frame: String) {
+        let req: Request = serde_json::from_str(&frame).unwrap();
+        if let Some(id) = req.id().cloned() {
+            let response = Response::from_ok(id, LSPAny::Null);
+            self.send_response(response).await;
+        }
+        self.server_requests.push_front(frame);
+    }
+
     async fn read_into_queues(&mut self) {
         let mut buf = vec![0u8; 4096];
         let n = self.res_stream.read(&mut buf).await.unwrap();
         for frame in Self::decode(&buf[..n]) {
             let value: serde_json::Value = serde_json::from_str(&frame).unwrap();
-            if value.get("id").is_some() {
+            if value.get("method").is_some() {
+                if value.get("id").is_some() {
+                    self.handle_server_request(frame).await;
+                } else {
+                    if value.get("method").and_then(|method| method.as_str())
+                        == Some("window/logMessage")
+                    {
+                        continue;
+                    }
+                    self.notifications.push_front(frame);
+                }
+            } else if value.get("id").is_some() {
                 self.responses.push_front(frame);
             } else {
                 self.notifications.push_front(frame);
@@ -120,8 +160,16 @@ impl TestServer {
 }
 
 fn build_initialize(id: i64) -> Request {
+    let root_uri = Uri::from_str("file:///").expect("root uri");
+    let params = InitializeParams {
+        workspace_folders: Some(vec![WorkspaceFolder {
+            uri: root_uri,
+            name: "uroborosql-language-server-tests".into(),
+        }]),
+        ..InitializeParams::default()
+    };
     Request::build("initialize")
-        .params(json!(InitializeParams::default()))
+        .params(json!(params))
         .id(id)
         .finish()
 }
@@ -163,10 +211,37 @@ fn build_did_change(uri: &Uri, version: i32, text: &str) -> Request {
         .finish()
 }
 
+fn build_did_change_range(uri: &Uri, version: i32, range: Range, text: &str) -> Request {
+    let params = DidChangeTextDocumentParams {
+        text_document: VersionedTextDocumentIdentifier {
+            uri: uri.clone(),
+            version,
+        },
+        content_changes: vec![TextDocumentContentChangeEvent {
+            range: Some(range),
+            range_length: None,
+            text: text.into(),
+        }],
+    };
+    Request::build("textDocument/didChange")
+        .params(json!(params))
+        .finish()
+}
+
 fn build_did_save(uri: &Uri, text: &str) -> Request {
     let params = DidSaveTextDocumentParams {
         text_document: TextDocumentIdentifier { uri: uri.clone() },
         text: Some(text.into()),
+    };
+    Request::build("textDocument/didSave")
+        .params(json!(params))
+        .finish()
+}
+
+fn build_did_save_without_text(uri: &Uri) -> Request {
+    let params = DidSaveTextDocumentParams {
+        text_document: TextDocumentIdentifier { uri: uri.clone() },
+        text: None,
     };
     Request::build("textDocument/didSave")
         .params(json!(params))
@@ -206,6 +281,10 @@ fn build_range_formatting(uri: &Uri, range: Range, id: i64) -> Request {
         .finish()
 }
 
+fn utf16_col_from_char_idx(line: &str, char_idx: usize) -> usize {
+    line.chars().take(char_idx).map(|c| c.len_utf16()).sum()
+}
+
 #[tokio::test]
 async fn diagnostics_publish_on_open_and_save() {
     let mut server = TestServer::new(Backend::new);
@@ -217,8 +296,7 @@ async fn diagnostics_publish_on_open_and_save() {
     assert!(init_res.is_ok());
 
     server.send_request(build_initialized()).await;
-    let init_notification = server.receive_notification().await;
-    assert_eq!(init_notification.method(), "window/logMessage");
+    let _ = server.receive_server_request().await;
 
     // didOpen triggers lint (initial diagnostics)
     server
@@ -269,7 +347,7 @@ async fn document_formatting_returns_edit() {
     server.send_request(build_initialize(1)).await;
     assert!(server.receive_response().await.is_ok());
     server.send_request(build_initialized()).await;
-    let _ = server.receive_notification().await;
+    let _ = server.receive_server_request().await;
 
     let original = "select A from B";
     server.send_request(build_did_open(&uri, original, 1)).await;
@@ -298,7 +376,7 @@ async fn range_formatting_returns_edit() {
     server.send_request(build_initialize(1)).await;
     assert!(server.receive_response().await.is_ok());
     server.send_request(build_initialized()).await;
-    let _ = server.receive_notification().await;
+    let _ = server.receive_server_request().await;
 
     let original = "select a from b;";
     server.send_request(build_did_open(&uri, original, 1)).await;
@@ -322,5 +400,56 @@ async fn range_formatting_returns_edit() {
         edits[0]["newText"].as_str().unwrap(),
         original,
         "range formatting should rewrite selection"
+    );
+}
+
+#[tokio::test]
+#[ignore = "repro: UTF-16 range change corrupts text until conversion is fixed"]
+async fn utf16_range_change_should_not_corrupt_text() {
+    let mut server = TestServer::new(Backend::new);
+    let uri = Uri::from_str("file:///utf16.sql").unwrap();
+
+    server.send_request(build_initialize(1)).await;
+    assert!(server.receive_response().await.is_ok());
+    server.send_request(build_initialized()).await;
+    let _ = server.receive_server_request().await;
+
+    let original = "select '😀' as v;";
+    server.send_request(build_did_open(&uri, original, 1)).await;
+    let _ = server.receive_notification().await;
+
+    let emoji_byte = original.find('😀').expect("emoji present");
+    let emoji_char_idx = original[..emoji_byte].chars().count();
+    let start_col = utf16_col_from_char_idx(original, emoji_char_idx);
+    let end_col = start_col + '😀'.len_utf16();
+    let range = Range {
+        start: Position::new(0, start_col as u32),
+        end: Position::new(0, end_col as u32),
+    };
+    server
+        .send_request(build_did_change_range(&uri, 2, range, "a"))
+        .await;
+
+    server.send_request(build_did_save_without_text(&uri)).await;
+    let save_notification = server.receive_notification().await;
+    assert_eq!(
+        save_notification.method(),
+        "textDocument/publishDiagnostics"
+    );
+
+    let diagnostics = save_notification.params().unwrap()["diagnostics"]
+        .as_array()
+        .unwrap()
+        .clone();
+    let has_parse_error = diagnostics.iter().any(|diag| {
+        diag.get("message")
+            .and_then(|message| message.as_str())
+            .map(|message| message.starts_with("Failed to parse SQL"))
+            .unwrap_or(false)
+    });
+
+    assert!(
+        !has_parse_error,
+        "UTF-16 range change should not corrupt document text"
     );
 }
