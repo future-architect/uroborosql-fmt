@@ -1,13 +1,33 @@
-use crate::text::rope_char_to_position;
-use crate::text::rope_position_to_char;
 use crate::Backend;
+use crate::document::{rope_char_to_position, rope_position_to_char};
+use tower_lsp_server::LanguageServer;
 use tower_lsp_server::jsonrpc::Result;
 use tower_lsp_server::lsp_types::*;
-use tower_lsp_server::LanguageServer;
 use uroborosql_fmt::format_sql;
 
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        if let Some(folders) = params.workspace_folders {
+            // 単一ワークスペースしか考慮していない
+            if let Some(folder) = folders.first() {
+                *self.root_uri.write().unwrap() = Some(folder.uri.clone());
+            }
+        } else {
+            // ワークスペースを開かずに利用している場合
+            self.client
+                .log_message(MessageType::INFO, "no workspace folders provided")
+                .await;
+        }
+
+        let supports_dynamic_watched_files = params
+            .capabilities
+            .workspace
+            .as_ref()
+            .and_then(|workspace| workspace.did_change_watched_files.as_ref())
+            .and_then(|capability| capability.dynamic_registration)
+            .unwrap_or(false);
+        *self.supports_dynamic_watched_files.write().unwrap() = supports_dynamic_watched_files;
+
         let sync_options = TextDocumentSyncOptions {
             open_close: Some(true),
             change: Some(TextDocumentSyncKind::INCREMENTAL),
@@ -37,6 +57,52 @@ impl LanguageServer for Backend {
         self.client
             .log_message(MessageType::INFO, "uroborosql-language-server initialized")
             .await;
+
+        self.refresh_client_config().await;
+        self.refresh_lint_config_store().await;
+
+        // Register file watcher
+        if *self.supports_dynamic_watched_files.read().unwrap() {
+            let register_options = DidChangeWatchedFilesRegistrationOptions {
+                // only watch .uroborosqllintrc.json
+                // .uroborosqlfmtrc.json は監視しない
+                watchers: vec![FileSystemWatcher {
+                    glob_pattern: GlobPattern::String("**/.uroborosqllintrc.json".to_string()),
+                    kind: None,
+                }],
+            };
+
+            let registrations = vec![Registration {
+                id: "uroborosql-fmt-watcher".to_string(),
+                method: "workspace/didChangeWatchedFiles".to_string(),
+                register_options: Some(serde_json::to_value(register_options).unwrap()),
+            }];
+
+            if let Err(e) = self.client.register_capability(registrations).await {
+                self.client
+                    .log_message(
+                        MessageType::ERROR,
+                        format!("client/registerCapability failed: {e}"),
+                    )
+                    .await;
+            }
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    "client does not support dynamic registration for didChangeWatchedFiles",
+                )
+                .await;
+        }
+    }
+
+    async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
+        self.refresh_client_config().await;
+        self.refresh_lint_config_store().await;
+    }
+
+    async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
+        self.refresh_lint_config_store().await;
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -99,13 +165,16 @@ impl LanguageServer for Backend {
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri;
-        let rope = match self.document_rope(&uri) {
-            Some(rope) => rope,
-            None => return Ok(None),
+        let Some(rope) = self.document_rope(&uri) else {
+            return Ok(None);
         };
         let text = rope.to_string();
 
-        match format_sql(&text, None, None) {
+        let fmt_config_path = self.resolve_fmt_config_path();
+        let fmt_config_path = fmt_config_path.as_ref().and_then(|path| path.to_str());
+        let client_config_json = self.client_config_json_explicit_only();
+
+        match format_sql(&text, Some(&client_config_json), fmt_config_path) {
             Ok(formatted) => {
                 if formatted == text {
                     return Ok(Some(vec![]));
@@ -140,26 +209,26 @@ impl LanguageServer for Backend {
         params: DocumentRangeFormattingParams,
     ) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri;
-        let rope = match self.document_rope(&uri) {
-            Some(rope) => rope,
-            None => return Ok(None),
+        let Some(rope) = self.document_rope(&uri) else {
+            return Ok(None);
         };
 
-        let start_char = match rope_position_to_char(&rope, params.range.start) {
-            Some(pos) => pos,
-            None => return Ok(None),
+        let Some(start_char) = rope_position_to_char(&rope, params.range.start) else {
+            return Ok(None);
         };
-        let end_char = match rope_position_to_char(&rope, params.range.end) {
-            Some(pos) => pos,
-            None => return Ok(None),
+        let Some(end_char) = rope_position_to_char(&rope, params.range.end) else {
+            return Ok(None);
         };
         if start_char > end_char || end_char > rope.len_chars() {
             return Ok(None);
         }
 
         let slice = rope.slice(start_char..end_char).to_string();
-        // ignore settings for now
-        match format_sql(&slice, None, None) {
+        let fmt_config_path = self.resolve_fmt_config_path();
+        let fmt_config_path = fmt_config_path.as_ref().and_then(|path| path.to_str());
+        let client_config_json = self.client_config_json_explicit_only();
+
+        match format_sql(&slice, Some(&client_config_json), fmt_config_path) {
             Ok(formatted) => {
                 let edit = TextEdit {
                     range: Range {
