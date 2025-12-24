@@ -56,7 +56,7 @@ struct LintConfig {
     db: Option<ResolvedDbConfig>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConfigStore {
     root_dir: PathBuf,
     unresolved_config: LintConfig,

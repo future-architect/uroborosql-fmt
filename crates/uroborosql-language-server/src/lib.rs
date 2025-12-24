@@ -1,33 +1,37 @@
+mod configuration;
+mod document;
+mod formatting;
+mod lint;
+mod paths;
 mod server;
-mod text;
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use ropey::Rope;
-use tower_lsp_server::lsp_types::Uri;
-use tower_lsp_server::lsp_types::*;
 pub use tower_lsp_server::ClientSocket;
 #[cfg(feature = "runtime-tokio")]
 use tower_lsp_server::Server;
+use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::{Client, LspService};
-use uroborosql_lint::{
-    Diagnostic as SqlDiagnostic, LintError, Linter, ResolvedLintConfig, Severity as SqlSeverity,
-};
+use uroborosql_lint::{ConfigStore, Linter};
 
-use crate::text::rope_range_to_char_range;
+use crate::configuration::ClientConfig;
+use crate::document::DocumentState;
+
+const CONFIGURATION_SECTION: &str = "uroborosql-fmt";
+const DEFAULT_FMT_CONFIG_PATH: &str = ".uroborosqlfmtrc.json";
 
 #[derive(Clone)]
 pub struct Backend {
     client: Client,
     linter: Arc<Linter>,
     documents: Arc<RwLock<HashMap<Uri, DocumentState>>>,
-}
-
-#[derive(Clone)]
-struct DocumentState {
-    rope: Rope,
-    version: i32,
+    /// language client の設定
+    client_config: Arc<RwLock<ClientConfig>>,
+    lint_config_store: Arc<RwLock<Option<ConfigStore>>>,
+    // LSP の設定取得など、URI が必要な場面向けに保持する
+    root_uri: Arc<RwLock<Option<Uri>>>, // 現状、単一ワークスペースしか考慮していない
+    supports_dynamic_watched_files: Arc<RwLock<bool>>,
 }
 
 impl Backend {
@@ -36,75 +40,11 @@ impl Backend {
             client,
             linter: Arc::new(Linter::new()),
             documents: Arc::new(RwLock::new(HashMap::new())),
+            client_config: Arc::new(RwLock::new(ClientConfig::default())),
+            lint_config_store: Arc::new(RwLock::new(None)),
+            root_uri: Arc::new(RwLock::new(None)),
+            supports_dynamic_watched_files: Arc::new(RwLock::new(false)),
         }
-    }
-
-    async fn lint_and_publish(&self, uri: &Uri, text: &str, version: Option<i32>) {
-        let state = ResolvedLintConfig::default();
-        let diagnostics = match self.linter.run(text, &state) {
-            Ok(diags) => diags.into_iter().map(to_lsp_diagnostic).collect(),
-            Err(err) => vec![to_parse_error(err)],
-        };
-
-        self.client
-            .publish_diagnostics(uri.clone(), diagnostics, version)
-            .await;
-    }
-
-    fn upsert_document(&self, uri: &Uri, text: &str, version: Option<i32>) {
-        let resolved_version = version.or_else(|| {
-            self.documents
-                .read()
-                .ok()
-                .and_then(|docs| docs.get(uri).map(|doc| doc.version))
-        });
-        let version = resolved_version.unwrap_or_default();
-
-        if let Ok(mut docs) = self.documents.write() {
-            docs.insert(
-                uri.clone(),
-                DocumentState {
-                    rope: Rope::from_str(text),
-                    version,
-                },
-            );
-        }
-    }
-
-    fn apply_change(&self, uri: &Uri, change: TextDocumentContentChangeEvent, version: i32) {
-        if let Ok(mut docs) = self.documents.write() {
-            if let Some(doc) = docs.get_mut(uri) {
-                if version < doc.version {
-                    return;
-                }
-                doc.version = version;
-                if let Some(range) = change.range {
-                    if let Some((start, end)) = rope_range_to_char_range(&doc.rope, &range) {
-                        doc.rope.remove(start..end);
-                        doc.rope.insert(start, &change.text);
-                    }
-                } else {
-                    doc.rope = Rope::from_str(&change.text);
-                }
-            }
-        }
-    }
-
-    fn remove_document(&self, uri: &Uri) {
-        if let Ok(mut docs) = self.documents.write() {
-            docs.remove(uri);
-        }
-    }
-
-    fn document_rope(&self, uri: &Uri) -> Option<Rope> {
-        self.documents
-            .read()
-            .ok()
-            .and_then(|docs| docs.get(uri).map(|doc| doc.rope.clone()))
-    }
-
-    fn document_text(&self, uri: &Uri) -> Option<String> {
-        self.document_rope(uri).map(|rope| rope.to_string())
     }
 }
 
@@ -115,40 +55,4 @@ pub async fn run_stdio() {
 
     let (service, socket) = LspService::new(Backend::new);
     Server::new(stdin, stdout, socket).serve(service).await;
-}
-
-fn to_lsp_diagnostic(diag: SqlDiagnostic) -> Diagnostic {
-    let severity = match diag.severity {
-        SqlSeverity::Error => Some(DiagnosticSeverity::ERROR),
-        SqlSeverity::Warning => Some(DiagnosticSeverity::WARNING),
-        SqlSeverity::Info => Some(DiagnosticSeverity::INFORMATION),
-    };
-
-    let range = Range {
-        start: Position::new(diag.span.start.line as u32, diag.span.start.column as u32),
-        end: Position::new(diag.span.end.line as u32, diag.span.end.column as u32),
-    };
-
-    Diagnostic {
-        range,
-        severity,
-        code: Some(NumberOrString::String(diag.rule_id.to_string())),
-        source: Some("uroborosql-lint".into()),
-        message: diag.message,
-        ..Diagnostic::default()
-    }
-}
-
-fn to_parse_error(err: LintError) -> Diagnostic {
-    let message = match err {
-        LintError::ParseError(reason) => format!("Failed to parse SQL: {reason}"),
-    };
-
-    Diagnostic {
-        range: Range::default(),
-        severity: Some(DiagnosticSeverity::ERROR),
-        source: Some("uroborosql-lint".into()),
-        message,
-        ..Diagnostic::default()
-    }
 }
