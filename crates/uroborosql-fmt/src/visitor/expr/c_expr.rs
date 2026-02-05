@@ -1,4 +1,5 @@
 mod aexpr_const;
+mod array_expr;
 mod case_expr;
 mod columnref;
 mod exists_subquery;
@@ -145,10 +146,8 @@ impl Visitor {
                 Expr::ExistsSubquery(Box::new(exists_subquery))
             }
             SyntaxKind::ARRAY => {
-                return Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_c_expr(): ARRAY is not implemented\n{}",
-                    error_annotation_from_cursor(cursor, src)
-                )))
+                let array_expr = self.handle_array_nodes(cursor, src)?;
+                Expr::ArrayExpr(Box::new(array_expr))
             }
             SyntaxKind::explicit_row => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(

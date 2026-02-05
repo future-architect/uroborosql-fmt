@@ -59,6 +59,11 @@ pub(crate) fn format_sql_with_config(
                 eprintln!("mode: normal");
             }
 
+            if CONFIG.read().unwrap().debug {
+                eprintln!("CST:");
+                print_cst(tree.root_node(), 0);
+            }
+
             validate_format_result(src, false)?;
             // validate で設定が上書きされるので再度読み込む
             load_settings(config);
@@ -100,11 +105,6 @@ pub(crate) fn format_cst(
     tree: &postgresql_cst_parser::tree_sitter::Tree,
     src: &str,
 ) -> Result<String, UroboroSQLFmtError> {
-    if CONFIG.read().unwrap().debug {
-        eprintln!("CST:");
-        print_cst(tree.root_node(), 0);
-    }
-
     // ビジターオブジェクトを生成
     let mut visitor = Visitor::default();
 
