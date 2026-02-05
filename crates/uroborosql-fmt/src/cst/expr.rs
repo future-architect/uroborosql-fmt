@@ -143,7 +143,7 @@ impl Expr {
             Expr::Sub(_) => ")".len(),            // 必ずかっこ
             Expr::ExistsSubquery(_) => ")".len(), // 必ずかっこ
             Expr::ParenExpr(paren) => paren.last_line_len_from_left(acc),
-            Expr::Asterisk(asterisk) => asterisk.last_line_len(),
+            Expr::Asterisk(asterisk) => acc + asterisk.last_line_len(),
             Expr::Cond(_) => "END".len(), // "END"
             Expr::Unary(unary) => unary.last_line_len_from_left(acc),
             Expr::ColumnList(cols) => cols.last_line_len(acc),

@@ -137,7 +137,7 @@ impl AlignedExpr {
             // 右辺があり複数行である場合、右辺の長さを返す
             Some(rhs) => rhs.last_line_len(),
             // 右辺が無い場合、左辺の長さを返す
-            None => self.lhs.last_line_len(),
+            None => self.lhs.last_line_len_from_left(acc),
         }
     }
 

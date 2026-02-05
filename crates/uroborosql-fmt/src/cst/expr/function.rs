@@ -100,7 +100,7 @@ impl FunctionCallArgs {
             let mut current_len = acc + "(".len();
 
             self.exprs.iter().enumerate().for_each(|(i, col)| {
-                current_len += col.last_line_len_from_left(current_len);
+                current_len = col.last_line_len_from_left(current_len);
                 if i != self.exprs.len() - 1 {
                     current_len += ", ".len()
                 }
