@@ -149,7 +149,7 @@ impl Visitor {
                 cursor.goto_next_sibling();
 
                 // cursor -> comment? | RBracket
-                while cursor.node().is_comment() {
+                if cursor.node().is_comment() {
                     return Err(UroboroSQLFmtError::Unimplemented(format!(
                         "visit_array_expr(): trailing comments after nested array are not supported\n{}",
                         error_annotation_from_cursor(cursor, src)
