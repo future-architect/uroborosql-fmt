@@ -85,3 +85,40 @@ impl ExistsSubquery {
         Ok(result)
     }
 }
+
+/// LATERALサブクエリを表す
+#[derive(Debug, Clone)]
+pub(crate) struct LateralSubquery {
+    lateral_keyword: String,
+    select_sub_expr: SubExpr,
+    loc: Location,
+}
+
+impl LateralSubquery {
+    pub(crate) fn new(
+        lateral_keyword: &str,
+        select_sub_expr: SubExpr,
+        loc: Location,
+    ) -> LateralSubquery {
+        LateralSubquery {
+            lateral_keyword: lateral_keyword.to_string(),
+            select_sub_expr,
+            loc,
+        }
+    }
+
+    pub(crate) fn loc(&self) -> Location {
+        self.loc.clone()
+    }
+
+    /// LATERALサブクエリをフォーマットした文字列を返す。
+    pub(crate) fn render(&self, depth: usize) -> Result<String, UroboroSQLFmtError> {
+        let mut result = String::new();
+        let lateral_keyword = &self.lateral_keyword;
+
+        result.push_str(lateral_keyword);
+        result += &self.select_sub_expr.render(depth)?;
+
+        Ok(result)
+    }
+}

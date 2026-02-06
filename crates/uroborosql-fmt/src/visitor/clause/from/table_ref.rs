@@ -1,5 +1,6 @@
 mod func_table;
 mod joined_table;
+mod lateral;
 
 use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::TreeCursor};
 
@@ -253,10 +254,12 @@ impl Visitor {
                 // LATERAL xmltable opt_alias_clause
                 // LATERAL select_with_parens opt_alias_clause
                 // LATERAL json_table opt_alias_clause
-                Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_table_ref(): LATERAL_P node appeared. LATERAL expressions are not implemented yet.\n{}",
-                    error_annotation_from_cursor(cursor, src)
-                )))
+                let table_ref = self.visit_lateral_table_ref(cursor, src)?;
+
+                cursor.goto_parent();
+                ensure_kind!(cursor, SyntaxKind::table_ref, src);
+
+                Ok(table_ref)
             }
             SyntaxKind::xmltable => {
                 // XMLテーブル
