@@ -12,6 +12,7 @@ pub(crate) use statement::*;
 
 // expr
 pub(crate) use aligned::*;
+pub(crate) use array_expr::*;
 pub(crate) use asterisk::*;
 pub(crate) use column_list::*;
 pub(crate) use cond::*;

@@ -34,12 +34,12 @@ fn run_with_config(
     let result = match uroborosql_fmt::format_sql(&content, None, config_path) {
         Ok(format_result) => format_result,
         Err(UroboroSQLFmtError::Validation {
-            format_result,
+            _format_result,
             error_msg,
         }) => {
             // assertion errorが生じた際は、Ok((フォーマット結果, エラーメッセージ))が返される
             failure_results.insert(src.to_str().unwrap().to_string(), error_msg);
-            format_result
+            _format_result
         }
         Err(e) => {
             failure_results.insert(src.to_str().unwrap().to_string(), e.to_string());

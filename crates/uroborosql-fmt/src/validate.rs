@@ -61,7 +61,7 @@ fn compare_tokens(
                     compare_token_text(src_token, dst_token, format_result, src)?
                 } else {
                     return Err(UroboroSQLFmtError::Validation {
-                        format_result: format_result.to_owned(),
+                        _format_result: format_result.to_owned(),
                         error_msg: format!("different kind token: Errors have occurred near the following token\n{}", error_annotation(src_token, Some(dst_token), src)),
                     });
                 }
@@ -69,7 +69,7 @@ fn compare_tokens(
             itertools::EitherOrBoth::Left(src_token) => {
                 // src.len() > dst.len() の場合
                 return Err(UroboroSQLFmtError::Validation {
-                    format_result: format_result.to_owned(),
+                    _format_result: format_result.to_owned(),
                     error_msg: format!(
                         "different kind token: Errors have occurred near the following token\n{}",
                         error_annotation(src_token, None, src)
@@ -79,7 +79,7 @@ fn compare_tokens(
             itertools::EitherOrBoth::Right(_) => {
                 // src.len() < dst.len() の場合
                 return Err(UroboroSQLFmtError::Validation {
-                    format_result: format_result.to_owned(),
+                    _format_result: format_result.to_owned(),
                     error_msg: format!("different kind token: For some reason the number of tokens in the format result has increased\nformat_result: \n{format_result}"),
                 });
             }
@@ -109,7 +109,7 @@ fn compare_token_text(
                 Ok(())
             } else {
                 Err(UroboroSQLFmtError::Validation {
-                    format_result: format_result.to_owned(),
+                    _format_result: format_result.to_owned(),
                     error_msg: format!(
                         r#"hint must start with "/*+" or "--+".\n{}"#,
                         error_annotation(src_token, Some(dst_token), src)

@@ -1,4 +1,5 @@
 pub(crate) mod aligned;
+pub(crate) mod array_expr;
 pub(crate) mod asterisk;
 pub(crate) mod column_list;
 pub(crate) mod cond;
@@ -19,9 +20,9 @@ use joined_table::JoinedTable;
 use crate::{error::UroboroSQLFmtError, util::to_tab_num};
 
 use self::{
-    aligned::AlignedExpr, asterisk::AsteriskExpr, cond::CondExpr, function::FunctionCall,
-    function_table::FunctionTable, paren::ParenExpr, primary::PrimaryExpr, subquery::SubExpr,
-    table_function_alias::TableFuncAlias, type_cast::TypeCast, unary::UnaryExpr,
+    aligned::AlignedExpr, array_expr::ArrayExpr, asterisk::AsteriskExpr, cond::CondExpr,
+    function::FunctionCall, function_table::FunctionTable, paren::ParenExpr, primary::PrimaryExpr,
+    subquery::SubExpr, table_function_alias::TableFuncAlias, type_cast::TypeCast, unary::UnaryExpr,
 };
 
 use super::{ColumnList, Comment, ExistsSubquery, ExprSeq, Location, SeparatedLines};
@@ -64,6 +65,8 @@ pub(crate) enum Expr {
     TypeCast(Box<TypeCast>),
     /// テーブル結合
     JoinedTable(Box<JoinedTable>),
+    /// ARRAY expression: ARRAY[...]
+    ArrayExpr(Box<ArrayExpr>),
 }
 
 impl Expr {
@@ -85,6 +88,7 @@ impl Expr {
             Expr::TypeCast(type_cast) => type_cast.loc(),
             Expr::JoinedTable(joined_table) => joined_table.loc(),
             Expr::TableFuncAlias(table_func_alias) => table_func_alias.loc(),
+            Expr::ArrayExpr(array_expr) => array_expr.loc(),
         }
     }
 
@@ -110,6 +114,7 @@ impl Expr {
             Expr::TypeCast(type_cast) => type_cast.render(depth),
             Expr::JoinedTable(joined_table) => joined_table.render(depth),
             Expr::TableFuncAlias(table_func_alias) => table_func_alias.render(depth),
+            Expr::ArrayExpr(array_expr) => array_expr.render(depth),
         }
     }
 
@@ -138,7 +143,7 @@ impl Expr {
             Expr::Sub(_) => ")".len(),            // 必ずかっこ
             Expr::ExistsSubquery(_) => ")".len(), // 必ずかっこ
             Expr::ParenExpr(paren) => paren.last_line_len_from_left(acc),
-            Expr::Asterisk(asterisk) => asterisk.last_line_len(),
+            Expr::Asterisk(asterisk) => acc + asterisk.last_line_len(),
             Expr::Cond(_) => "END".len(), // "END"
             Expr::Unary(unary) => unary.last_line_len_from_left(acc),
             Expr::ColumnList(cols) => cols.last_line_len(acc),
@@ -149,6 +154,7 @@ impl Expr {
             Expr::ExprSeq(n_expr) => n_expr.last_line_len_from_left(acc),
             Expr::TypeCast(type_cast) => type_cast.last_line_len_from_left(acc),
             Expr::JoinedTable(joined_table) => joined_table.last_line_len_from_left(acc),
+            Expr::ArrayExpr(array_expr) => array_expr.last_line_len_from_left(acc),
         }
     }
 
@@ -215,6 +221,7 @@ impl Expr {
             Expr::Aligned(aligned) => aligned.set_head_comment(comment),
             Expr::Boolean(boolean) => boolean.set_head_comment(comment),
             Expr::ColumnList(col_list) => col_list.set_head_comment(comment),
+            Expr::ArrayExpr(array_expr) => array_expr.set_head_comment(comment),
             // primary, aligned, boolean以外の式は現状、バインドパラメータがつくことはない
             Expr::ExprSeq(expr_seq) => expr_seq.set_head_comment_to_first_child(comment),
             _ => unimplemented!(),
@@ -236,6 +243,7 @@ impl Expr {
             Expr::TypeCast(type_cast) => type_cast.is_multi_line(),
             Expr::JoinedTable(joined_table) => joined_table.is_multi_line(),
             Expr::TableFuncAlias(table_func_alias) => table_func_alias.is_multi_line(),
+            Expr::ArrayExpr(array_expr) => array_expr.is_multi_line(),
         }
     }
 
@@ -258,7 +266,8 @@ impl Expr {
             | Expr::ExprSeq(_)
             | Expr::TypeCast(_)
             | Expr::JoinedTable(_)
-            | Expr::TableFuncAlias(_) => false,
+            | Expr::TableFuncAlias(_)
+            | Expr::ArrayExpr(_) => false,
         }
     }
 
