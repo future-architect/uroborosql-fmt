@@ -25,7 +25,9 @@ use self::{
     subquery::SubExpr, table_function_alias::TableFuncAlias, type_cast::TypeCast, unary::UnaryExpr,
 };
 
-use super::{ColumnList, Comment, ExistsSubquery, ExprSeq, Location, SeparatedLines};
+use super::{
+    ColumnList, Comment, ExistsSubquery, ExprSeq, LateralSubquery, Location, SeparatedLines,
+};
 
 /// 式に対応した列挙型
 ///
@@ -43,6 +45,8 @@ pub(crate) enum Expr {
     Sub(Box<SubExpr>),
     /// EXISTSサブクエリ
     ExistsSubquery(Box<ExistsSubquery>),
+    /// LATERALサブクエリ
+    LateralSubquery(Box<LateralSubquery>),
     /// かっこでくくられた式
     ParenExpr(Box<ParenExpr>),
     /// アスタリスク*
@@ -77,6 +81,7 @@ impl Expr {
             Expr::Boolean(sep_lines) => sep_lines.loc().unwrap(),
             Expr::Sub(sub) => sub.loc(),
             Expr::ExistsSubquery(exists_sub) => exists_sub.loc(),
+            Expr::LateralSubquery(lateral_sub) => lateral_sub.loc(),
             Expr::ParenExpr(paren_expr) => paren_expr.loc(),
             Expr::Asterisk(asterisk) => asterisk.loc(),
             Expr::Cond(cond) => cond.loc(),
@@ -104,6 +109,7 @@ impl Expr {
             Expr::Boolean(boolean) => boolean.render(depth),
             Expr::Sub(sub) => sub.render(depth),
             Expr::ExistsSubquery(exists_sub) => exists_sub.render(depth),
+            Expr::LateralSubquery(lateral_sub) => lateral_sub.render(depth),
             Expr::ParenExpr(paren_expr) => paren_expr.render(depth),
             Expr::Cond(cond) => cond.render(depth),
             Expr::Unary(unary) => unary.render(depth),
@@ -140,8 +146,9 @@ impl Expr {
         match self {
             Expr::Primary(primary) => primary.last_line_len_from_left(acc),
             Expr::Aligned(aligned) => aligned.last_line_len_from_left(acc),
-            Expr::Sub(_) => ")".len(),            // 必ずかっこ
-            Expr::ExistsSubquery(_) => ")".len(), // 必ずかっこ
+            Expr::Sub(_) => ")".len(),             // 必ずかっこ
+            Expr::ExistsSubquery(_) => ")".len(),  // 必ずかっこ
+            Expr::LateralSubquery(_) => ")".len(), // 必ずかっこ
             Expr::ParenExpr(paren) => paren.last_line_len_from_left(acc),
             Expr::Asterisk(asterisk) => acc + asterisk.last_line_len(),
             Expr::Cond(_) => "END".len(), // "END"
@@ -231,7 +238,11 @@ impl Expr {
     /// 複数行の式であればtrueを返す
     fn is_multi_line(&self) -> bool {
         match self {
-            Expr::Boolean(_) | Expr::Sub(_) | Expr::ExistsSubquery(_) | Expr::Cond(_) => true,
+            Expr::Boolean(_)
+            | Expr::Sub(_)
+            | Expr::ExistsSubquery(_)
+            | Expr::LateralSubquery(_)
+            | Expr::Cond(_) => true,
             Expr::Primary(_) | Expr::Asterisk(_) => false,
             Expr::Aligned(aligned) => aligned.is_multi_line(),
             Expr::Unary(unary) => unary.is_multi_line(),
@@ -256,6 +267,7 @@ impl Expr {
             | Expr::Primary(_)
             | Expr::Sub(_)
             | Expr::ExistsSubquery(_)
+            | Expr::LateralSubquery(_)
             | Expr::ParenExpr(_)
             | Expr::Asterisk(_)
             | Expr::Cond(_)
