@@ -254,7 +254,7 @@ impl Visitor {
                 // LATERAL xmltable opt_alias_clause
                 // LATERAL select_with_parens opt_alias_clause
                 // LATERAL json_table opt_alias_clause
-                let table_ref = self.visit_lateral_table_ref(cursor, src)?;
+                let table_ref = self.handle_lateral_table_ref(cursor, src)?;
 
                 cursor.goto_parent();
                 ensure_kind!(cursor, SyntaxKind::table_ref, src);

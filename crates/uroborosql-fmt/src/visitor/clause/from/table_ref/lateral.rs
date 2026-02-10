@@ -16,8 +16,8 @@ impl Visitor {
     /// LATERAL json_table opt_alias_clause
     ///
     /// 呼出し時、cursorはLATERAL_Pを指している
-    /// 呼出し後、cursorはtable_refを指している
-    pub(crate) fn visit_lateral_table_ref(
+    /// 呼出し後、cursorは最後に処理したノード（select_with_parens または opt_alias_clause）を指している
+    pub(crate) fn handle_lateral_table_ref(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -38,26 +38,26 @@ impl Visitor {
         match cursor.node().kind() {
             SyntaxKind::select_with_parens => {
                 // LATERAL select_with_parens opt_alias_clause
-                self.visit_lateral_subquery(cursor, src, lateral_keyword, lateral_loc)
+                self.handle_lateral_subquery(cursor, src, lateral_keyword, lateral_loc)
             }
             SyntaxKind::func_table => {
                 // LATERAL func_table func_alias_clause
                 Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_lateral_table_ref(): LATERAL func_table is not implemented yet.\n{}",
+                    "handle_lateral_table_ref(): LATERAL func_table is not implemented yet.\n{}",
                     error_annotation_from_cursor(cursor, src)
                 )))
             }
             SyntaxKind::xmltable => {
                 // LATERAL xmltable opt_alias_clause
                 Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_lateral_table_ref(): LATERAL xmltable is not implemented yet.\n{}",
+                    "handle_lateral_table_ref(): LATERAL xmltable is not implemented yet.\n{}",
                     error_annotation_from_cursor(cursor, src)
                 )))
             }
             _ => {
                 // LATERAL json_table など
                 Err(UroboroSQLFmtError::Unimplemented(format!(
-                    "visit_lateral_table_ref(): LATERAL with unsupported node kind.\n{}",
+                    "handle_lateral_table_ref(): LATERAL with unsupported node kind.\n{}",
                     error_annotation_from_cursor(cursor, src)
                 )))
             }
@@ -67,8 +67,8 @@ impl Visitor {
     /// LATERAL select_with_parens opt_alias_clause を処理する
     ///
     /// 呼出し時、cursorはselect_with_parensを指している
-    /// 呼出し後、cursorはtable_refを指している
-    fn visit_lateral_subquery(
+    /// 呼出し後、cursorは最後に処理したノード（select_with_parens または opt_alias_clause）を指している
+    fn handle_lateral_subquery(
         &mut self,
         cursor: &mut TreeCursor,
         src: &str,
@@ -84,7 +84,7 @@ impl Visitor {
             Expr::Sub(sub) => *sub,
             _ => {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_lateral_subquery(): expected Sub expr from visit_select_with_parens\n{}",
+                    "handle_lateral_subquery(): expected Sub expr from visit_select_with_parens\n{}",
                     error_annotation_from_cursor(cursor, src)
                 )));
             }
@@ -108,7 +108,7 @@ impl Visitor {
                 table_ref.set_lhs_trailing_comment(comment)?;
             } else {
                 return Err(UroboroSQLFmtError::UnexpectedSyntax(format!(
-                    "visit_lateral_subquery(): unexpected comment after LATERAL subquery\n{}",
+                    "handle_lateral_subquery(): unexpected comment after LATERAL subquery\n{}",
                     error_annotation_from_cursor(cursor, src)
                 )));
             }
