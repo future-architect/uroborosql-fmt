@@ -21,6 +21,7 @@ permissions:
 jobs:
   test:
     uses: ./.github/workflows/test.yml
+    secrets: inherit
   build-napi:
     needs: test
     strategy:

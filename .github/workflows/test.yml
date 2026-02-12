@@ -22,8 +22,8 @@ jobs:
       - name: Check error and warning
         run: |
           result=$(cargo check --quiet 2>&1)
-          echo ${result}
-          test -z ${result}
+          echo "${result}"
+          test -z "${result}"
 
       - name: Fmt
         run: cargo fmt --check
