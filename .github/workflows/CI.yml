@@ -137,9 +137,10 @@ jobs:
 
       - name: Notify Slack on Failure
         if: failure()
-        uses: ./.github/workflows/CI-failure-slack-notify
+        uses: ./.github/actions/slack-notify
         with:
           webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          status: failure
 
   build-wasm:
     needs: test
