@@ -25,8 +25,8 @@ runs:
         SHORT_SHA="${SHA:0:7}"
         WORKFLOW_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
         COMMIT_URL="${SERVER_URL}/${REPO}/commit/${SHA}"
-
-        read -r -d '' PAYLOAD << EOM
+        
+        PAYLOAD=$(cat <<EOF
         {
           "username": "GitHub CI/CD",
           "icon_emoji": ":x:",
@@ -45,12 +45,12 @@ runs:
                 },
                 {
                   "title": "Branch",
-                  "value": "\`$REF_NAME\`",
+                  "value": "\\\`$REF_NAME\\\`",
                   "short": true
                 },
                 {
                   "title": "Commit",
-                  "value": "<$COMMIT_URL|\`$SHORT_SHA\`>",
+                  "value": "<$COMMIT_URL|\\\`$SHORT_SHA\\\`>",
                   "short": true
                 },
                 {
@@ -65,6 +65,7 @@ runs:
             }
           ]
         }
-        EOM
-
+        EOF
+        )
+        
         echo "$PAYLOAD" | curl -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"

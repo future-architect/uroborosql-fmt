@@ -24,7 +24,11 @@ jobs:
         run: |
           # JSONエスケープ用のヘルパー関数
           escape_json() {
-            echo "$1" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g' | cut -c 1-500
+            if [ -z "$1" ]; then
+              echo ""
+            else
+              echo "$1" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g' | head -c 500
+            fi
           }
 
           # --- 1. イベントごとにメッセージ内容と色を切り替える ---
@@ -35,13 +39,11 @@ jobs:
             COMMIT_SHA="${{ github.sha }}"
             SHORT_SHA="${COMMIT_SHA:0:7}"
             URL="${{ github.event.head_commit.url }}"
-            COMPARE_URL="${{ github.event.compare }}"
-            COMMITS_COUNT="${{ github.event.commits[0] && '1' || '0' }}"
             COLOR="good" # Green
             
             FIELDS="\"fields\": [
-              {\"title\": \"Commit\", \"value\": \"<$URL|\`$SHORT_SHA\`>\", \"short\": true},
-              {\"title\": \"Branch\", \"value\": \"\`${GITHUB_REF_NAME}\`\", \"short\": true},
+              {\"title\": \"Commit\", \"value\": \"<$URL|\\\`$SHORT_SHA\\\`>\", \"short\": true},
+              {\"title\": \"Branch\", \"value\": \"\\\`${GITHUB_REF_NAME}\\\`\", \"short\": true},
               {\"title\": \"Author\", \"value\": \"$ACTOR\", \"short\": true},
               {\"title\": \"Repository\", \"value\": \"<https://github.com/$REPO|$REPO>\", \"short\": true}
             ],"
@@ -85,11 +87,11 @@ jobs:
 
             FIELDS="\"fields\": [
               {\"title\": \"Author\", \"value\": \"$PR_USER\", \"short\": true},
-              {\"title\": \"Branch\", \"value\": \"\`$HEAD_BRANCH\` → \`$BASE_BRANCH\`\", \"short\": true},
+              {\"title\": \"Branch\", \"value\": \"\\\`$HEAD_BRANCH\\\` → \\\`$BASE_BRANCH\\\`\", \"short\": true},
               {\"title\": \"Changes\", \"value\": \"+$ADDITIONS / -$DELETIONS ($CHANGED_FILES files)\", \"short\": true},
               {\"title\": \"Status\", \"value\": \"$ACTION\", \"short\": true}
             ],"
-            MESSAGE="*$PR_TITLE*\\n${PR_BODY:0:200}"
+            MESSAGE="*$PR_TITLE*\\\\n${PR_BODY:0:200}"
 
           elif [ "$EVENT_NAME" == "issue_comment" ]; then
             EMOJI="💬"
@@ -101,7 +103,7 @@ jobs:
             COLOR="#007bff" # Blue
             
             # IssueかPRかを判定
-            if [ "${{ github.event.issue.pull_request }}" != "" ]; then
+            if [ -n "${{ github.event.issue.pull_request.url }}" ]; then
               TITLE="Comment on PR #$ISSUE_NUMBER"
             else
               TITLE="Comment on Issue #$ISSUE_NUMBER"
@@ -122,8 +124,8 @@ jobs:
             FIELDS=""
           fi
 
-          # --- 2. Slackへの送信データ作成（Block Kit使用） ---
-          read -r -d '' PAYLOAD << EOM
+          # --- 2. Slackへの送信データ作成 ---
+          PAYLOAD=$(cat <<EOF
           {
             "username": "GitHub Notifications",
             "icon_emoji": ":github:",
@@ -143,7 +145,8 @@ jobs:
               }
             ]
           }
-          EOM
+          EOF
+          )
 
           # --- 3. 送信実行 ---
           echo "$PAYLOAD" | curl -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
