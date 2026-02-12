@@ -40,16 +40,9 @@ jobs:
             SHORT_SHA="${COMMIT_SHA:0:7}"
             URL="${{ github.event.head_commit.url }}"
             COLOR="good" # Green
-            
-            FIELDS=$(cat <<FIELD_EOF
-"fields": [
-  {"title": "Commit", "value": "<${URL}|\\\`${SHORT_SHA}\\\`>", "short": true},
-  {"title": "Branch", "value": "\\\`${GITHUB_REF_NAME}\\\`", "short": true},
-  {"title": "Author", "value": "${ACTOR}", "short": true},
-  {"title": "Repository", "value": "<https://github.com/${REPO}|${REPO}>", "short": true}
-]
-FIELD_EOF
-            )
+
+            FIELDS=$(printf '"fields":[{"title":"Commit","value":"<%s|`%s`>","short":true},{"title":"Branch","value":"`%s`","short":true},{"title":"Author","value":"%s","short":true},{"title":"Repository","value":"<https://github.com/%s|%s>","short":true}]' \
+              "$URL" "$SHORT_SHA" "$GITHUB_REF_NAME" "$ACTOR" "$REPO" "$REPO")
             MESSAGE="$COMMIT_MSG"
 
           elif [ "$EVENT_NAME" == "pull_request" ]; then
@@ -88,15 +81,8 @@ FIELD_EOF
               COLOR="warning" # Yellow
             fi
 
-            FIELDS=$(cat <<FIELD_EOF
-"fields": [
-  {"title": "Author", "value": "${PR_USER}", "short": true},
-  {"title": "Branch", "value": "\\\`${HEAD_BRANCH}\\\` → \\\`${BASE_BRANCH}\\\`", "short": true},
-  {"title": "Changes", "value": "+${ADDITIONS} / -${DELETIONS} (${CHANGED_FILES} files)", "short": true},
-  {"title": "Status", "value": "${ACTION}", "short": true}
-]
-FIELD_EOF
-            )
+            FIELDS=$(printf '"fields":[{"title":"Author","value":"%s","short":true},{"title":"Branch","value":"`%s` → `%s`","short":true},{"title":"Changes","value":"+%s / -%s (%s files)","short":true},{"title":"Status","value":"%s","short":true}]' \
+              "$PR_USER" "$HEAD_BRANCH" "$BASE_BRANCH" "$ADDITIONS" "$DELETIONS" "$CHANGED_FILES" "$ACTION")
             MESSAGE="*$PR_TITLE*\\\\n${PR_BODY:0:200}"
 
           elif [ "$EVENT_NAME" == "issue_comment" ]; then
@@ -114,14 +100,9 @@ FIELD_EOF
             else
               TITLE="Comment on Issue #$ISSUE_NUMBER"
             fi
-            
-            FIELDS=$(cat <<FIELD_EOF
-"fields": [
-  {"title": "Commented by", "value": "${COMMENT_USER}", "short": true},
-  {"title": "On", "value": "#${ISSUE_NUMBER}: ${ISSUE_TITLE}", "short": true}
-]
-FIELD_EOF
-            )
+
+            FIELDS=$(printf '"fields":[{"title":"Commented by","value":"%s","short":true},{"title":"On","value":"#%s: %s","short":true}]' \
+              "$COMMENT_USER" "$ISSUE_NUMBER" "$ISSUE_TITLE")
             MESSAGE="$COMMENT_BODY"
 
           else
