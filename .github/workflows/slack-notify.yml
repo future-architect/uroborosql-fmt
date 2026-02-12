@@ -41,8 +41,18 @@ jobs:
             URL="${{ github.event.head_commit.url }}"
             COLOR="good" # Green
 
-            FIELDS=$(printf '"fields":[{"title":"Commit","value":"<%s|`%s`>","short":true},{"title":"Branch","value":"`%s`","short":true},{"title":"Author","value":"%s","short":true},{"title":"Repository","value":"<https://github.com/%s|%s>","short":true}]' \
-              "$URL" "$SHORT_SHA" "$GITHUB_REF_NAME" "$ACTOR" "$REPO" "$REPO")
+            FIELDS_JSON=$(jq -nc \
+              --arg url "$URL" \
+              --arg sha "$SHORT_SHA" \
+              --arg branch "$GITHUB_REF_NAME" \
+              --arg actor "$ACTOR" \
+              --arg repo "$REPO" \
+              '[
+                {"title":"Commit","value":"<\($url)|`\($sha)`>","short":true},
+                {"title":"Branch","value":"`\($branch)`","short":true},
+                {"title":"Author","value":"\($actor)","short":true},
+                {"title":"Repository","value":"<https://github.com/\($repo)|\($repo)>","short":true}
+              ]')
             MESSAGE="$COMMIT_MSG"
 
           elif [ "$EVENT_NAME" == "pull_request" ]; then
@@ -81,8 +91,20 @@ jobs:
               COLOR="warning" # Yellow
             fi
 
-            FIELDS=$(printf '"fields":[{"title":"Author","value":"%s","short":true},{"title":"Branch","value":"`%s` → `%s`","short":true},{"title":"Changes","value":"+%s / -%s (%s files)","short":true},{"title":"Status","value":"%s","short":true}]' \
-              "$PR_USER" "$HEAD_BRANCH" "$BASE_BRANCH" "$ADDITIONS" "$DELETIONS" "$CHANGED_FILES" "$ACTION")
+            FIELDS_JSON=$(jq -nc \
+              --arg user "$PR_USER" \
+              --arg head "$HEAD_BRANCH" \
+              --arg base "$BASE_BRANCH" \
+              --arg adds "$ADDITIONS" \
+              --arg dels "$DELETIONS" \
+              --arg files "$CHANGED_FILES" \
+              --arg action "$ACTION" \
+              '[
+                {"title":"Author","value":"\($user)","short":true},
+                {"title":"Branch","value":"`\($head)` → `\($base)`","short":true},
+                {"title":"Changes","value":"+\($adds) / -\($dels) (\($files) files)","short":true},
+                {"title":"Status","value":"\($action)","short":true}
+              ]')
             MESSAGE="*$PR_TITLE*\\\\n${PR_BODY:0:200}"
 
           elif [ "$EVENT_NAME" == "issue_comment" ]; then
@@ -101,8 +123,14 @@ jobs:
               TITLE="Comment on Issue #$ISSUE_NUMBER"
             fi
 
-            FIELDS=$(printf '"fields":[{"title":"Commented by","value":"%s","short":true},{"title":"On","value":"#%s: %s","short":true}]' \
-              "$COMMENT_USER" "$ISSUE_NUMBER" "$ISSUE_TITLE")
+            FIELDS_JSON=$(jq -nc \
+              --arg user "$COMMENT_USER" \
+              --arg num "$ISSUE_NUMBER" \
+              --arg title "$ISSUE_TITLE" \
+              '[
+                {"title":"Commented by","value":"\($user)","short":true},
+                {"title":"On","value":"#\($num): \($title)","short":true}
+              ]')
             MESSAGE="$COMMENT_BODY"
 
           else
@@ -111,55 +139,72 @@ jobs:
             MESSAGE="Check GitHub for details."
             URL="https://github.com/$REPO"
             COLOR="#999999"
-            FIELDS=""
+            FIELDS_JSON=""
           fi
 
           # --- 2. Slackへの送信データ作成 ---
-          if [ -n "$FIELDS" ]; then
-            PAYLOAD=$(cat <<EOF
-{
-  "username": "GitHub Notifications",
-  "icon_emoji": ":github:",
-  "text": "$EMOJI Notification from $REPO",
-  "attachments": [
-    {
-      "color": "$COLOR",
-      "author_name": "$ACTOR",
-      "author_icon": "$AVATAR_URL",
-      "title": "$TITLE",
-      "title_link": "$URL",
-      "text": "$MESSAGE",
-      $FIELDS,
-      "footer": "<https://github.com/$REPO|$REPO>",
-      "footer_icon": "https://github.githubassets.com/favicon.ico",
-      "ts": $(date +%s)
-    }
-  ]
-}
-EOF
-)
+          if [ -n "$FIELDS_JSON" ]; then
+            PAYLOAD=$(jq -nc \
+              --arg username "GitHub Notifications" \
+              --arg icon ":github:" \
+              --arg text "$EMOJI Notification from $REPO" \
+              --arg color "$COLOR" \
+              --arg author "$ACTOR" \
+              --arg avatar "$AVATAR_URL" \
+              --arg title "$TITLE" \
+              --arg url "$URL" \
+              --arg message "$MESSAGE" \
+              --arg footer "<https://github.com/$REPO|$REPO>" \
+              --arg footer_icon "https://github.githubassets.com/favicon.ico" \
+              --argjson ts "$(date +%s)" \
+              --argjson fields "$FIELDS_JSON" \
+              '{
+                username:$username,
+                icon_emoji:$icon,
+                text:$text,
+                attachments:[{
+                  color:$color,
+                  author_name:$author,
+                  author_icon:$avatar,
+                  title:$title,
+                  title_link:$url,
+                  text:$message,
+                  fields:$fields,
+                  footer:$footer,
+                  footer_icon:$footer_icon,
+                  ts:$ts
+                }]
+              }')
           else
-            PAYLOAD=$(cat <<EOF
-{
-  "username": "GitHub Notifications",
-  "icon_emoji": ":github:",
-  "text": "$EMOJI Notification from $REPO",
-  "attachments": [
-    {
-      "color": "$COLOR",
-      "author_name": "$ACTOR",
-      "author_icon": "$AVATAR_URL",
-      "title": "$TITLE",
-      "title_link": "$URL",
-      "text": "$MESSAGE",
-      "footer": "<https://github.com/$REPO|$REPO>",
-      "footer_icon": "https://github.githubassets.com/favicon.ico",
-      "ts": $(date +%s)
-    }
-  ]
-}
-EOF
-)
+            PAYLOAD=$(jq -nc \
+              --arg username "GitHub Notifications" \
+              --arg icon ":github:" \
+              --arg text "$EMOJI Notification from $REPO" \
+              --arg color "$COLOR" \
+              --arg author "$ACTOR" \
+              --arg avatar "$AVATAR_URL" \
+              --arg title "$TITLE" \
+              --arg url "$URL" \
+              --arg message "$MESSAGE" \
+              --arg footer "<https://github.com/$REPO|$REPO>" \
+              --arg footer_icon "https://github.githubassets.com/favicon.ico" \
+              --argjson ts "$(date +%s)" \
+              '{
+                username:$username,
+                icon_emoji:$icon,
+                text:$text,
+                attachments:[{
+                  color:$color,
+                  author_name:$author,
+                  author_icon:$avatar,
+                  title:$title,
+                  title_link:$url,
+                  text:$message,
+                  footer:$footer,
+                  footer_icon:$footer_icon,
+                  ts:$ts
+                }]
+              }')
           fi
 
           # --- 3. Webhook URL の検証 ---
@@ -175,7 +220,7 @@ EOF
           echo "Full Payload:"
           echo "$PAYLOAD"
           echo "---"
-          
+
           # JSON検証
           if ! echo "$PAYLOAD" | jq . > /dev/null 2>&1; then
             echo "::warning::Payload is not valid JSON, attempting to send anyway..."
