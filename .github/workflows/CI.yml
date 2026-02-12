@@ -138,7 +138,7 @@ jobs:
 
       - name: Notify Slack on Failure
         if: failure()
-        uses: ./.github/actions/slack-notify
+        uses: ./.github/actions/slack-failure-notify
         with:
           webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
           status: failure
@@ -175,7 +175,7 @@ jobs:
 
       - name: Notify Slack on Failure
         if: failure()
-        uses: ./.github/actions/slack-notify
+        uses: ./.github/actions/slack-failure-notify
         with:
           webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
@@ -255,6 +255,6 @@ jobs:
 
       - name: Notify Slack on Failure
         if: failure()
-        uses: ./.github/actions/slack-notify
+        uses: ./.github/actions/slack-failure-notify
         with:
           webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
