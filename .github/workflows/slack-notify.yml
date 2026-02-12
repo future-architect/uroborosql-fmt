@@ -41,12 +41,12 @@ jobs:
             URL="${{ github.event.head_commit.url }}"
             COLOR="good" # Green
             
-            FIELDS="\"fields\": [
-              {\"title\": \"Commit\", \"value\": \"<$URL|\\\`$SHORT_SHA\\\`>\", \"short\": true},
-              {\"title\": \"Branch\", \"value\": \"\\\`${GITHUB_REF_NAME}\\\`\", \"short\": true},
-              {\"title\": \"Author\", \"value\": \"$ACTOR\", \"short\": true},
-              {\"title\": \"Repository\", \"value\": \"<https://github.com/$REPO|$REPO>\", \"short\": true}
-            ],"
+            FIELDS='"fields": [
+              {"title": "Commit", "value": "<'"$URL"'|`'"$SHORT_SHA"'`>", "short": true},
+              {"title": "Branch", "value": "`'"${GITHUB_REF_NAME}"'`", "short": true},
+              {"title": "Author", "value": "'"$ACTOR"'", "short": true},
+              {"title": "Repository", "value": "<https://github.com/'"$REPO"'|'"$REPO"'>", "short": true}
+            ]'
             MESSAGE="$COMMIT_MSG"
 
           elif [ "$EVENT_NAME" == "pull_request" ]; then
@@ -85,13 +85,13 @@ jobs:
               COLOR="warning" # Yellow
             fi
 
-            FIELDS="\"fields\": [
-              {\"title\": \"Author\", \"value\": \"$PR_USER\", \"short\": true},
-              {\"title\": \"Branch\", \"value\": \"\\\`$HEAD_BRANCH\\\` → \\\`$BASE_BRANCH\\\`\", \"short\": true},
-              {\"title\": \"Changes\", \"value\": \"+$ADDITIONS / -$DELETIONS ($CHANGED_FILES files)\", \"short\": true},
-              {\"title\": \"Status\", \"value\": \"$ACTION\", \"short\": true}
-            ],"
-            MESSAGE="*$PR_TITLE*\\\\n${PR_BODY:0:200}"
+            FIELDS='"fields": [
+              {"title": "Author", "value": "'"$PR_USER"'", "short": true},
+              {"title": "Branch", "value": "`'"$HEAD_BRANCH"'` \u2192 `'"$BASE_BRANCH"'`", "short": true},
+              {"title": "Changes", "value": "+'"$ADDITIONS"' / -'"$DELETIONS"' ('"$CHANGED_FILES"' files)", "short": true},
+              {"title": "Status", "value": "'"$ACTION"'", "short": true}
+            ]'
+            MESSAGE="*$PR_TITLE*\\n${PR_BODY:0:200}"
 
           elif [ "$EVENT_NAME" == "issue_comment" ]; then
             EMOJI="💬"
@@ -109,10 +109,10 @@ jobs:
               TITLE="Comment on Issue #$ISSUE_NUMBER"
             fi
             
-            FIELDS="\"fields\": [
-              {\"title\": \"Commented by\", \"value\": \"$COMMENT_USER\", \"short\": true},
-              {\"title\": \"On\", \"value\": \"#$ISSUE_NUMBER: $ISSUE_TITLE\", \"short\": true}
-            ],"
+            FIELDS='"fields": [
+              {"title": "Commented by", "value": "'"$COMMENT_USER"'", "short": true},
+              {"title": "On", "value": "#'"$ISSUE_NUMBER"': '"$ISSUE_TITLE"'", "short": true}
+            ]'
             MESSAGE="$COMMENT_BODY"
 
           else
@@ -125,28 +125,52 @@ jobs:
           fi
 
           # --- 2. Slackへの送信データ作成 ---
-          PAYLOAD=$(cat <<EOF
-          {
-            "username": "GitHub Notifications",
-            "icon_emoji": ":github:",
-            "text": "$EMOJI Notification from $REPO",
-            "attachments": [
-              {
-                "color": "$COLOR",
-                "author_name": "$ACTOR",
-                "author_icon": "$AVATAR_URL",
-                "title": "$TITLE",
-                "title_link": "$URL",
-                "text": "$MESSAGE",
-                $FIELDS
-                "footer": "<https://github.com/$REPO|$REPO>",
-                "footer_icon": "https://github.githubassets.com/favicon.ico",
-                "ts": $(date +%s)
-              }
-            ]
-          }
-          EOF
-          )
+          if [ -n "$FIELDS" ]; then
+            PAYLOAD=$(cat <<EOF
+{
+  "username": "GitHub Notifications",
+  "icon_emoji": ":github:",
+  "text": "$EMOJI Notification from $REPO",
+  "attachments": [
+    {
+      "color": "$COLOR",
+      "author_name": "$ACTOR",
+      "author_icon": "$AVATAR_URL",
+      "title": "$TITLE",
+      "title_link": "$URL",
+      "text": "$MESSAGE",
+      $FIELDS,
+      "footer": "<https://github.com/$REPO|$REPO>",
+      "footer_icon": "https://github.githubassets.com/favicon.ico",
+      "ts": $(date +%s)
+    }
+  ]
+}
+EOF
+            )
+          else
+            PAYLOAD=$(cat <<EOF
+{
+  "username": "GitHub Notifications",
+  "icon_emoji": ":github:",
+  "text": "$EMOJI Notification from $REPO",
+  "attachments": [
+    {
+      "color": "$COLOR",
+      "author_name": "$ACTOR",
+      "author_icon": "$AVATAR_URL",
+      "title": "$TITLE",
+      "title_link": "$URL",
+      "text": "$MESSAGE",
+      "footer": "<https://github.com/$REPO|$REPO>",
+      "footer_icon": "https://github.githubassets.com/favicon.ico",
+      "ts": $(date +%s)
+    }
+  ]
+}
+EOF
+            )
+          fi
 
           # --- 3. Webhook URL の検証 ---
           if [ -z "$SLACK_WEBHOOK_URL" ]; then
@@ -158,8 +182,16 @@ jobs:
           echo "Sending notification to Slack..."
           echo "Event: $EVENT_NAME"
           echo "Actor: $ACTOR"
-          echo "Payload preview:"
-          echo "$PAYLOAD" | head -n 5
+          echo "Full Payload:"
+          echo "$PAYLOAD"
+          echo "---"
+          
+          # JSON検証
+          if ! echo "$PAYLOAD" | jq . > /dev/null 2>&1; then
+            echo "::warning::Payload is not valid JSON, attempting to send anyway..."
+          else
+            echo "✅ Payload is valid JSON"
+          fi
 
           # --- 5. 送信実行（エラーハンドリング付き） ---
           HTTP_CODE=$(echo "$PAYLOAD" | curl -X POST -H 'Content-type: application/json' \
