@@ -1,0 +1,153 @@
+name: Slack Notification
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    types: [opened, closed, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Send Notification to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          EVENT_JSON: ${{ toJson(github.event) }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL is not set."
+            exit 0
+          fi
+
+          # イベント情報を一時ファイルへ保存 (クォート問題回避のため)
+          printf '%s' "$EVENT_JSON" > event.json
+
+          # 共通変数の設定
+          TS=$(date +%s)
+          COLOR="#999999"
+
+          # イベントごとの処理
+          case "$EVENT_NAME" in
+            push)
+              EMOJI="🚀"
+              REF_NAME="${GITHUB_REF_NAME}"
+              COMMIT_MSG=$(jq -r '.head_commit.message' event.json)
+              COMMIT_URL=$(jq -r '.head_commit.url' event.json)
+              SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+              
+              TITLE="Push to \`$REF_NAME\`"
+              MESSAGE="$COMMIT_MSG"
+              COLOR="good"
+              URL="$COMMIT_URL"
+              
+              FIELDS=$(jq -n \
+                --arg sha "$SHORT_SHA" \
+                --arg url "$COMMIT_URL" \
+                --arg actor "$ACTOR" \
+                '[
+                  {"title":"Commit", "value":"<\($url)|`\($sha)`>", "short":true},
+                  {"title":"Author", "value":$actor, "short":true}
+                ]')
+              ;;
+
+            pull_request)
+              ACTION=$(jq -r '.action' event.json)
+              PR_NUM=$(jq -r '.pull_request.number' event.json)
+              PR_TITLE=$(jq -r '.pull_request.title' event.json)
+              PR_BODY=$(jq -r '.pull_request.body // ""' event.json | head -c 200)
+              MERGED=$(jq -r '.pull_request.merged' event.json)
+              
+              URL=$(jq -r '.pull_request.html_url' event.json)
+              MESSAGE=$(printf "*%s*\n%s" "$PR_TITLE" "$PR_BODY")
+              
+              if [ "$MERGED" == "true" ]; then
+                EMOJI="🎉"; TITLE="Merged PR #$PR_NUM"; COLOR="#6f42c1"
+              elif [ "$ACTION" == "opened" ]; then
+                EMOJI="📬"; TITLE="New PR #$PR_NUM"; COLOR="warning"
+              elif [ "$ACTION" == "closed" ]; then
+                EMOJI="🚫"; TITLE="Closed PR #$PR_NUM"; COLOR="#999999"
+              else
+                EMOJI="🔄"; TITLE="PR $ACTION #$PR_NUM"; COLOR="warning"
+              fi
+              
+              FIELDS=$(jq -n \
+                --arg head "$(jq -r '.pull_request.head.ref' event.json)" \
+                --arg base "$(jq -r '.pull_request.base.ref' event.json)" \
+                '[
+                  {"title":"Branch", "value":"`\($head)` → `\($base)`", "short":true}
+                ]')
+              ;;
+
+            issue_comment)
+              EMOJI="💬"
+              ISSUE_NUM=$(jq -r '.issue.number' event.json)
+              COMMENT_BODY=$(jq -r '.comment.body' event.json)
+              URL=$(jq -r '.comment.html_url' event.json)
+              COLOR="#007bff"
+              
+              if [ "$(jq -r '.issue.pull_request != null' event.json)" == "true" ]; then
+                TITLE="Comment on PR #$ISSUE_NUM"
+              else
+                TITLE="Comment on Issue #$ISSUE_NUM"
+              fi
+              MESSAGE="$COMMENT_BODY"
+              FIELDS="[]"
+              ;;
+              
+            *)
+              EMOJI="ℹ️"
+              TITLE="Event: $EVENT_NAME"
+              MESSAGE="Triggered by $ACTOR"
+              URL="https://github.com/$REPO"
+              FIELDS="[]"
+              ;;
+          esac
+
+          # Payload 生成 (jqで安全に構築)
+          PAYLOAD=$(jq -nc \
+            --arg username "GitHub Notifications" \
+            --arg icon ":github:" \
+            --arg text "$EMOJI Notification from $REPO" \
+            --arg color "$COLOR" \
+            --arg title "$TITLE" \
+            --arg url "$URL" \
+            --arg message "$MESSAGE" \
+            --arg footer "<https://github.com/$REPO|$REPO>" \
+            --argjson fields "${FIELDS:-[]}" \
+            --argjson ts "$TS" \
+            '{
+              username: $username,
+              icon_emoji: $icon,
+              text: $text,
+              attachments: [{
+                color: $color,
+                title: $title,
+                title_link: $url,
+                text: $message,
+                fields: $fields,
+                footer: $footer,
+                ts: $ts
+              }]
+            }')
+
+          # 送信処理（エラーハンドリング付き）
+          HTTP_CODE=$(echo "$PAYLOAD" | curl -X POST -H 'Content-type: application/json' \
+            -d @- "$SLACK_WEBHOOK_URL" \
+            -w '%{http_code}' \
+            -s -o /tmp/slack_response.txt)
+
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Notification sent (HTTP 200)"
+          else
+            echo "::error::Failed to send notification. HTTP Code: $HTTP_CODE"
+            cat /tmp/slack_response.txt
+            exit 1
+          fi

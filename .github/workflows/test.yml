@@ -19,8 +19,8 @@ jobs:
       - name: Check error and warning
         run: |
           result=$(cargo check --quiet 2>&1)
-          echo ${result}
-          test -z ${result}
+          echo "${result}"
+          test -z "${result}"
 
       - name: Fmt
         run: cargo fmt --check
@@ -33,3 +33,9 @@ jobs:
 
       - name: Check test files diff
         run: git diff --exit-code
+
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: ./.github/actions/slack-failure-notify
+        with:
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

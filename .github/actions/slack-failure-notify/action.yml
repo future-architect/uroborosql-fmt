@@ -1,0 +1,104 @@
+name: "Slack Notify on Failure"
+description: "Send a notification to Slack when a job fails"
+inputs:
+  webhook_url:
+    description: "Slack Webhook URL"
+    required: true
+  status:
+    description: "Job status (failure, success, etc.)"
+    required: false
+    default: "failure"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Send Notification
+      shell: bash
+      env:
+        SLACK_WEBHOOK_URL: ${{ inputs.webhook_url }}
+        STATUS: ${{ inputs.status }}
+        REPO: ${{ github.repository }}
+        WORKFLOW: ${{ github.workflow }}
+        run_id: ${{ github.run_id }}
+        run_number: ${{ github.run_number }}
+        actor: ${{ github.actor }}
+        ref_name: ${{ github.ref_name }}
+        sha: ${{ github.sha }}
+        server_url: ${{ github.server_url }}
+      run: |
+        # Webhook URL の検証
+        if [ -z "$SLACK_WEBHOOK_URL" ]; then
+          echo "::warning::SLACK_WEBHOOK_URL is not set. Skipping notification."
+          exit 0
+        fi
+
+        # 変数準備
+        SHORT_SHA="${sha:0:7}"
+        WORKFLOW_URL="${server_url}/${REPO}/actions/runs/${run_id}"
+        COMMIT_URL="${server_url}/${REPO}/commit/${sha}"
+
+        # タイトルと色の決定
+        if [ "$STATUS" == "success" ]; then
+          COLOR="good"
+          TITLE="✅ CI Succeeded"
+          ICON=":white_check_mark:"
+        else
+          COLOR="danger"
+          TITLE="🚨 CI Failed"
+          ICON=":x:"
+        fi
+
+        # JSONペイロードの構築 (jqを使用してエスケープ処理を自動化)
+        PAYLOAD=$(jq -nc \
+          --arg username "GitHub CI/CD" \
+          --arg icon "$ICON" \
+          --arg text "$TITLE" \
+          --arg color "$COLOR" \
+          --arg actor "$actor" \
+          --arg status "$STATUS" \
+          --arg workflow "$WORKFLOW" \
+          --arg workflow_url "$WORKFLOW_URL" \
+          --arg repo "$REPO" \
+          --arg repo_url "${server_url}/${REPO}" \
+          --arg branch "$ref_name" \
+          --arg commit_url "$COMMIT_URL" \
+          --arg short_sha "$SHORT_SHA" \
+          --arg run_number "$run_number" \
+          --argjson ts "$(date +%s)" \
+          '{
+            username: $username,
+            icon_emoji: $icon,
+            text: $text,
+            attachments: [
+              {
+                color: $color,
+                author_name: $actor,
+                title: ("Workflow " + $workflow + " " + $status),
+                title_link: $workflow_url,
+                fields: [
+                  { title: "Repository", value: ("<" + $repo_url + "|" + $repo + ">"), short: true },
+                  { title: "Branch", value: ("`" + $branch + "`"), short: true },
+                  { title: "Commit", value: ("<" + $commit_url + "|`" + $short_sha + "`>"), short: true },
+                  { title: "Run Number", value: ("#" + $run_number), short: true }
+                ],
+                footer: ("<" + $workflow_url + "|👉 View Logs and Details>"),
+                footer_icon: "https://github.githubassets.com/favicon.ico",
+                ts: $ts
+              }
+            ]
+          }'
+        )
+
+        # 送信実行
+        HTTP_CODE=$(echo "$PAYLOAD" | curl -X POST -H 'Content-type: application/json' \
+          -d @- "$SLACK_WEBHOOK_URL" \
+          -w '%{http_code}' \
+          -s -o /tmp/slack_response.txt)
+
+        if [ "$HTTP_CODE" -eq 200 ]; then
+          echo "✅ Notification sent (HTTP 200)"
+        else
+          echo "::error::Failed to send notification. HTTP Code: $HTTP_CODE"
+          cat /tmp/slack_response.txt
+          exit 1
+        fi

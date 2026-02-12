@@ -21,6 +21,7 @@ permissions:
 jobs:
   test:
     uses: ./.github/workflows/test.yml
+    secrets: inherit
   build-napi:
     needs: test
     strategy:
@@ -135,6 +136,13 @@ jobs:
           path: ${{ env.WORKING_DIR }}/${{ env.APP_NAME }}.*.node
           if-no-files-found: error
 
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: ./.github/actions/slack-failure-notify
+        with:
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          status: failure
+
   build-wasm:
     needs: test
     runs-on: ubuntu-latest
@@ -151,7 +159,7 @@ jobs:
 
       - name: Setup wasm-pack
         uses: taiki-e/install-action@wasm-pack
-      
+
       - name: Build
         run: wasm-pack build --target web
         working-directory: crates/uroborosql-fmt-wasm
@@ -164,6 +172,12 @@ jobs:
             crates/uroborosql-fmt-wasm/pkg/uroborosql_fmt_wasm.js
             crates/uroborosql-fmt-wasm/pkg/uroborosql_fmt_wasm_bg.wasm
           if-no-files-found: error
+
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: ./.github/actions/slack-failure-notify
+        with:
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   deploy-to-gh-pages:
     if: github.repository == 'future-architect/uroborosql-fmt' &&
@@ -238,3 +252,9 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./wasm
           force_orphan: true
+
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: ./.github/actions/slack-failure-notify
+        with:
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
