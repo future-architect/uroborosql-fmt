@@ -66,7 +66,7 @@ jobs:
               MERGED=$(jq -r '.pull_request.merged' event.json)
               
               URL=$(jq -r '.pull_request.html_url' event.json)
-              MESSAGE="*$PR_TITLE*\n$PR_BODY"
+              MESSAGE=$(printf "*%s*\n%s" "$PR_TITLE" "$PR_BODY")
               
               if [ "$MERGED" == "true" ]; then
                 EMOJI="🎉"; TITLE="Merged PR #$PR_NUM"; COLOR="#6f42c1"
