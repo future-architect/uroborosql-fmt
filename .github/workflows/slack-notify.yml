@@ -1,0 +1,149 @@
+name: Slack Notification
+on:
+  push:
+    branches: ["**"] # 全ブランチ対象
+  pull_request:
+    types: [opened, closed, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Send Notification to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          AVATAR_URL: ${{ github.event.sender.avatar_url }}
+        run: |
+          # JSONエスケープ用のヘルパー関数
+          escape_json() {
+            echo "$1" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g' | cut -c 1-500
+          }
+
+          # --- 1. イベントごとにメッセージ内容と色を切り替える ---
+          if [ "$EVENT_NAME" == "push" ]; then
+            EMOJI="🚀"
+            TITLE="Push to \`${GITHUB_REF_NAME}\`"
+            COMMIT_MSG=$(escape_json "${{ github.event.head_commit.message }}")
+            COMMIT_SHA="${{ github.sha }}"
+            SHORT_SHA="${COMMIT_SHA:0:7}"
+            URL="${{ github.event.head_commit.url }}"
+            COMPARE_URL="${{ github.event.compare }}"
+            COMMITS_COUNT="${{ github.event.commits[0] && '1' || '0' }}"
+            COLOR="good" # Green
+            
+            FIELDS="\"fields\": [
+              {\"title\": \"Commit\", \"value\": \"<$URL|\`$SHORT_SHA\`>\", \"short\": true},
+              {\"title\": \"Branch\", \"value\": \"\`${GITHUB_REF_NAME}\`\", \"short\": true},
+              {\"title\": \"Author\", \"value\": \"$ACTOR\", \"short\": true},
+              {\"title\": \"Repository\", \"value\": \"<https://github.com/$REPO|$REPO>\", \"short\": true}
+            ],"
+            MESSAGE="$COMMIT_MSG"
+
+          elif [ "$EVENT_NAME" == "pull_request" ]; then
+            ACTION="${{ github.event.action }}"
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            PR_TITLE=$(escape_json "${{ github.event.pull_request.title }}")
+            PR_BODY=$(escape_json "${{ github.event.pull_request.body }}")
+            PR_USER="${{ github.event.pull_request.user.login }}"
+            BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
+            HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
+            URL="${{ github.event.pull_request.html_url }}"
+            ADDITIONS="${{ github.event.pull_request.additions }}"
+            DELETIONS="${{ github.event.pull_request.deletions }}"
+            CHANGED_FILES="${{ github.event.pull_request.changed_files }}"
+            
+            # マージされた場合の処理
+            if [ "${{ github.event.pull_request.merged }}" == "true" ]; then
+              EMOJI="🎉"
+              TITLE="Pull Request Merged: #$PR_NUMBER"
+              COLOR="#6f42c1" # Purple
+            elif [ "$ACTION" == "opened" ]; then
+              EMOJI="📬"
+              TITLE="New Pull Request: #$PR_NUMBER"
+              COLOR="warning" # Yellow
+            elif [ "$ACTION" == "closed" ]; then
+              EMOJI="🚫"
+              TITLE="Pull Request Closed: #$PR_NUMBER"
+              COLOR="#999999" # Gray
+            elif [ "$ACTION" == "reopened" ]; then
+              EMOJI="♻️"
+              TITLE="Pull Request Reopened: #$PR_NUMBER"
+              COLOR="warning" # Yellow
+            else
+              EMOJI="🔄"
+              TITLE="Pull Request $ACTION: #$PR_NUMBER"
+              COLOR="warning" # Yellow
+            fi
+
+            FIELDS="\"fields\": [
+              {\"title\": \"Author\", \"value\": \"$PR_USER\", \"short\": true},
+              {\"title\": \"Branch\", \"value\": \"\`$HEAD_BRANCH\` → \`$BASE_BRANCH\`\", \"short\": true},
+              {\"title\": \"Changes\", \"value\": \"+$ADDITIONS / -$DELETIONS ($CHANGED_FILES files)\", \"short\": true},
+              {\"title\": \"Status\", \"value\": \"$ACTION\", \"short\": true}
+            ],"
+            MESSAGE="*$PR_TITLE*\\n${PR_BODY:0:200}"
+
+          elif [ "$EVENT_NAME" == "issue_comment" ]; then
+            EMOJI="💬"
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+            ISSUE_TITLE=$(escape_json "${{ github.event.issue.title }}")
+            COMMENT_BODY=$(escape_json "${{ github.event.comment.body }}")
+            COMMENT_USER="${{ github.event.comment.user.login }}"
+            URL="${{ github.event.comment.html_url }}"
+            COLOR="#007bff" # Blue
+            
+            # IssueかPRかを判定
+            if [ "${{ github.event.issue.pull_request }}" != "" ]; then
+              TITLE="Comment on PR #$ISSUE_NUMBER"
+            else
+              TITLE="Comment on Issue #$ISSUE_NUMBER"
+            fi
+            
+            FIELDS="\"fields\": [
+              {\"title\": \"Commented by\", \"value\": \"$COMMENT_USER\", \"short\": true},
+              {\"title\": \"On\", \"value\": \"#$ISSUE_NUMBER: $ISSUE_TITLE\", \"short\": true}
+            ],"
+            MESSAGE="$COMMENT_BODY"
+
+          else
+            EMOJI="ℹ️"
+            TITLE="Event Triggered: $EVENT_NAME"
+            MESSAGE="Check GitHub for details."
+            URL="https://github.com/$REPO"
+            COLOR="#999999"
+            FIELDS=""
+          fi
+
+          # --- 2. Slackへの送信データ作成（Block Kit使用） ---
+          read -r -d '' PAYLOAD << EOM
+          {
+            "username": "GitHub Notifications",
+            "icon_emoji": ":github:",
+            "text": "$EMOJI Notification from $REPO",
+            "attachments": [
+              {
+                "color": "$COLOR",
+                "author_name": "$ACTOR",
+                "author_icon": "$AVATAR_URL",
+                "title": "$TITLE",
+                "title_link": "$URL",
+                "text": "$MESSAGE",
+                $FIELDS
+                "footer": "<https://github.com/$REPO|$REPO>",
+                "footer_icon": "https://github.githubassets.com/favicon.ico",
+                "ts": $(date +%s)
+              }
+            ]
+          }
+          EOM
+
+          # --- 3. 送信実行 ---
+          echo "$PAYLOAD" | curl -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"

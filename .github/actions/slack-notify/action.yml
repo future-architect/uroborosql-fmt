@@ -1,0 +1,70 @@
+name: "Slack Notify on Failure"
+description: "Send a notification to Slack when a job fails"
+inputs:
+  webhook_url:
+    description: "Slack Webhook URL"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Send Notification
+      shell: bash
+      env:
+        SLACK_WEBHOOK_URL: ${{ inputs.webhook_url }}
+        REPO: ${{ github.repository }}
+        WORKFLOW: ${{ github.workflow }}
+        JOB: ${{ github.job }}
+        RUN_ID: ${{ github.run_id }}
+        RUN_NUMBER: ${{ github.run_number }}
+        ACTOR: ${{ github.actor }}
+        REF_NAME: ${{ github.ref_name }}
+        SHA: ${{ github.sha }}
+        SERVER_URL: ${{ github.server_url }}
+      run: |
+        SHORT_SHA="${SHA:0:7}"
+        WORKFLOW_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+        COMMIT_URL="${SERVER_URL}/${REPO}/commit/${SHA}"
+
+        read -r -d '' PAYLOAD << EOM
+        {
+          "username": "GitHub CI/CD",
+          "icon_emoji": ":x:",
+          "text": "🚨 CI Failed!",
+          "attachments": [
+            {
+              "color": "danger",
+              "author_name": "$ACTOR",
+              "title": "Workflow '$WORKFLOW' failed",
+              "title_link": "$WORKFLOW_URL",
+              "fields": [
+                {
+                  "title": "Repository",
+                  "value": "<${SERVER_URL}/${REPO}|$REPO>",
+                  "short": true
+                },
+                {
+                  "title": "Branch",
+                  "value": "\`$REF_NAME\`",
+                  "short": true
+                },
+                {
+                  "title": "Commit",
+                  "value": "<$COMMIT_URL|\`$SHORT_SHA\`>",
+                  "short": true
+                },
+                {
+                  "title": "Run Number",
+                  "value": "#$RUN_NUMBER",
+                  "short": true
+                }
+              ],
+              "footer": "<$WORKFLOW_URL|👉 View Logs and Details>",
+              "footer_icon": "https://github.githubassets.com/favicon.ico",
+              "ts": $(date +%s)
+            }
+          ]
+        }
+        EOM
+
+        echo "$PAYLOAD" | curl -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
