@@ -34,19 +34,22 @@ jobs:
           # --- 1. イベントごとにメッセージ内容と色を切り替える ---
           if [ "$EVENT_NAME" == "push" ]; then
             EMOJI="🚀"
-            TITLE="Push to \`${GITHUB_REF_NAME}\`"
+            TITLE="Push to \\\`${GITHUB_REF_NAME}\\\`"
             COMMIT_MSG=$(escape_json "${{ github.event.head_commit.message }}")
             COMMIT_SHA="${{ github.sha }}"
             SHORT_SHA="${COMMIT_SHA:0:7}"
             URL="${{ github.event.head_commit.url }}"
             COLOR="good" # Green
             
-            FIELDS='"fields": [
-              {"title": "Commit", "value": "<'"$URL"'|`'"$SHORT_SHA"'`>", "short": true},
-              {"title": "Branch", "value": "`'"${GITHUB_REF_NAME}"'`", "short": true},
-              {"title": "Author", "value": "'"$ACTOR"'", "short": true},
-              {"title": "Repository", "value": "<https://github.com/'"$REPO"'|'"$REPO"'>", "short": true}
-            ]'
+            FIELDS=$(cat <<FIELD_EOF
+"fields": [
+  {"title": "Commit", "value": "<${URL}|\\\`${SHORT_SHA}\\\`>", "short": true},
+  {"title": "Branch", "value": "\\\`${GITHUB_REF_NAME}\\\`", "short": true},
+  {"title": "Author", "value": "${ACTOR}", "short": true},
+  {"title": "Repository", "value": "<https://github.com/${REPO}|${REPO}>", "short": true}
+]
+FIELD_EOF
+            )
             MESSAGE="$COMMIT_MSG"
 
           elif [ "$EVENT_NAME" == "pull_request" ]; then
@@ -85,13 +88,16 @@ jobs:
               COLOR="warning" # Yellow
             fi
 
-            FIELDS='"fields": [
-              {"title": "Author", "value": "'"$PR_USER"'", "short": true},
-              {"title": "Branch", "value": "`'"$HEAD_BRANCH"'` \u2192 `'"$BASE_BRANCH"'`", "short": true},
-              {"title": "Changes", "value": "+'"$ADDITIONS"' / -'"$DELETIONS"' ('"$CHANGED_FILES"' files)", "short": true},
-              {"title": "Status", "value": "'"$ACTION"'", "short": true}
-            ]'
-            MESSAGE="*$PR_TITLE*\\n${PR_BODY:0:200}"
+            FIELDS=$(cat <<FIELD_EOF
+"fields": [
+  {"title": "Author", "value": "${PR_USER}", "short": true},
+  {"title": "Branch", "value": "\\\`${HEAD_BRANCH}\\\` → \\\`${BASE_BRANCH}\\\`", "short": true},
+  {"title": "Changes", "value": "+${ADDITIONS} / -${DELETIONS} (${CHANGED_FILES} files)", "short": true},
+  {"title": "Status", "value": "${ACTION}", "short": true}
+]
+FIELD_EOF
+            )
+            MESSAGE="*$PR_TITLE*\\\\n${PR_BODY:0:200}"
 
           elif [ "$EVENT_NAME" == "issue_comment" ]; then
             EMOJI="💬"
@@ -109,10 +115,13 @@ jobs:
               TITLE="Comment on Issue #$ISSUE_NUMBER"
             fi
             
-            FIELDS='"fields": [
-              {"title": "Commented by", "value": "'"$COMMENT_USER"'", "short": true},
-              {"title": "On", "value": "#'"$ISSUE_NUMBER"': '"$ISSUE_TITLE"'", "short": true}
-            ]'
+            FIELDS=$(cat <<FIELD_EOF
+"fields": [
+  {"title": "Commented by", "value": "${COMMENT_USER}", "short": true},
+  {"title": "On", "value": "#${ISSUE_NUMBER}: ${ISSUE_TITLE}", "short": true}
+]
+FIELD_EOF
+            )
             MESSAGE="$COMMENT_BODY"
 
           else
@@ -147,7 +156,7 @@ jobs:
   ]
 }
 EOF
-            )
+)
           else
             PAYLOAD=$(cat <<EOF
 {
@@ -169,7 +178,7 @@ EOF
   ]
 }
 EOF
-            )
+)
           fi
 
           # --- 3. Webhook URL の検証 ---
