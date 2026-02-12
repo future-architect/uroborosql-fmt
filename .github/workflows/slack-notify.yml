@@ -148,5 +148,31 @@ jobs:
           EOF
           )
 
-          # --- 3. 送信実行 ---
-          echo "$PAYLOAD" | curl -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
+          # --- 3. Webhook URL の検証 ---
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL is not set. Skipping notification."
+            exit 0
+          fi
+
+          # --- 4. デバッグ出力（URLは非表示） ---
+          echo "Sending notification to Slack..."
+          echo "Event: $EVENT_NAME"
+          echo "Actor: $ACTOR"
+          echo "Payload preview:"
+          echo "$PAYLOAD" | head -n 5
+
+          # --- 5. 送信実行（エラーハンドリング付き） ---
+          HTTP_CODE=$(echo "$PAYLOAD" | curl -X POST -H 'Content-type: application/json' \
+            -d @- "$SLACK_WEBHOOK_URL" \
+            -w '%{http_code}' \
+            -s -o /tmp/slack_response.txt)
+
+          # --- 6. レスポンスの確認 ---
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Successfully sent notification to Slack (HTTP $HTTP_CODE)"
+          else
+            echo "::error::Failed to send Slack notification. HTTP Code: $HTTP_CODE"
+            echo "Response:"
+            cat /tmp/slack_response.txt
+            exit 1
+          fi
