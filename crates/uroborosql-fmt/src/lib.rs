@@ -38,7 +38,8 @@ pub(crate) fn format_sql_with_config(
     config: Config,
 ) -> Result<String, UroboroSQLFmtError> {
     // CRLF を LF に正規化して、改行コードによる挙動の差異を防ぐ
-    let src = &src.replace("\r\n", "\n");
+    let src_owned = src.replace("\r\n", "\n");
+    let src = src_owned.as_str();
 
     load_settings(config.clone());
 
