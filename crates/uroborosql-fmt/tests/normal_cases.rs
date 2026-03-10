@@ -176,42 +176,7 @@ fn test_normal_cases() {
     for case in cases {
         println!("\nTesting: {}", case.name);
 
-        let result = match uroborosql_fmt::format_sql(&case.sql, None, None) {
-            Ok(formatted) => {
-                if formatted == case.expected {
-                    println!("✅ Test passed");
-                    TestResult {
-                        name: case.name,
-                        status: TestStatus::Pass,
-                        input: case.sql,
-                        expected: case.expected,
-                        got: Some(formatted),
-                        error: None,
-                    }
-                } else {
-                    println!("❌ Test failed");
-                    TestResult {
-                        name: case.name,
-                        status: TestStatus::Fail,
-                        input: case.sql,
-                        expected: case.expected,
-                        got: Some(formatted),
-                        error: None,
-                    }
-                }
-            }
-            Err(e) => {
-                println!("💥 Test error");
-                TestResult {
-                    name: case.name,
-                    status: TestStatus::Error,
-                    input: case.sql,
-                    expected: case.expected,
-                    got: None,
-                    error: Some(e.to_string()),
-                }
-            }
-        };
+        let result = run_format_test(&case.name, case.sql, case.expected);
 
         // エラー時にテストを中止するモードの場合
         if options.fail_fast {
@@ -228,6 +193,107 @@ fn test_normal_cases() {
         } else {
             results.push(result);
         }
+    }
+
+    print_test_report(&results);
+}
+
+fn run_format_test(name: &str, sql: String, expected: String) -> TestResult {
+    match uroborosql_fmt::format_sql(&sql, None, None) {
+        Ok(formatted) => {
+            if formatted == expected {
+                println!("✅ Test passed");
+                TestResult {
+                    name: name.to_string(),
+                    status: TestStatus::Pass,
+                    input: sql,
+                    expected,
+                    got: Some(formatted),
+                    error: None,
+                }
+            } else {
+                println!("❌ Test failed");
+                TestResult {
+                    name: name.to_string(),
+                    status: TestStatus::Fail,
+                    input: sql,
+                    expected,
+                    got: Some(formatted),
+                    error: None,
+                }
+            }
+        }
+        Err(e) => {
+            println!("💥 Test error");
+            TestResult {
+                name: name.to_string(),
+                status: TestStatus::Error,
+                input: sql,
+                expected,
+                got: None,
+                error: Some(e.to_string()),
+            }
+        }
+    }
+}
+
+/// CRLF改行コードを含むSQLが正しくフォーマットされることを確認する。
+///
+/// テストファイルは test_normal_cases にも配置されており、
+/// test_normal_cases() では LF 版、本テストでは CRLF 版として両方検証される。
+///
+/// issue: https://github.com/future-architect/uroborosql-fmt/issues/115
+#[test]
+fn test_crlf_cases() {
+    let src_dir = Path::new("test_normal_cases/src");
+    let dst_dir = Path::new("test_normal_cases/dst");
+
+    let crlf_cases = vec![
+        "110_crlf_hint_comment",
+        "111_crlf_block_comment",
+        "112_crlf_line_comment",
+    ];
+
+    let mut results = Vec::new();
+
+    for name in &crlf_cases {
+        println!("\nTesting (CRLF): {name}");
+
+        let src_path = src_dir.join(format!("{name}.sql"));
+        let dst_path = dst_dir.join(format!("{name}.sql"));
+
+        let sql_lf = match fs::read_to_string(&src_path) {
+            Ok(s) => s.replace("\r\n", "\n"),
+            Err(e) => {
+                results.push(TestResult {
+                    name: name.to_string(),
+                    status: TestStatus::Error,
+                    input: String::new(),
+                    expected: String::new(),
+                    got: None,
+                    error: Some(format!("Failed to read src: {e}")),
+                });
+                continue;
+            }
+        };
+        let expected = match fs::read_to_string(&dst_path) {
+            Ok(s) => s,
+            Err(e) => {
+                results.push(TestResult {
+                    name: name.to_string(),
+                    status: TestStatus::Error,
+                    input: sql_lf,
+                    expected: String::new(),
+                    got: None,
+                    error: Some(format!("Failed to read dst: {e}")),
+                });
+                continue;
+            }
+        };
+
+        let sql_crlf = sql_lf.replace('\n', "\r\n");
+
+        results.push(run_format_test(name, sql_crlf, expected));
     }
 
     print_test_report(&results);
