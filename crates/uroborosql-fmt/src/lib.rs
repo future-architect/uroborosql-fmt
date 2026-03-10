@@ -37,6 +37,9 @@ pub(crate) fn format_sql_with_config(
     src: &str,
     config: Config,
 ) -> Result<String, UroboroSQLFmtError> {
+    // CRLF を LF に正規化して、改行コードによる挙動の差異を防ぐ
+    let src = &src.replace("\r\n", "\n");
+
     load_settings(config.clone());
 
     // パーサの2way-sql用エラー回復機能を使うかどうか

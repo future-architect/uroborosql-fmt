@@ -1,0 +1,6 @@
+/*
+ * comment
+ */
+select
+	1
+;
