@@ -1,6 +1,6 @@
 [package]
 name = "uroborosql-fmt"
-version = "1.0.1"
+version.workspace = true
 description = "The core of uroborosql-fmt"
 authors.workspace = true
 edition.workspace = true

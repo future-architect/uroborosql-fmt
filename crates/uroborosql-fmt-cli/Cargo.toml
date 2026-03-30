@@ -1,6 +1,6 @@
 [package]
 name = "uroborosql-fmt-cli"
-version = "1.0.1"
+version.workspace = true
 description = "Crate to run uroborosql-fmt on the CLI"
 authors.workspace = true
 edition.workspace = true
