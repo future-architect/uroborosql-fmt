@@ -404,7 +404,6 @@ async fn range_formatting_returns_edit() {
 }
 
 #[tokio::test]
-#[ignore = "repro: UTF-16 range change corrupts text until conversion is fixed"]
 async fn utf16_range_change_should_not_corrupt_text() {
     let mut server = TestServer::new(Backend::new);
     let uri = Uri::from_str("file:///utf16.sql").unwrap();

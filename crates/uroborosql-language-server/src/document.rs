@@ -10,11 +10,11 @@ pub(crate) struct DocumentState {
     version: i32,
 }
 
-/// Converts an LSP position (line/character) into a char index within the Rope.
+/// Converts an LSP position (line/character in UTF-16 code units) into a char index within the Rope.
 /// Returns `None` if the requested line/character falls outside the current document.
 pub(crate) fn rope_position_to_char(rope: &Rope, position: Position) -> Option<usize> {
     let line = position.line as usize;
-    let column = position.character as usize;
+    let utf16_col = position.character as usize;
     let line_count = rope.len_lines();
 
     if line > line_count {
@@ -22,7 +22,7 @@ pub(crate) fn rope_position_to_char(rope: &Rope, position: Position) -> Option<u
     }
 
     if line == line_count {
-        return if column == 0 {
+        return if utf16_col == 0 {
             Some(rope.len_chars())
         } else {
             None
@@ -30,22 +30,21 @@ pub(crate) fn rope_position_to_char(rope: &Rope, position: Position) -> Option<u
     }
 
     let line_start = rope.line_to_char(line);
-    let line_len = rope.line(line).len_chars();
-    if column > line_len {
-        None
-    } else {
-        Some(line_start + column)
-    }
+    let line_slice = rope.line(line);
+    let char_idx = line_slice.try_utf16_cu_to_char(utf16_col).ok()?;
+    Some(line_start + char_idx)
 }
 
-/// Converts a Rope char index into an LSP position (line/character).
+/// Converts a Rope char index into an LSP position (line/character in UTF-16 code units).
 /// Clamps the index to the end of the document if it exceeds `len_chars`.
 pub(crate) fn rope_char_to_position(rope: &Rope, idx: usize) -> Position {
     let total_chars = rope.len_chars();
     let clamped = idx.min(total_chars);
     let line = rope.char_to_line(clamped);
     let line_start = rope.line_to_char(line);
-    Position::new(line as u32, (clamped - line_start) as u32)
+    let char_offset = clamped - line_start;
+    let utf16_col = rope.line(line).char_to_utf16_cu(char_offset);
+    Position::new(line as u32, utf16_col as u32)
 }
 
 /// Converts an LSP range into a pair of Rope char indices.
