@@ -1,0 +1,32 @@
+name: Release-plz
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-plz:
+    runs-on: ubuntu-latest
+    # fork からの実行を防止
+    if: github.repository == 'future-architect/uroborosql-fmt'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # RELEASE_PLZ_TOKEN (PAT) が必須。
+          # デフォルトの GITHUB_TOKEN で作成したタグは他のワークフロー (on: push: tags) を
+          # トリガーしないため、PAT を使用する必要がある。
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run release-plz
+        uses: release-plz/action@1528104d2ca23787631a1c1f022abb64b34c1e11 # v0.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
