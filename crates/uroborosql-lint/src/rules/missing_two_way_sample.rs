@@ -118,7 +118,7 @@ mod tests {
 
         assert!(diagnostics.iter().all(|diagnostic| {
             let SqlSpan { start, end } = diagnostic.span;
-            &sql[start.byte..end.byte] == ""
+            sql[start.byte..end.byte].is_empty()
         }));
     }
 
@@ -134,7 +134,7 @@ mod tests {
 
         assert!(diagnostics.iter().all(|diagnostic| {
             let SqlSpan { start, end } = diagnostic.span;
-            &sql[start.byte..end.byte] == ""
+            sql[start.byte..end.byte].is_empty()
         }));
     }
 
