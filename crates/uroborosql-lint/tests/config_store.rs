@@ -82,3 +82,39 @@ fn ignores_paths_matching_ignore_globs() {
     assert!(store.is_ignored(&temp.path().join("dist/app.sql")));
     assert!(!store.is_ignored(&temp.path().join("src/app.sql")));
 }
+
+#[test]
+fn uses_explicit_config_parent_as_root_dir() {
+    let temp = tempdir().expect("tempdir");
+    let config_root = temp.path().join("project");
+    let cwd = temp.path().join("cwd");
+
+    fs::create_dir_all(config_root.join("dist")).expect("create dist dir");
+    fs::create_dir_all(config_root.join("src")).expect("create src dir");
+    fs::create_dir_all(&cwd).expect("create cwd dir");
+
+    write_config(
+        &config_root,
+        r#"{
+  "ignore": ["dist/**"],
+  "overrides": [
+    {
+      "files": ["test/**/*.sql"],
+      "rules": {
+        "no-distinct": "off"
+      }
+    }
+  ]
+}"#,
+    );
+
+    let config_path = config_root.join(DEFAULT_CONFIG_FILENAME);
+    let store = ConfigStore::new(cwd, Some(config_path)).expect("config store");
+
+    assert_eq!(store.root_dir(), config_root.as_path());
+    assert!(store.is_ignored(&config_root.join("dist/app.sql")));
+    assert!(!store.is_ignored(&config_root.join("src/app.sql")));
+
+    let state_test = store.resolve(&config_root.join("test/case.sql"));
+    assert_eq!(severity_for_rule(&state_test, "no-distinct"), None);
+}

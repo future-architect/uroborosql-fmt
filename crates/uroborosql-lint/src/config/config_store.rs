@@ -81,10 +81,18 @@ impl ConfigStore {
     ) -> Result<Self, ConfigError> {
         let root_dir = root_dir.into();
         let (lint_config_object, origin) = load_config(&root_dir, config_path)?;
-        let unresolved_config =
-            LintConfig::from_lint_config_object(lint_config_object, &root_dir, origin.clone())?;
+        let effective_root_dir = origin
+            .as_deref()
+            .and_then(Path::parent)
+            .unwrap_or(&root_dir)
+            .to_path_buf();
+        let unresolved_config = LintConfig::from_lint_config_object(
+            lint_config_object,
+            &effective_root_dir,
+            origin.clone(),
+        )?;
         Ok(Self {
-            root_dir,
+            root_dir: effective_root_dir,
             unresolved_config,
         })
     }
