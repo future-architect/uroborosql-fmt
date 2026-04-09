@@ -80,6 +80,19 @@ impl ConfigStore {
         config_path: Option<PathBuf>,
     ) -> Result<Self, ConfigError> {
         let root_dir = root_dir.into();
+        let config_path = config_path
+            .map(|path| {
+                if path.is_absolute() {
+                    path
+                } else {
+                    root_dir.join(path)
+                }
+            })
+            .map(|path| {
+                path.canonicalize()
+                    .map_err(|err| ConfigError::Io(path, err))
+            })
+            .transpose()?;
         let (lint_config_object, origin) = load_config(&root_dir, config_path)?;
         let effective_root_dir = origin
             .as_deref()

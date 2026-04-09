@@ -27,13 +27,13 @@ fn run() -> Result<(), String> {
     let linter = Linter::new();
     let mut exit_with_error = false;
 
-    let path = cli.input;
+    let cwd = env::current_dir().map_err(|err| format!("Failed to get cwd: {err}"))?;
+    let path = resolve_input_path(cli.input, &cwd)?;
     let display = path.display().to_string();
 
     let sql =
         fs::read_to_string(&path).map_err(|err| format!("Failed to read {}: {}", display, err))?;
 
-    let cwd = env::current_dir().map_err(|err| format!("Failed to get cwd: {err}"))?;
     let config_store =
         ConfigStore::new(cwd, cli.config).map_err(|err| format!("Failed to load config: {err}"))?;
 
@@ -62,6 +62,17 @@ fn run() -> Result<(), String> {
     }
 }
 
+fn resolve_input_path(path: PathBuf, cwd: &std::path::Path) -> Result<PathBuf, String> {
+    let path = if path.is_absolute() {
+        path
+    } else {
+        cwd.join(path)
+    };
+
+    path.canonicalize()
+        .map_err(|err| format!("Failed to resolve input path {}: {}", path.display(), err))
+}
+
 fn print_diagnostic(file: &str, diagnostic: &Diagnostic) {
     let line = diagnostic.span.start.line + 1;
     let column = diagnostic.span.start.column + 1;
@@ -82,5 +93,43 @@ fn severity_label(severity: Severity) -> &'static str {
         Severity::Error => "error",
         Severity::Warning => "warning",
         Severity::Info => "info",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::resolve_input_path;
+
+    #[test]
+    fn resolves_relative_input_path_from_cwd() {
+        let temp = tempdir().expect("tempdir");
+        let cwd = temp.path().join("runner");
+        let project = temp.path().join("project");
+        let input = project.join("query.sql");
+
+        fs::create_dir_all(&cwd).expect("create cwd");
+        fs::create_dir_all(&project).expect("create project");
+        fs::write(&input, "select 1").expect("write input");
+
+        let resolved = resolve_input_path("../project/query.sql".into(), &cwd).expect("resolve");
+
+        assert_eq!(resolved, input.canonicalize().expect("canonicalize input"));
+    }
+
+    #[test]
+    fn keeps_absolute_input_path() {
+        let temp = tempdir().expect("tempdir");
+        let input = temp.path().join("query.sql");
+
+        fs::write(&input, "select 1").expect("write input");
+
+        let resolved =
+            resolve_input_path(input.clone(), temp.path()).expect("resolve absolute input");
+
+        assert_eq!(resolved, input.canonicalize().expect("canonicalize input"));
     }
 }
