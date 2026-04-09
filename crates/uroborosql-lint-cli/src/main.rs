@@ -1,6 +1,18 @@
 use std::{env, fs, path::PathBuf, process};
 
-use uroborosql_lint::{Diagnostic, LintError, Linter};
+use clap::Parser;
+use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, Severity};
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// Input SQL file
+    pub input: PathBuf,
+
+    /// Path to configuration file
+    #[arg(long, value_name = "FILE")]
+    pub config: Option<PathBuf>,
+}
 
 fn main() {
     if let Err(err) = run() {
@@ -10,37 +22,35 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    let mut args = env::args_os().skip(1);
-    let Some(path_os) = args.next() else {
-        return Err(format!(
-            "Usage: {} <SQL_FILE>...",
-            env::args()
-                .next()
-                .unwrap_or_else(|| "uroborosql-lint-cli".to_string())
-        ));
-    };
-
-    if args.next().is_some() {
-        return Err("Only a single SQL file can be specified".into());
-    }
+    let cli = Cli::parse();
 
     let linter = Linter::new();
     let mut exit_with_error = false;
 
-    let path = PathBuf::from(path_os);
+    let path = cli.input;
     let display = path.display().to_string();
 
     let sql =
         fs::read_to_string(&path).map_err(|err| format!("Failed to read {}: {}", display, err))?;
 
-    match linter.run(&sql) {
+    let cwd = env::current_dir().map_err(|err| format!("Failed to get cwd: {err}"))?;
+    let config_store =
+        ConfigStore::new(cwd, cli.config).map_err(|err| format!("Failed to load config: {err}"))?;
+
+    if config_store.is_ignored(&path) {
+        return Ok(());
+    }
+
+    let resolved_config = config_store.resolve(&path);
+
+    match linter.run(&sql, &resolved_config) {
         Ok(diagnostics) => {
             for diagnostic in diagnostics {
                 print_diagnostic(&display, &diagnostic);
             }
         }
         Err(LintError::ParseError(message)) => {
-            eprintln!("{}: failed to parse SQL: {}", display, message);
+            eprintln!("{}: error: failed to parse SQL: {}", display, message);
             exit_with_error = true;
         }
     }
@@ -57,7 +67,20 @@ fn print_diagnostic(file: &str, diagnostic: &Diagnostic) {
     let column = diagnostic.span.start.column + 1;
 
     println!(
-        "{}:{}:{}: {}: {}",
-        file, line, column, diagnostic.rule_id, diagnostic.message
+        "{}:{}:{}: {}: {}: {}",
+        file,
+        line,
+        column,
+        severity_label(diagnostic.severity),
+        diagnostic.rule_id,
+        diagnostic.message
     );
+}
+
+fn severity_label(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Error => "error",
+        Severity::Warning => "warning",
+        Severity::Info => "info",
+    }
 }

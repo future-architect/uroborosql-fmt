@@ -7,4 +7,5 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+clap = { version = "4.5", features = ["derive"] }
 uroborosql-lint = { path = "../uroborosql-lint" }
