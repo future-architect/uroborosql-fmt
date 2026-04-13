@@ -32,6 +32,8 @@ Example:
 
 Configures the severity for each rule.
 
+Unknown rule names are reported as configuration errors.
+
 Supported values:
 
 - `off`
@@ -97,5 +99,4 @@ Examples:
 
 ## Path Resolution
 
-- `ignore` and `overrides.files` are resolved relative to the config file
-- `db.path` is resolved relative to the config file
+- `ignore`, `overrides.files`, and `db.path` are resolved relative to the current working directory
