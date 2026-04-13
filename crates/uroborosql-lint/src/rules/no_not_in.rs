@@ -11,6 +11,7 @@ use postgresql_cst_parser::{
 
 /// Detects NOT IN expressions.
 /// Rule source: https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html#not-in-%E5%8F%A5
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NoNotIn;
 
 impl Rule for NoNotIn {
@@ -68,12 +69,12 @@ fn detect_not_in(node: &Node<'_>) -> Option<Range> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{linter::tests::run_with_rules, SqlSpan};
+    use crate::{linter::tests::run_with_rules, rules::RuleEnum, SqlSpan};
 
     #[test]
     fn detects_simple_not_in() {
         let sql = "SELECT value FROM users WHERE id NOT IN (1, 2);";
-        let diagnostics = run_with_rules(sql, vec![Box::new(NoNotIn)]);
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoNotIn(NoNotIn)]);
 
         let diagnostic = diagnostics
             .iter()
@@ -87,7 +88,7 @@ mod tests {
     #[test]
     fn detects_not_in_with_comment() {
         let sql = "SELECT value FROM users WHERE id NOT /* comment */ IN (1);";
-        let diagnostics = run_with_rules(sql, vec![Box::new(NoNotIn)]);
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoNotIn(NoNotIn)]);
 
         let diagnostic = diagnostics
             .iter()
@@ -101,7 +102,7 @@ mod tests {
     #[test]
     fn detects_not_in_with_subquery() {
         let sql = "SELECT value FROM users WHERE id NOT IN (SELECT id FROM admins);";
-        let diagnostics = run_with_rules(sql, vec![Box::new(NoNotIn)]);
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoNotIn(NoNotIn)]);
 
         assert!(
             diagnostics.iter().any(|diag| diag.rule_id == "no-not-in"),
@@ -112,14 +113,14 @@ mod tests {
     #[test]
     fn allows_in_without_not() {
         let sql = "SELECT value FROM users WHERE id IN (1, 2);";
-        let diagnostics = run_with_rules(sql, vec![Box::new(NoNotIn)]);
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoNotIn(NoNotIn)]);
         assert!(diagnostics.is_empty());
     }
 
     #[test]
     fn allows_not_between() {
         let sql = "SELECT value FROM users WHERE id NOT BETWEEN 1 AND 5;";
-        let diagnostics = run_with_rules(sql, vec![Box::new(NoNotIn)]);
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoNotIn(NoNotIn)]);
         assert!(diagnostics.is_empty(), "NOT BETWEEN should be allowed");
     }
 }
