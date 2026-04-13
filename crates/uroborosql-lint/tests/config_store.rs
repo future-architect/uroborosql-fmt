@@ -1,7 +1,9 @@
 use std::fs;
 
 use tempfile::tempdir;
-use uroborosql_lint::{ConfigStore, ResolvedLintConfig, Severity, DEFAULT_CONFIG_FILENAME};
+use uroborosql_lint::{
+    ConfigError, ConfigStore, ResolvedLintConfig, Severity, DEFAULT_CONFIG_FILENAME,
+};
 
 fn write_config(root: &std::path::Path, contents: &str) {
     let path = root.join(DEFAULT_CONFIG_FILENAME);
@@ -126,4 +128,59 @@ fn keeps_cwd_as_root_dir_for_explicit_config() {
 
     let state_test = store.resolve(&test_file.canonicalize().expect("canonicalize test file"));
     assert_eq!(severity_for_rule(&state_test, "no-distinct"), None);
+}
+
+#[test]
+fn rejects_unknown_rule_in_root_rules() {
+    let temp = tempdir().expect("tempdir");
+    write_config(
+        temp.path(),
+        r#"{
+  "rules": {
+    "no-distnct": "error",
+    "no-dstinct": "warn"
+  }
+}"#,
+    );
+
+    let err = ConfigStore::new(temp.path().to_path_buf(), None).expect_err("unknown rule error");
+
+    assert!(matches!(
+        err,
+        ConfigError::UnknownRules { rules }
+            if rules == vec!["no-distnct".to_string(), "no-dstinct".to_string()]
+    ));
+}
+
+#[test]
+fn rejects_unknown_rule_in_override_rules() {
+    let temp = tempdir().expect("tempdir");
+    write_config(
+        temp.path(),
+        r#"{
+  "overrides": [
+    {
+      "files": ["test/**/*.sql"],
+      "rules": {
+        "no-distnct": "off"
+      }
+    },
+    {
+      "files": ["src/**/*.sql"],
+      "rules": {
+        "no-dstinct": "warn",
+        "no-distnct": "error"
+      }
+    }
+  ]
+}"#,
+    );
+
+    let err = ConfigStore::new(temp.path().to_path_buf(), None).expect_err("unknown rule error");
+
+    assert!(matches!(
+        err,
+        ConfigError::UnknownRules { rules }
+            if rules == vec!["no-distnct".to_string(), "no-dstinct".to_string()]
+    ));
 }

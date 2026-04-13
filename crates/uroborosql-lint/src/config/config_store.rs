@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     fs,
     path::{Path, PathBuf},
 };
@@ -70,6 +70,8 @@ pub enum ConfigError {
     Json(PathBuf, #[source] serde_json::Error),
     #[error("invalid glob pattern {0}: {1}")]
     Glob(String, #[source] globset::Error),
+    #[error("unknown rules: {rules:?}")]
+    UnknownRules { rules: Vec<String> },
     #[error("invalid rule setting for {rule}: {value}")]
     InvalidRuleSetting { rule: String, value: Value },
 }
@@ -153,6 +155,7 @@ impl LintConfig {
         lint_config_object: LintConfigObject,
         root_dir: &Path,
     ) -> Result<Self, ConfigError> {
+        validate_rule_names(&lint_config_object)?;
         let rules = parse_rules_map(lint_config_object.rules)?;
         let overrides = lint_config_object
             .overrides
@@ -243,6 +246,32 @@ fn parse_rules_map(
             Ok((name, setting))
         })
         .collect()
+}
+
+fn validate_rule_names(config: &LintConfigObject) -> Result<(), ConfigError> {
+    let mut unknown_rules = BTreeSet::new();
+
+    for name in config.rules.keys() {
+        if RuleEnum::from_name(name).is_none() {
+            unknown_rules.insert(name.clone());
+        }
+    }
+
+    for override_config in &config.overrides {
+        for name in override_config.rules.keys() {
+            if RuleEnum::from_name(name).is_none() {
+                unknown_rules.insert(name.clone());
+            }
+        }
+    }
+
+    if unknown_rules.is_empty() {
+        Ok(())
+    } else {
+        Err(ConfigError::UnknownRules {
+            rules: unknown_rules.into_iter().collect(),
+        })
+    }
 }
 
 fn parse_rule_setting(name: &str, value: &Value) -> Result<RuleSetting, ConfigError> {
