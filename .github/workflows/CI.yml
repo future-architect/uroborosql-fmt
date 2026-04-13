@@ -53,6 +53,9 @@ jobs:
             target: x86_64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
             build: |-
+              # This image ships an older Cargo, so pin Rust 1.86.0 here for edition 2024 support.
+              rustup install 1.86.0 &&
+              rustup default 1.86.0 &&
               set -e &&
               yarn build --target x86_64-unknown-linux-gnu &&
               strip *.node

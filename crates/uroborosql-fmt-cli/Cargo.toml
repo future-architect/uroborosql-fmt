@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 uroborosql-fmt = { workspace = true }
-clap = { version = "4", features = ["derive"] }
+clap = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = "2"
