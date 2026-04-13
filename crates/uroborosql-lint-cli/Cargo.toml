@@ -7,4 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+clap = { workspace = true }
 uroborosql-lint = { path = "../uroborosql-lint" }
+
+[dev-dependencies]
+tempfile = "3"
