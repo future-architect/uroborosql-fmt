@@ -8,6 +8,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::Node};
 const MAX_IN_ELEMENTS: usize = 100;
 
 /// Rule source: https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html#in-%E5%8F%A5-1
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TooLargeInList;
 
 impl Rule for TooLargeInList {
@@ -59,10 +60,10 @@ fn count_expr_list_elements(node: &Node<'_>) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::linter::tests::run_with_rules;
+    use crate::{linter::tests::run_with_rules, rules::RuleEnum};
 
     fn run(sql: &str) -> Vec<Diagnostic> {
-        run_with_rules(sql, vec![Box::new(TooLargeInList)])
+        run_with_rules(sql, vec![RuleEnum::TooLargeInList(TooLargeInList)])
     }
 
     fn repetitions(count: usize) -> String {

@@ -10,6 +10,7 @@ use postgresql_cst_parser::{
 
 /// Detects function usage on columns in JOIN or WHERE conditions.
 /// source: https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html#:~:text=1-,%E3%82%A4%E3%83%B3%E3%83%87%E3%83%83%E3%82%AF%E3%82%B9%E3%82%AB%E3%83%A9%E3%83%A0%E3%81%AB%E9%96%A2%E6%95%B0,-%E3%82%92%E9%80%9A%E3%81%97%E3%81%9F
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoFunctionOnColumnInJoinOrWhere;
 
 struct Report<'a> {
@@ -104,10 +105,15 @@ fn is_in_detection_range(func_expr: &Node) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{linter::tests::run_with_rules, Diagnostic, SqlSpan};
+    use crate::{linter::tests::run_with_rules, Diagnostic, RuleEnum, SqlSpan};
 
     fn run(sql: &str) -> Vec<Diagnostic> {
-        run_with_rules(sql, vec![Box::new(NoFunctionOnColumnInJoinOrWhere)])
+        run_with_rules(
+            sql,
+            vec![RuleEnum::NoFunctionOnColumnInJoinOrWhere(
+                NoFunctionOnColumnInJoinOrWhere,
+            )],
+        )
     }
 
     mod where_clause {
