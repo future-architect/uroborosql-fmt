@@ -94,16 +94,13 @@ impl ConfigStore {
             })
             .transpose()?;
         let (lint_config_object, origin) = load_config(&root_dir, config_path)?;
+        let unresolved_config =
+            LintConfig::from_lint_config_object(lint_config_object, &root_dir, origin.as_deref())?;
         let effective_root_dir = origin
             .as_deref()
             .and_then(Path::parent)
             .unwrap_or(&root_dir)
             .to_path_buf();
-        let unresolved_config = LintConfig::from_lint_config_object(
-            lint_config_object,
-            &effective_root_dir,
-            origin.clone(),
-        )?;
         Ok(Self {
             root_dir: effective_root_dir,
             unresolved_config,
@@ -161,7 +158,7 @@ impl LintConfig {
     fn from_lint_config_object(
         lint_config_object: LintConfigObject,
         root_dir: &Path,
-        origin: Option<PathBuf>,
+        origin: Option<&Path>,
     ) -> Result<Self, ConfigError> {
         let rules = parse_rules_map(lint_config_object.rules)?;
         let overrides = lint_config_object
@@ -170,7 +167,7 @@ impl LintConfig {
             .map(resolve_override)
             .collect::<Result<Vec<_>, _>>()?;
         let ignore = build_globset(&lint_config_object.ignore)?;
-        let db = resolve_db_config(lint_config_object.db, root_dir, origin.as_deref());
+        let db = resolve_db_config(lint_config_object.db, root_dir, origin);
 
         Ok(Self {
             rules,
@@ -253,12 +250,13 @@ fn build_globset(patterns: &[String]) -> Result<GlobSet, ConfigError> {
 fn parse_rules_map(
     rules: HashMap<String, Value>,
 ) -> Result<HashMap<String, RuleSetting>, ConfigError> {
-    let mut parsed = HashMap::new();
-    for (name, value) in rules {
-        let setting = parse_rule_setting(&name, &value)?;
-        parsed.insert(name, setting);
-    }
-    Ok(parsed)
+    rules
+        .into_iter()
+        .map(|(name, value)| {
+            let setting = parse_rule_setting(&name, &value)?;
+            Ok((name, setting))
+        })
+        .collect()
 }
 
 fn parse_rule_setting(name: &str, value: &Value) -> Result<RuleSetting, ConfigError> {

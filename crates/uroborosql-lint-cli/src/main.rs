@@ -78,13 +78,10 @@ fn print_diagnostic(file: &str, diagnostic: &Diagnostic) {
     let column = diagnostic.span.start.column + 1;
 
     println!(
-        "{}:{}:{}: {}: {}: {}",
-        file,
-        line,
-        column,
-        severity_label(diagnostic.severity),
-        diagnostic.rule_id,
-        diagnostic.message
+        "{file}:{line}:{column}: {severity_label}: {rule_id}: {message}",
+        severity_label = severity_label(diagnostic.severity),
+        rule_id = diagnostic.rule_id,
+        message = diagnostic.message
     );
 }
 
