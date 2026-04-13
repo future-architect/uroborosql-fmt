@@ -62,6 +62,11 @@ pub struct ConfigStore {
     unresolved_config: LintConfig,
 }
 
+struct LoadedConfig {
+    config: LintConfigObject,
+    origin: Option<PathBuf>,
+}
+
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("failed to read {0}: {1}")]
@@ -95,8 +100,14 @@ impl ConfigStore {
                     .map_err(|err| ConfigError::Io(path, err))
             })
             .transpose()?;
-        let lint_config_object = load_config(&root_dir, config_path)?;
-        let unresolved_config = LintConfig::from_lint_config_object(lint_config_object, &root_dir)?;
+        let loaded_config = load_config(&root_dir, config_path)?;
+        let config_base_dir = loaded_config
+            .origin
+            .as_deref()
+            .and_then(Path::parent)
+            .unwrap_or(&root_dir);
+        let unresolved_config =
+            LintConfig::from_lint_config_object(loaded_config.config, config_base_dir)?;
         Ok(Self {
             root_dir,
             unresolved_config,
@@ -153,7 +164,7 @@ impl ConfigStore {
 impl LintConfig {
     fn from_lint_config_object(
         lint_config_object: LintConfigObject,
-        root_dir: &Path,
+        config_base_dir: &Path,
     ) -> Result<Self, ConfigError> {
         validate_rule_names(&lint_config_object)?;
         let rules = parse_rules_map(lint_config_object.rules)?;
@@ -163,7 +174,7 @@ impl LintConfig {
             .map(resolve_override)
             .collect::<Result<Vec<_>, _>>()?;
         let ignore = build_globset(&lint_config_object.ignore)?;
-        let db = resolve_db_config(lint_config_object.db, root_dir);
+        let db = resolve_db_config(lint_config_object.db, config_base_dir);
 
         Ok(Self {
             rules,
@@ -174,20 +185,28 @@ impl LintConfig {
     }
 }
 
-fn load_config(
-    root_dir: &Path,
-    config_path: Option<PathBuf>,
-) -> Result<LintConfigObject, ConfigError> {
+fn load_config(root_dir: &Path, config_path: Option<PathBuf>) -> Result<LoadedConfig, ConfigError> {
     if let Some(path) = config_path {
-        return read_config_file(&path);
+        let config = read_config_file(&path)?;
+        return Ok(LoadedConfig {
+            config,
+            origin: Some(path),
+        });
     }
 
     let path = root_dir.join(DEFAULT_CONFIG_FILENAME);
     if path.exists() {
-        return read_config_file(&path);
+        let config = read_config_file(&path)?;
+        return Ok(LoadedConfig {
+            config,
+            origin: Some(path),
+        });
     }
 
-    Ok(LintConfigObject::default())
+    Ok(LoadedConfig {
+        config: LintConfigObject::default(),
+        origin: None,
+    })
 }
 
 fn read_config_file(path: &Path) -> Result<LintConfigObject, ConfigError> {
@@ -204,7 +223,7 @@ fn resolve_override(ov: LintOverride) -> Result<ResolvedOverride, ConfigError> {
     Ok(ResolvedOverride { files, rules })
 }
 
-fn resolve_db_config(config: Option<DbConfig>, root_dir: &Path) -> Option<ResolvedDbConfig> {
+fn resolve_db_config(config: Option<DbConfig>, config_base_dir: &Path) -> Option<ResolvedDbConfig> {
     match config? {
         DbConfig::Server {
             host,
@@ -220,7 +239,7 @@ fn resolve_db_config(config: Option<DbConfig>, root_dir: &Path) -> Option<Resolv
             dbname,
         }),
         DbConfig::File { path } => Some(ResolvedDbConfig::File {
-            path: root_dir.join(path),
+            path: config_base_dir.join(path),
         }),
     }
 }

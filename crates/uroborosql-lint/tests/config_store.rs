@@ -131,6 +131,39 @@ fn keeps_cwd_as_root_dir_for_explicit_config() {
 }
 
 #[test]
+fn resolves_db_file_path_relative_to_explicit_config() {
+    let temp = tempdir().expect("tempdir");
+    let temp_root = temp.path().canonicalize().expect("canonicalize temp root");
+    let config_root = temp_root.join("project/config");
+    let cwd = temp_root.join("cwd");
+    let schema_path = config_root.join("schema/schema.sql");
+
+    fs::create_dir_all(schema_path.parent().expect("schema parent")).expect("create schema dir");
+    fs::create_dir_all(&cwd).expect("create cwd dir");
+    fs::write(&schema_path, "create table users (id bigint);").expect("write schema file");
+
+    write_config(
+        &config_root,
+        r#"{
+  "db": {
+    "schemaProvider": "file",
+    "path": "schema/schema.sql"
+  }
+}"#,
+    );
+
+    let config_path = config_root.join(DEFAULT_CONFIG_FILENAME);
+    let store = ConfigStore::new(cwd, Some(config_path)).expect("config store");
+    let state = store.resolve(temp_root.join("anywhere/query.sql").as_path());
+
+    let db = state.db.expect("resolved db config");
+    assert_eq!(
+        format!("{db:?}"),
+        format!("File {{ path: {:?} }}", schema_path)
+    );
+}
+
+#[test]
 fn rejects_unknown_rule_in_root_rules() {
     let temp = tempdir().expect("tempdir");
     write_config(

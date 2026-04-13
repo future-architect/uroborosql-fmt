@@ -96,4 +96,5 @@ Examples:
 
 ## Path Resolution
 
-- `ignore`, `overrides.files`, and `db.path` are resolved relative to the current working directory
+- `ignore` and `overrides.files` are resolved relative to the current working directory
+- `db.path` is resolved relative to the directory containing the loaded config file
