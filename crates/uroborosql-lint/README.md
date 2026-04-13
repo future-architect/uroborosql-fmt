@@ -36,12 +36,9 @@ Unknown rule names are reported as configuration errors.
 
 Supported values:
 
-- `off`
-- `warn` / `warning`
-- `error`
-- `"0"` / `0`
-- `"1"` / `1`
-- `"2"` / `2`
+- `off` / `"0"` / `0`
+- `warn` / `warning` / `"1"` / `1`
+- `error` / `"2"` / `2`
 
 ### `ignore`
 
