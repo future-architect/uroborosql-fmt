@@ -9,6 +9,7 @@ use postgresql_cst_parser::{
 };
 
 /// Rule source: https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html#union-%E5%8F%A5
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NoUnionDistinct;
 
 impl Rule for NoUnionDistinct {
@@ -91,12 +92,12 @@ fn extend_range(base: Range, extension: Range) -> Range {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{linter::tests::run_with_rules, SqlSpan};
+    use crate::{linter::tests::run_with_rules, rules::RuleEnum, SqlSpan};
 
     #[test]
     fn detects_union_without_all() {
         let sql = "SELECT 1 UNION SELECT 2;";
-        let diagnostics = run_with_rules(sql, vec![Box::new(NoUnionDistinct)]);
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoUnionDistinct(NoUnionDistinct)]);
         let diagnostic = diagnostics
             .iter()
             .find(|diag| diag.rule_id == "no-union-distinct")
@@ -109,7 +110,7 @@ mod tests {
     #[test]
     fn detects_union_distinct() {
         let sql = "SELECT 1 UNION DISTINCT SELECT 2;";
-        let diagnostics = run_with_rules(sql, vec![Box::new(NoUnionDistinct)]);
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoUnionDistinct(NoUnionDistinct)]);
         let diagnostic = diagnostics
             .iter()
             .find(|diag| diag.rule_id == "no-union-distinct")
@@ -122,7 +123,7 @@ mod tests {
     #[test]
     fn detects_union_distinct_with_comment() {
         let sql = "SELECT 1 UNION /* comment */ DISTINCT SELECT 2;";
-        let diagnostics = run_with_rules(sql, vec![Box::new(NoUnionDistinct)]);
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoUnionDistinct(NoUnionDistinct)]);
         let diagnostic = diagnostics
             .iter()
             .find(|diag| diag.rule_id == "no-union-distinct")
@@ -135,7 +136,7 @@ mod tests {
     #[test]
     fn allows_union_all() {
         let sql = "SELECT 1 UNION ALL SELECT 2;";
-        let diagnostics = run_with_rules(sql, vec![Box::new(NoUnionDistinct)]);
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoUnionDistinct(NoUnionDistinct)]);
         assert!(
             diagnostics
                 .iter()
@@ -147,7 +148,7 @@ mod tests {
     #[test]
     fn allows_union_all_with_comment() {
         let sql = "SELECT 1 UNION /* comment */ ALL SELECT 2;";
-        let diagnostics = run_with_rules(sql, vec![Box::new(NoUnionDistinct)]);
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoUnionDistinct(NoUnionDistinct)]);
 
         assert_eq!(diagnostics.len(), 0);
     }
