@@ -84,18 +84,20 @@ fn ignores_paths_matching_ignore_globs() {
 }
 
 #[test]
-fn uses_explicit_config_parent_as_root_dir() {
+fn keeps_cwd_as_root_dir_for_explicit_config() {
     let temp = tempdir().expect("tempdir");
-    let config_root = temp.path().join("project");
-    let cwd = temp.path().join("cwd");
-    let dist_file = config_root.join("dist/app.sql");
-    let src_file = config_root.join("src/app.sql");
-    let test_file = config_root.join("test/case.sql");
+    let temp_root = temp.path().canonicalize().expect("canonicalize temp root");
+    let config_root = temp_root.join("project");
+    let cwd = temp_root.join("cwd");
+    let dist_file = cwd.join("dist/app.sql");
+    let src_file = cwd.join("src/app.sql");
+    let test_file = cwd.join("test/case.sql");
 
-    fs::create_dir_all(config_root.join("dist")).expect("create dist dir");
-    fs::create_dir_all(config_root.join("src")).expect("create src dir");
-    fs::create_dir_all(config_root.join("test")).expect("create test dir");
+    fs::create_dir_all(&config_root).expect("create config root");
     fs::create_dir_all(&cwd).expect("create cwd dir");
+    fs::create_dir_all(cwd.join("dist")).expect("create dist dir");
+    fs::create_dir_all(cwd.join("src")).expect("create src dir");
+    fs::create_dir_all(cwd.join("test")).expect("create test dir");
     fs::write(&dist_file, "select 1").expect("write dist file");
     fs::write(&src_file, "select 1").expect("write src file");
     fs::write(&test_file, "select distinct foo from bar").expect("write test file");
@@ -116,14 +118,9 @@ fn uses_explicit_config_parent_as_root_dir() {
     );
 
     let config_path = config_root.join(DEFAULT_CONFIG_FILENAME);
-    let store = ConfigStore::new(cwd, Some(config_path)).expect("config store");
+    let store = ConfigStore::new(cwd.clone(), Some(config_path)).expect("config store");
 
-    assert_eq!(
-        store.root_dir(),
-        config_root
-            .canonicalize()
-            .expect("canonicalize config root")
-    );
+    assert_eq!(store.root_dir(), cwd.as_path());
     assert!(store.is_ignored(&dist_file.canonicalize().expect("canonicalize dist file")));
     assert!(!store.is_ignored(&src_file.canonicalize().expect("canonicalize src file")));
 
