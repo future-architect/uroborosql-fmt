@@ -18,13 +18,12 @@ fn read_before_end(src_lines: &[&str], cursor: &mut usize) -> Vec<String> {
         let kind = Kind::guess_from_str(current_line);
 
         match kind {
-            Kind::If | Kind::Begin => {
+            Kind::If | Kind::Begin
                 // 入れ子カウントをインクリメント
                 // ただし、一行目の場合は入れ子とは関係のない/*IF*/、/*BEGIN*/なので無視する
-                if !is_first_line {
+                if !is_first_line => {
                     nest_count += 1;
                 }
-            }
             Kind::End => {
                 if nest_count == 0 {
                     // 現在見ているネストは終了したのでbreak
