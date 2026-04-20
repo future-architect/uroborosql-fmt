@@ -1,0 +1,102 @@
+mod test_harness;
+
+use std::str::FromStr;
+use std::time::Duration;
+
+use tower_lsp_server::lsp_types::Uri;
+
+use test_harness::*;
+
+#[tokio::test]
+async fn diagnostics_publish_on_open_and_save() {
+    let mut server = new_test_server();
+    let uri = Uri::from_str("file:///test.sql").unwrap();
+
+    initialize_server(&mut server).await;
+
+    server
+        .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let diag_notification = server.receive_notification().await;
+    assert_eq!(
+        diag_notification.method(),
+        "textDocument/publishDiagnostics"
+    );
+    let diagnostics = diag_notification.params().unwrap()["diagnostics"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert!(!diagnostics.is_empty());
+
+    server
+        .send_request(build_did_change(&uri, 2, "SELECT DISTINCT id FROM users;"))
+        .await;
+    let change_notification = server
+        .receive_notification_timeout(Duration::from_millis(100))
+        .await;
+    assert!(change_notification.is_none());
+
+    server
+        .send_request(build_did_save(&uri, "SELECT DISTINCT id FROM users;"))
+        .await;
+    let save_notification = server.receive_notification().await;
+    assert_eq!(
+        save_notification.method(),
+        "textDocument/publishDiagnostics"
+    );
+}
+
+#[tokio::test]
+async fn did_close_clears_diagnostics() {
+    let mut server = new_test_server();
+    let uri = Uri::from_str("file:///close.sql").unwrap();
+
+    initialize_server(&mut server).await;
+
+    server
+        .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let open_notification = server.receive_notification().await;
+    assert_eq!(
+        open_notification.method(),
+        "textDocument/publishDiagnostics"
+    );
+
+    server.send_request(build_did_close(&uri)).await;
+    let close_notification = server.receive_notification().await;
+    assert_eq!(
+        close_notification.method(),
+        "textDocument/publishDiagnostics"
+    );
+    assert_eq!(
+        close_notification.params().unwrap()["diagnostics"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn did_change_watched_files_relints_open_documents() {
+    let mut server = new_test_server();
+    let uri = Uri::from_str("file:///watched.sql").unwrap();
+
+    initialize_server(&mut server).await;
+
+    server
+        .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let _ = server.receive_notification().await;
+
+    server
+        .send_request(build_did_change_watched_files(
+            Uri::from_str("file:///tmp/.uroborosqllintrc.json").unwrap(),
+        ))
+        .await;
+    let diag_notification = server.receive_notification().await;
+    assert_eq!(
+        diag_notification.method(),
+        "textDocument/publishDiagnostics"
+    );
+}
