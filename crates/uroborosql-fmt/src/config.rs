@@ -35,12 +35,9 @@ impl Case {
     }
 }
 
-/// ユーザーが明示的に指定したオプションのみを保持する構造体。
+/// ユーザーが明示的に指定したオプションのみを保持する構造体
 ///
 /// - 設定ファイル (`.uroborosqlfmtrc.json`) とオーバーライド JSON を型付きでマージする際の中間表現
-/// - `ClientConfig` (LSP) からも flatten して再利用することで、フィールド列挙を 1 箇所に集約
-/// - snake_case (設定ファイル) と camelCase (VSCode 等の LSP クライアント) の両方で deserialize 可能
-///   にするため、複数単語フィールドには `#[serde(alias)]` で camelCase の別名を付与している
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct PartialConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -130,7 +127,7 @@ pub struct PartialConfig {
 }
 
 impl PartialConfig {
-    /// `other` の値で `self` を上書きする (other 優先)。
+    /// `other` の値で `self` を上書きしてマージする
     pub fn merge(self, other: PartialConfig) -> PartialConfig {
         PartialConfig {
             debug: other.debug.or(self.debug),
@@ -162,7 +159,7 @@ impl PartialConfig {
         }
     }
 
-    /// `None` のフィールドをそれぞれの既定値で埋めて、確定値 `Config` を生成する。
+    /// `None` のフィールドをそれぞれの既定値で埋めて、確定値 `Config` を生成する
     pub fn resolve(self) -> Config {
         Config {
             debug: self.debug.unwrap_or(false),
