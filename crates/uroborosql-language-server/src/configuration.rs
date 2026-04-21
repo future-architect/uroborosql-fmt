@@ -3,30 +3,26 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tower_lsp_server::lsp_types::request::{Request, WorkspaceConfiguration};
 use tower_lsp_server::lsp_types::{ConfigurationItem, MessageType};
+use uroborosql_fmt::config::PartialConfig;
 use uroborosql_lint::ConfigStore;
 
 use crate::{Backend, CONFIGURATION_SECTION};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all(serialize = "snake_case", deserialize = "camelCase"))]
 pub(crate) struct ClientConfig {
-    pub debug: Option<bool>,
-    pub tab_size: Option<usize>,
-    pub complement_alias: Option<bool>,
-    pub trim_bind_param: Option<bool>,
-    pub keyword_case: Option<String>,
-    pub identifier_case: Option<String>,
-    pub max_char_per_line: Option<isize>,
-    pub complement_outer_keyword: Option<bool>,
-    pub complement_column_as_keyword: Option<bool>,
-    pub remove_table_as_keyword: Option<bool>,
-    pub remove_redundant_nest: Option<bool>,
-    pub complement_sql_id: Option<bool>,
-    pub convert_double_colon_cast: Option<bool>,
-    pub unify_not_equal: Option<bool>,
-    pub indent_tab: Option<bool>,
-    pub use_parser_error_recovery: Option<bool>,
+    #[serde(flatten)]
+    pub formatter: PartialConfig,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "configurationFilePath"
+    )]
     pub configuration_file_path: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "lintConfigurationFilePath"
+    )]
     pub lint_configuration_file_path: Option<String>,
 }
 
