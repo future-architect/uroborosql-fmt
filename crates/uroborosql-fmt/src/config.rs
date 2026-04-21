@@ -119,11 +119,7 @@ pub struct PartialConfig {
         alias = "unifyNotEqual"
     )]
     pub unify_not_equal: Option<bool>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "indentTab"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "indentTab")]
     pub indent_tab: Option<bool>,
     #[serde(
         default,
