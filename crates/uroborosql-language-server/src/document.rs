@@ -78,14 +78,15 @@ impl Backend {
             if version < doc.version {
                 return;
             }
-            doc.version = version;
             if let Some(range) = change.range {
                 if let Some((start, end)) = rope_range_to_char_range(&doc.rope, &range) {
                     doc.rope.remove(start..end);
                     doc.rope.insert(start, &change.text);
+                    doc.version = version;
                 }
             } else {
                 doc.rope = Rope::from_str(&change.text);
+                doc.version = version;
             }
         }
     }
