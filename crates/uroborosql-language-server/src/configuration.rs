@@ -61,6 +61,11 @@ impl Backend {
             return;
         };
 
+        if received_config.is_null() {
+            *self.client_config.write().unwrap() = ClientConfig::default();
+            return;
+        }
+
         match serde_json::from_value::<ClientConfig>(received_config) {
             Ok(config) => {
                 *self.client_config.write().unwrap() = config;
@@ -99,10 +104,6 @@ impl Backend {
     }
 }
 
-fn config_path_is_specified(possible_config_path: &Option<String>) -> bool {
-    matches!(possible_config_path, Some(path_string) if !path_string.is_empty())
-}
-
 pub(crate) fn resolve_config_path(
     root_dir: Option<&Path>,
     raw_path: Option<String>,
@@ -110,8 +111,8 @@ pub(crate) fn resolve_config_path(
 ) -> Option<PathBuf> {
     let root_dir = root_dir?;
 
-    if config_path_is_specified(&raw_path) {
-        let path = PathBuf::from(raw_path.expect("checked above"));
+    if let Some(path_string) = raw_path.filter(|s| !s.is_empty()) {
+        let path = PathBuf::from(path_string);
         return if path.is_absolute() {
             Some(path)
         } else {

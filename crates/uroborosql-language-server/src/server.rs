@@ -57,7 +57,7 @@ impl LanguageServer for Backend {
             },
             server_info: Some(ServerInfo {
                 name: "uroborosql-language-server".into(),
-                version: None,
+                version: Some(env!("CARGO_PKG_VERSION").into()),
             }),
         })
     }
