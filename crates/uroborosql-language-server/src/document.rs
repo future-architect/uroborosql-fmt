@@ -10,7 +10,7 @@ pub(crate) struct DocumentState {
     version: i32,
 }
 
-pub(crate) fn rope_position_to_char(rope: &Rope, position: Position) -> Option<usize> {
+pub(crate) fn rope_position_to_char_index(rope: &Rope, position: Position) -> Option<usize> {
     let line = position.line as usize;
     let utf16_col = position.character as usize;
     let line_count = rope.len_lines();
@@ -29,7 +29,7 @@ pub(crate) fn rope_position_to_char(rope: &Rope, position: Position) -> Option<u
     Some(line_start + char_idx)
 }
 
-pub(crate) fn rope_char_to_position(rope: &Rope, idx: usize) -> Position {
+pub(crate) fn rope_char_index_to_position(rope: &Rope, idx: usize) -> Position {
     let clamped = idx.min(rope.len_chars());
     let line = rope.char_to_line(clamped);
     let line_start = rope.line_to_char(line);
@@ -38,9 +38,9 @@ pub(crate) fn rope_char_to_position(rope: &Rope, idx: usize) -> Position {
     Position::new(line as u32, utf16_col as u32)
 }
 
-pub(crate) fn rope_range_to_char_range(rope: &Rope, range: &Range) -> Option<(usize, usize)> {
-    let start = rope_position_to_char(rope, range.start)?;
-    let end = rope_position_to_char(rope, range.end)?;
+pub(crate) fn rope_range_to_char_index_range(rope: &Rope, range: &Range) -> Option<(usize, usize)> {
+    let start = rope_position_to_char_index(rope, range.start)?;
+    let end = rope_position_to_char_index(rope, range.end)?;
     Some((start, end))
 }
 
@@ -79,7 +79,7 @@ impl Backend {
                 return;
             }
             if let Some(range) = change.range {
-                if let Some((start, end)) = rope_range_to_char_range(&doc.rope, &range) {
+                if let Some((start, end)) = rope_range_to_char_index_range(&doc.rope, &range) {
                     doc.rope.remove(start..end);
                     doc.rope.insert(start, &change.text);
                     doc.version = version;

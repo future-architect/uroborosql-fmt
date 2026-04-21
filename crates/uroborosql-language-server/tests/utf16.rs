@@ -2,6 +2,7 @@ mod test_harness;
 
 use std::str::FromStr;
 
+use tower_lsp_server::lsp_types::notification::{Notification, PublishDiagnostics};
 use tower_lsp_server::lsp_types::{Position, Range, Uri};
 
 use test_harness::*;
@@ -31,10 +32,7 @@ async fn utf16_range_change_should_not_corrupt_text() {
 
     server.send_request(build_did_save_without_text(&uri)).await;
     let save_notification = server.receive_notification().await;
-    assert_eq!(
-        save_notification.method(),
-        "textDocument/publishDiagnostics"
-    );
+    assert_eq!(save_notification.method(), PublishDiagnostics::METHOD);
 
     let diagnostics = save_notification.params().unwrap()["diagnostics"]
         .as_array()
@@ -60,10 +58,7 @@ async fn diagnostics_range_uses_utf16_columns() {
     let original = "SELECT DISTINCT '😀a';";
     server.send_request(build_did_open(&uri, original, 1)).await;
     let diag_notification = server.receive_notification().await;
-    assert_eq!(
-        diag_notification.method(),
-        "textDocument/publishDiagnostics"
-    );
+    assert_eq!(diag_notification.method(), PublishDiagnostics::METHOD);
 
     let diagnostics = diag_notification.params().unwrap()["diagnostics"]
         .as_array()

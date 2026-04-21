@@ -4,6 +4,10 @@ use std::str::FromStr;
 
 use tower_lsp_server::UriExt;
 use tower_lsp_server::lsp_types::Uri;
+use tower_lsp_server::lsp_types::notification::{Notification, PublishDiagnostics};
+use tower_lsp_server::lsp_types::request::{
+    RegisterCapability, Request as LspRequest, UnregisterCapability, WorkspaceConfiguration,
+};
 
 use test_harness::*;
 
@@ -21,18 +25,15 @@ async fn initialize_uses_root_uri_when_workspace_folders_are_missing() {
     server.send_request(build_initialized()).await;
 
     let config_request = server.receive_server_request().await;
-    assert_eq!(config_request.method(), "workspace/configuration");
+    assert_eq!(config_request.method(), WorkspaceConfiguration::METHOD);
     let register_request = server.receive_server_request().await;
-    assert_eq!(register_request.method(), "client/registerCapability");
+    assert_eq!(register_request.method(), RegisterCapability::METHOD);
 
     server
         .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
         .await;
     let diag_notification = server.receive_notification().await;
-    assert_eq!(
-        diag_notification.method(),
-        "textDocument/publishDiagnostics"
-    );
+    assert_eq!(diag_notification.method(), PublishDiagnostics::METHOD);
     assert!(
         !diag_notification.params().unwrap()["diagnostics"]
             .as_array()
@@ -55,14 +56,11 @@ async fn did_change_configuration_requests_workspace_configuration_again() {
 
     server.send_request(build_did_change_configuration()).await;
     let config_request = server.receive_server_request().await;
-    assert_eq!(config_request.method(), "workspace/configuration");
+    assert_eq!(config_request.method(), WorkspaceConfiguration::METHOD);
     let unregister_request = server.receive_server_request().await;
-    assert_eq!(unregister_request.method(), "client/unregisterCapability");
+    assert_eq!(unregister_request.method(), UnregisterCapability::METHOD);
     let register_request = server.receive_server_request().await;
-    assert_eq!(register_request.method(), "client/registerCapability");
+    assert_eq!(register_request.method(), RegisterCapability::METHOD);
     let diag_notification = server.receive_notification().await;
-    assert_eq!(
-        diag_notification.method(),
-        "textDocument/publishDiagnostics"
-    );
+    assert_eq!(diag_notification.method(), PublishDiagnostics::METHOD);
 }

@@ -1,11 +1,12 @@
 use tower_lsp_server::LanguageServer;
 use tower_lsp_server::jsonrpc::Result;
+use tower_lsp_server::lsp_types::notification::{DidChangeWatchedFiles, Notification};
 use tower_lsp_server::lsp_types::*;
 use uroborosql_fmt::format_sql;
 use uroborosql_lint::DEFAULT_CONFIG_FILENAME;
 
 use crate::Backend;
-use crate::document::{rope_char_to_position, rope_position_to_char};
+use crate::document::{rope_char_index_to_position, rope_position_to_char_index};
 
 impl LanguageServer for Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
@@ -160,7 +161,7 @@ impl LanguageServer for Backend {
                 Ok(Some(vec![TextEdit {
                     range: Range {
                         start: Position::new(0, 0),
-                        end: rope_char_to_position(&rope, rope.len_chars()),
+                        end: rope_char_index_to_position(&rope, rope.len_chars()),
                     },
                     new_text: formatted,
                 }]))
@@ -186,10 +187,10 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let Some(start_char) = rope_position_to_char(&rope, params.range.start) else {
+        let Some(start_char) = rope_position_to_char_index(&rope, params.range.start) else {
             return Ok(None);
         };
-        let Some(end_char) = rope_position_to_char(&rope, params.range.end) else {
+        let Some(end_char) = rope_position_to_char_index(&rope, params.range.end) else {
             return Ok(None);
         };
         if start_char > end_char || end_char > rope.len_chars() {
@@ -204,8 +205,8 @@ impl LanguageServer for Backend {
         match format_sql(&slice, Some(&client_config_json), fmt_config_path) {
             Ok(formatted) => Ok(Some(vec![TextEdit {
                 range: Range {
-                    start: rope_char_to_position(&rope, start_char),
-                    end: rope_char_to_position(&rope, end_char),
+                    start: rope_char_index_to_position(&rope, start_char),
+                    end: rope_char_index_to_position(&rope, end_char),
                 },
                 new_text: formatted,
             }])),
@@ -241,7 +242,7 @@ impl Backend {
         if *self.has_watched_files_registration.read().unwrap() {
             let unregisterations = vec![Unregistration {
                 id: "uroborosql-fmt-watcher".to_string(),
-                method: "workspace/didChangeWatchedFiles".to_string(),
+                method: DidChangeWatchedFiles::METHOD.to_string(),
             }];
             if let Err(err) = self.client.unregister_capability(unregisterations).await {
                 self.client
@@ -266,7 +267,7 @@ impl Backend {
 
         let registrations = vec![Registration {
             id: "uroborosql-fmt-watcher".to_string(),
-            method: "workspace/didChangeWatchedFiles".to_string(),
+            method: DidChangeWatchedFiles::METHOD.to_string(),
             register_options: Some(serde_json::to_value(register_options).unwrap()),
         }];
 

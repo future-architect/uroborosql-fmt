@@ -9,6 +9,14 @@ use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
 use tower_lsp_server::jsonrpc::{Request, Response};
 use tower_lsp_server::lsp_types::Uri;
+use tower_lsp_server::lsp_types::notification::{
+    DidChangeConfiguration, DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument,
+    DidOpenTextDocument, DidSaveTextDocument, Initialized, LogMessage, Notification,
+};
+use tower_lsp_server::lsp_types::request::{
+    Formatting, Initialize, RangeFormatting, RegisterCapability, Request as LspRequest,
+    WorkspaceConfiguration,
+};
 use tower_lsp_server::lsp_types::*;
 use tower_lsp_server::{Client, LanguageServer, LspService, Server};
 use uroborosql_language_server::Backend;
@@ -125,7 +133,7 @@ impl TestServer {
     async fn handle_server_request(&mut self, frame: String) {
         let req: Request = serde_json::from_str(&frame).unwrap();
         if let Some(id) = req.id().cloned() {
-            let result = if req.method() == "workspace/configuration" {
+            let result = if req.method() == WorkspaceConfiguration::METHOD {
                 self.workspace_configuration_responses
                     .pop_front()
                     .unwrap_or(LSPAny::Null)
@@ -148,7 +156,7 @@ impl TestServer {
                     self.handle_server_request(frame).await;
                 } else {
                     if value.get("method").and_then(|method| method.as_str())
-                        == Some("window/logMessage")
+                        == Some(LogMessage::METHOD)
                     {
                         continue;
                     }
@@ -211,20 +219,20 @@ pub(crate) fn build_initialize_with_root_uri(
         },
         ..InitializeParams::default()
     };
-    Request::build("initialize")
+    Request::build(Initialize::METHOD)
         .params(json!(params))
         .id(id)
         .finish()
 }
 
 pub(crate) fn build_initialized() -> Request {
-    Request::build("initialized")
+    Request::build(Initialized::METHOD)
         .params(json!(InitializedParams {}))
         .finish()
 }
 
 pub(crate) fn build_did_open(uri: &Uri, text: &str, version: i32) -> Request {
-    Request::build("textDocument/didOpen")
+    Request::build(DidOpenTextDocument::METHOD)
         .params(json!(DidOpenTextDocumentParams {
             text_document: TextDocumentItem {
                 uri: uri.clone(),
@@ -237,7 +245,7 @@ pub(crate) fn build_did_open(uri: &Uri, text: &str, version: i32) -> Request {
 }
 
 pub(crate) fn build_did_change(uri: &Uri, version: i32, text: &str) -> Request {
-    Request::build("textDocument/didChange")
+    Request::build(DidChangeTextDocument::METHOD)
         .params(json!(DidChangeTextDocumentParams {
             text_document: VersionedTextDocumentIdentifier {
                 uri: uri.clone(),
@@ -253,7 +261,7 @@ pub(crate) fn build_did_change(uri: &Uri, version: i32, text: &str) -> Request {
 }
 
 pub(crate) fn build_did_change_range(uri: &Uri, version: i32, range: Range, text: &str) -> Request {
-    Request::build("textDocument/didChange")
+    Request::build(DidChangeTextDocument::METHOD)
         .params(json!(DidChangeTextDocumentParams {
             text_document: VersionedTextDocumentIdentifier {
                 uri: uri.clone(),
@@ -269,7 +277,7 @@ pub(crate) fn build_did_change_range(uri: &Uri, version: i32, range: Range, text
 }
 
 pub(crate) fn build_did_save(uri: &Uri, text: &str) -> Request {
-    Request::build("textDocument/didSave")
+    Request::build(DidSaveTextDocument::METHOD)
         .params(json!(DidSaveTextDocumentParams {
             text_document: TextDocumentIdentifier { uri: uri.clone() },
             text: Some(text.into()),
@@ -278,7 +286,7 @@ pub(crate) fn build_did_save(uri: &Uri, text: &str) -> Request {
 }
 
 pub(crate) fn build_did_save_without_text(uri: &Uri) -> Request {
-    Request::build("textDocument/didSave")
+    Request::build(DidSaveTextDocument::METHOD)
         .params(json!(DidSaveTextDocumentParams {
             text_document: TextDocumentIdentifier { uri: uri.clone() },
             text: None,
@@ -287,7 +295,7 @@ pub(crate) fn build_did_save_without_text(uri: &Uri) -> Request {
 }
 
 pub(crate) fn build_did_close(uri: &Uri) -> Request {
-    Request::build("textDocument/didClose")
+    Request::build(DidCloseTextDocument::METHOD)
         .params(json!(DidCloseTextDocumentParams {
             text_document: TextDocumentIdentifier { uri: uri.clone() },
         }))
@@ -295,7 +303,7 @@ pub(crate) fn build_did_close(uri: &Uri) -> Request {
 }
 
 pub(crate) fn build_did_change_configuration() -> Request {
-    Request::build("workspace/didChangeConfiguration")
+    Request::build(DidChangeConfiguration::METHOD)
         .params(json!(DidChangeConfigurationParams {
             settings: serde_json::Value::Null,
         }))
@@ -303,7 +311,7 @@ pub(crate) fn build_did_change_configuration() -> Request {
 }
 
 pub(crate) fn build_did_change_watched_files(uri: Uri) -> Request {
-    Request::build("workspace/didChangeWatchedFiles")
+    Request::build(DidChangeWatchedFiles::METHOD)
         .params(json!(DidChangeWatchedFilesParams {
             changes: vec![FileEvent {
                 uri,
@@ -314,7 +322,7 @@ pub(crate) fn build_did_change_watched_files(uri: Uri) -> Request {
 }
 
 pub(crate) fn build_formatting(uri: &Uri, id: i64) -> Request {
-    Request::build("textDocument/formatting")
+    Request::build(Formatting::METHOD)
         .params(json!(DocumentFormattingParams {
             text_document: TextDocumentIdentifier { uri: uri.clone() },
             options: FormattingOptions {
@@ -329,7 +337,7 @@ pub(crate) fn build_formatting(uri: &Uri, id: i64) -> Request {
 }
 
 pub(crate) fn build_range_formatting(uri: &Uri, range: Range, id: i64) -> Request {
-    Request::build("textDocument/rangeFormatting")
+    Request::build(RangeFormatting::METHOD)
         .params(json!(DocumentRangeFormattingParams {
             text_document: TextDocumentIdentifier { uri: uri.clone() },
             range,
@@ -354,10 +362,10 @@ pub(crate) async fn initialize_server(server: &mut TestServer) {
     server.send_request(build_initialized()).await;
 
     let config_request = server.receive_server_request().await;
-    assert_eq!(config_request.method(), "workspace/configuration");
+    assert_eq!(config_request.method(), WorkspaceConfiguration::METHOD);
 
     let register_request = server.receive_server_request().await;
-    assert_eq!(register_request.method(), "client/registerCapability");
+    assert_eq!(register_request.method(), RegisterCapability::METHOD);
 }
 
 pub(crate) async fn initialize_server_with_root_uri(
@@ -376,10 +384,10 @@ pub(crate) async fn initialize_server_with_root_uri(
     server.send_request(build_initialized()).await;
 
     let config_request = server.receive_server_request().await;
-    assert_eq!(config_request.method(), "workspace/configuration");
+    assert_eq!(config_request.method(), WorkspaceConfiguration::METHOD);
 
     let register_request = server.receive_server_request().await;
-    assert_eq!(register_request.method(), "client/registerCapability");
+    assert_eq!(register_request.method(), RegisterCapability::METHOD);
 }
 
 pub(crate) fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {

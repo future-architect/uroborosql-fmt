@@ -9,7 +9,7 @@ use uroborosql_lint::{
 
 use crate::Backend;
 use crate::configuration::resolve_config_path;
-use crate::document::rope_char_to_position;
+use crate::document::rope_char_index_to_position;
 use crate::paths::file_uri_to_path;
 
 impl Backend {
@@ -83,8 +83,8 @@ fn to_lsp_diagnostic(diag: SqlDiagnostic, rope: Option<&ropey::Rope>) -> Diagnos
 
     let range = if let Some(rope) = rope {
         Range {
-            start: rope_char_to_position(rope, rope.byte_to_char(diag.span.start.byte)),
-            end: rope_char_to_position(rope, rope.byte_to_char(diag.span.end.byte)),
+            start: rope_char_index_to_position(rope, rope.byte_to_char(diag.span.start.byte)),
+            end: rope_char_index_to_position(rope, rope.byte_to_char(diag.span.end.byte)),
         }
     } else {
         Range {

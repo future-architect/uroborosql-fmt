@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use tower_lsp_server::lsp_types::Uri;
+use tower_lsp_server::lsp_types::notification::{Notification, PublishDiagnostics};
 
 use test_harness::*;
 
@@ -18,10 +19,7 @@ async fn diagnostics_publish_on_open_and_save() {
         .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
         .await;
     let diag_notification = server.receive_notification().await;
-    assert_eq!(
-        diag_notification.method(),
-        "textDocument/publishDiagnostics"
-    );
+    assert_eq!(diag_notification.method(), PublishDiagnostics::METHOD);
     let diagnostics = diag_notification.params().unwrap()["diagnostics"]
         .as_array()
         .unwrap()
@@ -40,10 +38,7 @@ async fn diagnostics_publish_on_open_and_save() {
         .send_request(build_did_save(&uri, "SELECT DISTINCT id FROM users;"))
         .await;
     let save_notification = server.receive_notification().await;
-    assert_eq!(
-        save_notification.method(),
-        "textDocument/publishDiagnostics"
-    );
+    assert_eq!(save_notification.method(), PublishDiagnostics::METHOD);
 }
 
 #[tokio::test]
@@ -57,17 +52,11 @@ async fn did_close_clears_diagnostics() {
         .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
         .await;
     let open_notification = server.receive_notification().await;
-    assert_eq!(
-        open_notification.method(),
-        "textDocument/publishDiagnostics"
-    );
+    assert_eq!(open_notification.method(), PublishDiagnostics::METHOD);
 
     server.send_request(build_did_close(&uri)).await;
     let close_notification = server.receive_notification().await;
-    assert_eq!(
-        close_notification.method(),
-        "textDocument/publishDiagnostics"
-    );
+    assert_eq!(close_notification.method(), PublishDiagnostics::METHOD);
     assert_eq!(
         close_notification.params().unwrap()["diagnostics"]
             .as_array()
@@ -95,8 +84,5 @@ async fn did_change_watched_files_relints_open_documents() {
         ))
         .await;
     let diag_notification = server.receive_notification().await;
-    assert_eq!(
-        diag_notification.method(),
-        "textDocument/publishDiagnostics"
-    );
+    assert_eq!(diag_notification.method(), PublishDiagnostics::METHOD);
 }

@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use tower_lsp_server::lsp_types::request::{Request, WorkspaceConfiguration};
 use tower_lsp_server::lsp_types::{ConfigurationItem, MessageType};
 use uroborosql_lint::ConfigStore;
 
@@ -43,7 +44,7 @@ impl Backend {
                 self.client
                     .log_message(
                         MessageType::WARNING,
-                        format!("workspace/configuration failed: {err}"),
+                        format!("{} failed: {err}", WorkspaceConfiguration::METHOD),
                     )
                     .await;
                 return;
@@ -54,7 +55,7 @@ impl Backend {
             self.client
                 .log_message(
                     MessageType::WARNING,
-                    "workspace/configuration returned empty result",
+                    &format!("{} returned empty result", WorkspaceConfiguration::METHOD),
                 )
                 .await;
             return;
