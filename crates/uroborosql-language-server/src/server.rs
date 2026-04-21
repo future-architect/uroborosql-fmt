@@ -1,6 +1,9 @@
 use tower_lsp_server::LanguageServer;
 use tower_lsp_server::jsonrpc::Result;
 use tower_lsp_server::lsp_types::notification::{DidChangeWatchedFiles, Notification};
+use tower_lsp_server::lsp_types::request::{
+    RegisterCapability, Request as LspRequest, UnregisterCapability,
+};
 use tower_lsp_server::lsp_types::*;
 use uroborosql_fmt::format_sql;
 use uroborosql_lint::DEFAULT_CONFIG_FILENAME;
@@ -248,7 +251,7 @@ impl Backend {
                 self.client
                     .log_message(
                         MessageType::WARNING,
-                        format!("client/unregisterCapability failed: {err}"),
+                        format!("{} failed: {err}", UnregisterCapability::METHOD),
                     )
                     .await;
             }
@@ -279,7 +282,7 @@ impl Backend {
                 self.client
                     .log_message(
                         MessageType::ERROR,
-                        format!("client/registerCapability failed: {err}"),
+                        format!("{} failed: {err}", RegisterCapability::METHOD),
                     )
                     .await;
             }
