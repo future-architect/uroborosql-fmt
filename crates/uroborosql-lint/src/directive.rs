@@ -43,7 +43,7 @@ fn extract_directives<'tree>(root: &Node<'tree>) -> (Vec<LintDirective>, Vec<Dia
 
     for comment in root
         .descendants()
-        .filter(|node| node.child_count() == 0 && node.kind() == SyntaxKind::SQL_COMMENT)
+        .filter(|node| node.kind() == SyntaxKind::SQL_COMMENT)
     {
         match parse_directive(&comment) {
             ParsedDirective::NotDirective => {}
@@ -66,8 +66,8 @@ fn extract_directives<'tree>(root: &Node<'tree>) -> (Vec<LintDirective>, Vec<Dia
 /// Returns the byte offset where the leading line-comment section ends.
 ///
 /// File-head `disable` directives are valid only inside the initial run of
-/// blank lines and SQL line comments. The first block comment or non-comment
-/// token ends that section.
+/// blank lines and SQL line comments. The first block comment or other token
+/// ends that section.
 fn file_head_comment_end_byte<'tree>(root: &Node<'tree>) -> usize {
     root.descendants()
         .filter(|node| node.child_count() == 0)
