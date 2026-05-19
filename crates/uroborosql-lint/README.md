@@ -4,6 +4,37 @@
 
 The default config file name is `.uroborosqllintrc.json`.
 
+## Directive Comments
+
+Line comment directives can suppress specific lint rules directly in SQL.
+
+Supported directives:
+
+- `-- uroborosql-lint-disable <rules>`
+- `-- uroborosql-lint-disable-next-line <rules>`
+
+Rules must be comma-separated canonical rule names such as `no-distinct` or `no-wildcard-projection`.
+
+Example:
+
+```sql
+-- uroborosql-lint-disable no-distinct
+SELECT DISTINCT id FROM users;
+```
+
+```sql
+-- uroborosql-lint-disable-next-line no-distinct, no-wildcard-projection
+SELECT DISTINCT * FROM users;
+```
+
+Behavior:
+
+- `disable-next-line` suppresses diagnostics whose start position is on the next physical line only
+- `disable` suppresses rules for the whole file, but only when it appears in the file head comment section
+- The file head comment section is the leading sequence of blank lines and line comments
+- A block comment ends that file head section, so any later `disable` directive is ignored
+- Invalid directives are ignored silently in the current implementation
+
 Example:
 
 ```json

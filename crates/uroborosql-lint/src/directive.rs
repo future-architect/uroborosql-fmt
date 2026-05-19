@@ -211,7 +211,9 @@ mod tests {
 
     #[test]
     fn disable_next_line_suppresses_only_the_next_physical_line() {
-        let sql = "-- uroborosql-lint-disable-next-line no-distinct\nSELECT DISTINCT id FROM users;\nSELECT DISTINCT name FROM users;";
+        let sql = r#"-- uroborosql-lint-disable-next-line no-distinct
+SELECT DISTINCT id FROM users;
+SELECT DISTINCT name FROM users;"#;
 
         let diagnostics = run_with_rules(sql, vec![RuleEnum::NoDistinct(NoDistinct)]);
 
@@ -221,8 +223,9 @@ mod tests {
 
     #[test]
     fn disable_next_line_does_not_skip_blank_lines() {
-        let sql =
-            "-- uroborosql-lint-disable-next-line no-distinct\n\nSELECT DISTINCT id FROM users;";
+        let sql = r#"-- uroborosql-lint-disable-next-line no-distinct
+
+SELECT DISTINCT id FROM users;"#;
 
         let diagnostics = run_with_rules(sql, vec![RuleEnum::NoDistinct(NoDistinct)]);
 
@@ -232,7 +235,8 @@ mod tests {
 
     #[test]
     fn file_head_disable_suppresses_requested_rule_only() {
-        let sql = "-- uroborosql-lint-disable no-distinct\nSELECT DISTINCT * FROM users;";
+        let sql = r#"-- uroborosql-lint-disable no-distinct
+SELECT DISTINCT * FROM users;"#;
 
         let diagnostics = run_with_rules(
             sql,
@@ -248,8 +252,9 @@ mod tests {
 
     #[test]
     fn file_head_disable_remains_effective_after_block_comment() {
-        let sql =
-            "-- uroborosql-lint-disable no-distinct\n/* comment */\nSELECT DISTINCT id FROM users;";
+        let sql = r#"-- uroborosql-lint-disable no-distinct
+/* comment */
+SELECT DISTINCT id FROM users;"#;
 
         let diagnostics = run_with_rules(sql, vec![RuleEnum::NoDistinct(NoDistinct)]);
 
@@ -258,8 +263,9 @@ mod tests {
 
     #[test]
     fn disable_after_block_comment_is_ignored() {
-        let sql =
-            "/* comment */\n-- uroborosql-lint-disable no-distinct\nSELECT DISTINCT id FROM users;";
+        let sql = r#"/* comment */
+-- uroborosql-lint-disable no-distinct
+SELECT DISTINCT id FROM users;"#;
 
         let diagnostics = run_with_rules(sql, vec![RuleEnum::NoDistinct(NoDistinct)]);
 
@@ -268,7 +274,9 @@ mod tests {
 
     #[test]
     fn file_head_disable_and_next_line_directives_compose() {
-        let sql = "-- uroborosql-lint-disable no-distinct\n-- uroborosql-lint-disable-next-line no-wildcard-projection\nSELECT DISTINCT * FROM users;";
+        let sql = r#"-- uroborosql-lint-disable no-distinct
+-- uroborosql-lint-disable-next-line no-wildcard-projection
+SELECT DISTINCT * FROM users;"#;
 
         let diagnostics = run_with_rules(
             sql,
@@ -283,7 +291,8 @@ mod tests {
 
     #[test]
     fn linter_run_returns_suppressed_diagnostics() {
-        let sql = "-- uroborosql-lint-disable no-distinct\nSELECT DISTINCT id FROM users;";
+        let sql = r#"-- uroborosql-lint-disable no-distinct
+SELECT DISTINCT id FROM users;"#;
         let resolved_config = ResolvedLintConfig {
             rules: vec![(RuleEnum::NoDistinct(NoDistinct), Severity::Warning)],
             db: None,
@@ -296,7 +305,9 @@ mod tests {
 
     #[test]
     fn extracts_only_head_disable_directives() {
-        let sql = "-- uroborosql-lint-disable no-distinct\nSELECT 1;\n-- uroborosql-lint-disable no-wildcard-projection";
+        let sql = r#"-- uroborosql-lint-disable no-distinct
+SELECT 1;
+-- uroborosql-lint-disable no-wildcard-projection"#;
         let tree = parse(sql);
 
         let directives = extract_directives(&tree.root_node());
