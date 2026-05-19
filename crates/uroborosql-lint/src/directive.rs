@@ -37,7 +37,7 @@ pub fn suppress_diagnostics<'tree>(
 }
 
 fn extract_directives<'tree>(root: &Node<'tree>) -> (Vec<LintDirective>, Vec<Diagnostic>) {
-    let file_head_end_byte = file_head_end_byte(root);
+    let file_head_comment_end_byte = file_head_comment_end_byte(root);
     let mut directives = Vec::new();
     let mut diagnostics = Vec::new();
 
@@ -50,7 +50,7 @@ fn extract_directives<'tree>(root: &Node<'tree>) -> (Vec<LintDirective>, Vec<Dia
             ParsedDirective::Invalid(diagnostic) => diagnostics.push(diagnostic),
             ParsedDirective::Valid(directive) => {
                 if directive.kind == LintDirectiveKind::Disable
-                    && comment.range().start_byte >= file_head_end_byte
+                    && comment.range().start_byte >= file_head_comment_end_byte
                 {
                     continue;
                 }
@@ -63,7 +63,12 @@ fn extract_directives<'tree>(root: &Node<'tree>) -> (Vec<LintDirective>, Vec<Dia
     (directives, diagnostics)
 }
 
-fn file_head_end_byte<'tree>(root: &Node<'tree>) -> usize {
+/// Returns the byte offset where the leading line-comment section ends.
+///
+/// File-head `disable` directives are valid only inside the initial run of
+/// blank lines and SQL line comments. The first block comment or non-comment
+/// token ends that section.
+fn file_head_comment_end_byte<'tree>(root: &Node<'tree>) -> usize {
     root.descendants()
         .filter(|node| node.child_count() == 0)
         .find_map(|node| match node.kind() {
@@ -152,6 +157,7 @@ fn parse_rules<'tree>(
 
     let mut seen = HashSet::new();
     let mut rules = Vec::new();
+    // Keep spans in original comment coordinates for directive diagnostics.
     let rules_offset = directive_offset + (rest.len() - rest.trim_start().len());
     let rest = rest.trim();
 
