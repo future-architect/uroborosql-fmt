@@ -1,5 +1,6 @@
 use crate::{
-    context::LintContext, diagnostic::Diagnostic, tree::collect_preorder, ResolvedLintConfig,
+    context::LintContext, diagnostic::Diagnostic, directive::suppress_diagnostics,
+    tree::collect_preorder, ResolvedLintConfig,
 };
 use postgresql_cst_parser::tree_sitter;
 
@@ -44,7 +45,7 @@ impl Linter {
             }
         }
 
-        Ok(ctx.into_diagnostics())
+        Ok(suppress_diagnostics(&root, ctx.into_diagnostics()))
     }
 }
 
