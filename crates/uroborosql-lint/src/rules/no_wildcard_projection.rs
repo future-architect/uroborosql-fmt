@@ -73,7 +73,7 @@ mod tests {
 
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "no-wildcard-projection")
+            .find(|diag| diag.code == "no-wildcard-projection")
             .expect("should detect SELECT *");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -87,7 +87,7 @@ mod tests {
 
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "no-wildcard-projection")
+            .find(|diag| diag.code == "no-wildcard-projection")
             .expect("should detect RETURNING *");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -100,7 +100,7 @@ mod tests {
         let diagnostics = run(sql);
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "no-wildcard-projection")
+            .find(|diag| diag.code == "no-wildcard-projection")
             .expect("should detect *");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -113,7 +113,7 @@ mod tests {
         let diagnostics = run(sql);
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "no-wildcard-projection")
+            .find(|diag| diag.code == "no-wildcard-projection")
             .expect("should detect *");
 
         let SqlSpan { start, end } = diagnostic.span;

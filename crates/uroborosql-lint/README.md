@@ -33,7 +33,8 @@ Behavior:
 - `disable` suppresses rules for the whole file, but only when it appears in the file head comment section
 - The file head comment section is the leading sequence of blank lines and line comments
 - A block comment ends that file head section, so any later `disable` directive is ignored
-- Invalid directives are ignored silently in the current implementation
+- Unknown rule names in directives produce an `invalid-lint-directive` warning on the comment
+- Other invalid directives are ignored silently in the current implementation
 
 Example:
 
