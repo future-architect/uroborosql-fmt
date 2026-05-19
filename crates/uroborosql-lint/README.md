@@ -34,7 +34,7 @@ Behavior:
 - The file head comment section is the leading sequence of blank lines and line comments
 - A block comment ends that file head section, so any later `disable` directive is ignored
 - Unknown rule names in directives produce an `invalid-lint-directive` warning on the comment
-- Other invalid directives are ignored silently in the current implementation
+- Missing rule names, trailing commas, and other invalid directive syntax also produce an `invalid-lint-directive` warning
 
 Example:
 

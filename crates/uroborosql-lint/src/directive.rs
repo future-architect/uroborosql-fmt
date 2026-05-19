@@ -137,6 +137,15 @@ fn parse_rules<'tree>(
     rest: &str,
     directive_offset: usize,
 ) -> Option<ParsedRules> {
+    if rest.is_empty() {
+        return Some(ParsedRules::Invalid(invalid_syntax_diagnostic(
+            comment,
+            "invalid lint directive syntax: expected one or more comma-separated rule names",
+            0,
+            comment.text().len(),
+        )));
+    }
+
     if !rest.starts_with(char::is_whitespace) {
         return Some(ParsedRules::Ignore);
     }
@@ -147,7 +156,12 @@ fn parse_rules<'tree>(
     let rest = rest.trim();
 
     if rest.is_empty() {
-        return Some(ParsedRules::Ignore);
+        return Some(ParsedRules::Invalid(invalid_syntax_diagnostic(
+            comment,
+            "invalid lint directive syntax: expected one or more comma-separated rule names",
+            rules_offset,
+            comment.text().len(),
+        )));
     }
 
     let mut offset = 0;
@@ -157,11 +171,34 @@ fn parse_rules<'tree>(
         let name = raw_name[trimmed_start..trimmed_end].trim();
 
         if name.is_empty() {
-            return Some(ParsedRules::Ignore);
+            let start = rules_offset + offset + trimmed_start;
+            let end = if offset + raw_name.len() == rest.len() {
+                start.saturating_sub(1)
+            } else {
+                start + raw_name.len()
+            };
+            let message = if offset + raw_name.len() == rest.len() {
+                "invalid lint directive syntax: trailing comma is not allowed"
+            } else {
+                "invalid lint directive syntax: expected comma-separated rule names"
+            };
+            return Some(ParsedRules::Invalid(invalid_syntax_diagnostic(
+                comment,
+                message,
+                start.saturating_sub(1),
+                end,
+            )));
         }
 
         if name.contains(char::is_whitespace) {
-            return Some(ParsedRules::Ignore);
+            let start = rules_offset + offset + trimmed_start;
+            let end = start + name.len();
+            return Some(ParsedRules::Invalid(invalid_syntax_diagnostic(
+                comment,
+                "invalid lint directive syntax: expected comma-separated rule names",
+                start,
+                end,
+            )));
         }
 
         if RuleEnum::from_name(name).is_none() {
@@ -193,6 +230,21 @@ fn unknown_rule_diagnostic<'tree>(
         INVALID_LINT_DIRECTIVE_CODE,
         Severity::Warning,
         format!("unknown lint directive rule `{unknown_rule}`"),
+        &range,
+    )
+}
+
+fn invalid_syntax_diagnostic<'tree>(
+    comment: &Node<'tree>,
+    message: impl Into<String>,
+    start_offset: usize,
+    end_offset: usize,
+) -> Diagnostic {
+    let range = subrange_in_comment(comment, start_offset, end_offset.max(start_offset + 1));
+    Diagnostic::new(
+        INVALID_LINT_DIRECTIVE_CODE,
+        Severity::Warning,
+        message,
         &range,
     )
 }
@@ -312,20 +364,29 @@ mod tests {
     fn rejects_invalid_directive_inputs() {
         assert!(matches!(
             parse_comment_directive("-- uroborosql-lint-disable"),
-            ParsedDirective::NotDirective
+            ParsedDirective::Invalid(Diagnostic {
+                message,
+                ..
+            }) if message == "invalid lint directive syntax: expected one or more comma-separated rule names"
         ));
-        assert_eq!(
+        assert!(matches!(
             parse_comment_directive("-- uroborosql-lint-disable no-distinct,"),
-            ParsedDirective::NotDirective
-        );
+            ParsedDirective::Invalid(Diagnostic {
+                message,
+                ..
+            }) if message == "invalid lint directive syntax: trailing comma is not allowed"
+        ));
         assert!(matches!(
             parse_comment_directive("-- uroborosql-lint-disable unknown-rule"),
             ParsedDirective::Invalid(_)
         ));
-        assert_eq!(
+        assert!(matches!(
             parse_comment_directive("-- uroborosql-lint-disable no-distinct because reason"),
-            ParsedDirective::NotDirective
-        );
+            ParsedDirective::Invalid(Diagnostic {
+                message,
+                ..
+            }) if message == "invalid lint directive syntax: expected comma-separated rule names"
+        ));
     }
 
     #[test]
@@ -462,6 +523,26 @@ SELECT DISTINCT id FROM users;"#;
         assert_eq!(diagnostics[0].span.start.line, 0);
         assert_eq!(diagnostics[0].span.start.column, 27);
         assert_eq!(diagnostics[0].span.end.column, 37);
+        assert_eq!(diagnostics[1].code, "no-distinct");
+    }
+
+    #[test]
+    fn invalid_directive_syntax_produces_warning() {
+        let sql = r#"-- uroborosql-lint-disable no-distinct because reason
+SELECT DISTINCT id FROM users;"#;
+        let resolved_config = ResolvedLintConfig {
+            rules: vec![(RuleEnum::NoDistinct(NoDistinct), Severity::Warning)],
+            db: None,
+        };
+
+        let diagnostics = Linter::new().run(sql, &resolved_config).expect("lint ok");
+
+        assert_eq!(diagnostics.len(), 2);
+        assert_eq!(diagnostics[0].code, INVALID_LINT_DIRECTIVE_CODE);
+        assert_eq!(
+            diagnostics[0].message,
+            "invalid lint directive syntax: expected comma-separated rule names"
+        );
         assert_eq!(diagnostics[1].code, "no-distinct");
     }
 }
