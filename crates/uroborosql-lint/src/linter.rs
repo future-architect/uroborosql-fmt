@@ -54,7 +54,7 @@ pub mod tests {
     use super::*;
     use crate::{
         diagnostic::Severity,
-        rules::{NoDistinct, RuleEnum},
+        rules::{NoDistinct, NoWildcardProjection, RuleEnum},
     };
 
     fn resolve_from_rules(rules: Vec<(RuleEnum, Severity)>) -> ResolvedLintConfig {
@@ -83,5 +83,136 @@ pub mod tests {
 
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn disable_next_line_suppresses_only_the_next_physical_line() {
+        let sql = r#"-- uroborosql-lint-disable-next-line no-distinct
+SELECT DISTINCT id FROM users;
+SELECT DISTINCT name FROM users;"#;
+
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoDistinct(NoDistinct)]);
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].span.start.line, 2);
+    }
+
+    #[test]
+    fn disable_next_line_does_not_skip_blank_lines() {
+        let sql = r#"-- uroborosql-lint-disable-next-line no-distinct
+
+SELECT DISTINCT id FROM users;"#;
+
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoDistinct(NoDistinct)]);
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].span.start.line, 2);
+    }
+
+    #[test]
+    fn file_head_disable_suppresses_requested_rule_only() {
+        let sql = r#"-- uroborosql-lint-disable no-distinct
+SELECT DISTINCT * FROM users;"#;
+
+        let diagnostics = run_with_rules(
+            sql,
+            vec![
+                RuleEnum::NoDistinct(NoDistinct),
+                RuleEnum::NoWildcardProjection(NoWildcardProjection),
+            ],
+        );
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "no-wildcard-projection");
+    }
+
+    #[test]
+    fn file_head_disable_remains_effective_after_block_comment() {
+        let sql = r#"-- uroborosql-lint-disable no-distinct
+/* comment */
+SELECT DISTINCT id FROM users;"#;
+
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoDistinct(NoDistinct)]);
+
+        assert!(diagnostics.is_empty());
+    }
+
+    #[test]
+    fn disable_after_block_comment_is_ignored() {
+        let sql = r#"/* comment */
+-- uroborosql-lint-disable no-distinct
+SELECT DISTINCT id FROM users;"#;
+
+        let diagnostics = run_with_rules(sql, vec![RuleEnum::NoDistinct(NoDistinct)]);
+
+        assert_eq!(diagnostics.len(), 1);
+    }
+
+    #[test]
+    fn file_head_disable_and_next_line_directives_compose() {
+        let sql = r#"-- uroborosql-lint-disable no-distinct
+-- uroborosql-lint-disable-next-line no-wildcard-projection
+SELECT DISTINCT * FROM users;"#;
+
+        let diagnostics = run_with_rules(
+            sql,
+            vec![
+                RuleEnum::NoDistinct(NoDistinct),
+                RuleEnum::NoWildcardProjection(NoWildcardProjection),
+            ],
+        );
+
+        assert!(diagnostics.is_empty());
+    }
+
+    #[test]
+    fn linter_run_returns_suppressed_diagnostics() {
+        let resolved_config =
+            resolve_from_rules(vec![(RuleEnum::NoDistinct(NoDistinct), Severity::Warning)]);
+        let sql = r#"-- uroborosql-lint-disable no-distinct
+SELECT DISTINCT id FROM users;"#;
+
+        let diagnostics = Linter::new().run(sql, &resolved_config).expect("lint ok");
+
+        assert!(diagnostics.is_empty());
+    }
+
+    #[test]
+    fn unknown_rule_in_directive_produces_warning_on_rule_name() {
+        let resolved_config =
+            resolve_from_rules(vec![(RuleEnum::NoDistinct(NoDistinct), Severity::Warning)]);
+        let sql = r#"-- uroborosql-lint-disable no-dstinct
+SELECT DISTINCT id FROM users;"#;
+
+        let diagnostics = Linter::new().run(sql, &resolved_config).expect("lint ok");
+
+        assert_eq!(diagnostics.len(), 2);
+        assert_eq!(diagnostics[0].code, "invalid-lint-directive");
+        assert_eq!(
+            diagnostics[0].message,
+            "unknown lint directive rule `no-dstinct`"
+        );
+        assert_eq!(diagnostics[0].span.start.line, 0);
+        assert_eq!(diagnostics[0].span.start.column, 27);
+        assert_eq!(diagnostics[0].span.end.column, 37);
+        assert_eq!(diagnostics[1].code, "no-distinct");
+    }
+
+    #[test]
+    fn invalid_directive_syntax_produces_warning() {
+        let resolved_config =
+            resolve_from_rules(vec![(RuleEnum::NoDistinct(NoDistinct), Severity::Warning)]);
+        let sql = r#"-- uroborosql-lint-disable no-distinct because reason
+SELECT DISTINCT id FROM users;"#;
+
+        let diagnostics = Linter::new().run(sql, &resolved_config).expect("lint ok");
+
+        assert_eq!(diagnostics.len(), 2);
+        assert_eq!(diagnostics[0].code, "invalid-lint-directive");
+        assert_eq!(
+            diagnostics[0].message,
+            "invalid lint directive syntax: expected comma-separated rule names"
+        );
+        assert_eq!(diagnostics[1].code, "no-distinct");
     }
 }
