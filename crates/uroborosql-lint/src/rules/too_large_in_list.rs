@@ -91,7 +91,7 @@ mod tests {
         );
         let diagnostics = run(&sql);
         assert_eq!(diagnostics.len(), 1);
-        assert_eq!(diagnostics[0].rule_id, "too-large-in-list");
+        assert_eq!(diagnostics[0].code, "too-large-in-list");
     }
 
     #[test]

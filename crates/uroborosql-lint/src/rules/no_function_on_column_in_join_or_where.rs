@@ -143,7 +143,7 @@ mod tests {
 
             assert!(diagnostics
                 .iter()
-                .any(|diag| diag.rule_id == "no-function-on-column-in-join-or-where"),);
+                .any(|diag| diag.code == "no-function-on-column-in-join-or-where"),);
 
             assert_eq!(diagnostics.len(), 1);
 
@@ -225,7 +225,7 @@ mod tests {
 
             assert!(diagnostics
                 .iter()
-                .all(|diag| diag.rule_id == "no-function-on-column-in-join-or-where"),);
+                .all(|diag| diag.code == "no-function-on-column-in-join-or-where"),);
 
             assert_eq!(
                 diagnostics.len(),
@@ -268,7 +268,7 @@ mod tests {
 
             assert!(diagnostics
                 .iter()
-                .any(|diag| diag.rule_id == "no-function-on-column-in-join-or-where"),);
+                .any(|diag| diag.code == "no-function-on-column-in-join-or-where"),);
 
             assert_eq!(diagnostics.len(), 1);
 
@@ -283,7 +283,7 @@ mod tests {
 
             assert!(diagnostics
                 .iter()
-                .all(|diag| diag.rule_id == "no-function-on-column-in-join-or-where"),);
+                .all(|diag| diag.code == "no-function-on-column-in-join-or-where"),);
 
             assert_eq!(diagnostics.len(), 2,);
 

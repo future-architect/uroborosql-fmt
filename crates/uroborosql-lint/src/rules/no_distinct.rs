@@ -45,7 +45,7 @@ mod tests {
         let diagnostics = run_with_rules(sql, vec![RuleEnum::NoDistinct(NoDistinct)]);
         assert_eq!(diagnostics.len(), 1);
         let diagnostic = &diagnostics[0];
-        assert_eq!(diagnostic.rule_id, "no-distinct");
+        assert_eq!(diagnostic.code, "no-distinct");
         assert_eq!(diagnostic.severity, Severity::Warning);
         assert!(sql[diagnostic.span.start.byte..diagnostic.span.end.byte]
             .eq_ignore_ascii_case("distinct"));

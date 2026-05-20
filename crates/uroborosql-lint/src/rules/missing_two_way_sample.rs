@@ -86,7 +86,7 @@ mod tests {
         let diagnostics = run(sql);
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "missing-two-way-sample")
+            .find(|diag| diag.code == "missing-two-way-sample")
             .expect("should detect missing sample");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -99,7 +99,7 @@ mod tests {
         let diagnostics = run(sql);
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "missing-two-way-sample")
+            .find(|diag| diag.code == "missing-two-way-sample")
             .expect("should detect missing sample");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -112,7 +112,7 @@ mod tests {
         let diagnostics = run(sql);
         assert!(diagnostics
             .iter()
-            .all(|diag| diag.rule_id == "missing-two-way-sample"));
+            .all(|diag| diag.code == "missing-two-way-sample"));
 
         assert_eq!(diagnostics.len(), 2);
 
@@ -128,7 +128,7 @@ mod tests {
         let diagnostics = run(sql);
         assert!(diagnostics
             .iter()
-            .all(|diag| diag.rule_id == "missing-two-way-sample"));
+            .all(|diag| diag.code == "missing-two-way-sample"));
 
         assert_eq!(diagnostics.len(), 2);
 
