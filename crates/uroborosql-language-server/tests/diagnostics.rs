@@ -86,3 +86,37 @@ async fn did_change_watched_files_relints_open_documents() {
     let diag_notification = server.receive_notification().await;
     assert_eq!(diag_notification.method(), PublishDiagnostics::METHOD);
 }
+
+#[tokio::test]
+async fn diagnostics_include_invalid_directive_warning() {
+    let mut server = new_test_server();
+    let uri = Uri::from_str("file:///directive.sql").unwrap();
+
+    initialize_server(&mut server).await;
+
+    server
+        .send_request(build_did_open(
+            &uri,
+            "-- uroborosql-lint-disable definitely-not-a-rule\nSELECT DISTINCT id FROM users;",
+            1,
+        ))
+        .await;
+    let diag_notification = server.receive_notification().await;
+    assert_eq!(diag_notification.method(), PublishDiagnostics::METHOD);
+
+    let diagnostics = diag_notification.params().unwrap()["diagnostics"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(diagnostics.len(), 2);
+    assert_eq!(
+        diagnostics[0]["code"].as_str(),
+        Some("invalid-lint-directive")
+    );
+    assert_eq!(diagnostics[0]["range"]["start"]["line"].as_u64(), Some(0));
+    assert_eq!(
+        diagnostics[0]["range"]["start"]["character"].as_u64(),
+        Some(27)
+    );
+    assert_eq!(diagnostics[1]["code"].as_str(), Some("no-distinct"));
+}

@@ -96,7 +96,7 @@ fn to_lsp_diagnostic(diag: SqlDiagnostic, rope: Option<&ropey::Rope>) -> Diagnos
     Diagnostic {
         range,
         severity,
-        code: Some(NumberOrString::String(diag.rule_id.to_string())),
+        code: Some(NumberOrString::String(diag.code.to_string())),
         source: Some("uroborosql-lint".into()),
         message: diag.message,
         ..Diagnostic::default()

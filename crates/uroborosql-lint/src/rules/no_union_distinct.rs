@@ -100,7 +100,7 @@ mod tests {
         let diagnostics = run_with_rules(sql, vec![RuleEnum::NoUnionDistinct(NoUnionDistinct)]);
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "no-union-distinct")
+            .find(|diag| diag.code == "no-union-distinct")
             .expect("should detect UNION");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -113,7 +113,7 @@ mod tests {
         let diagnostics = run_with_rules(sql, vec![RuleEnum::NoUnionDistinct(NoUnionDistinct)]);
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "no-union-distinct")
+            .find(|diag| diag.code == "no-union-distinct")
             .expect("should detect UNION");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -126,7 +126,7 @@ mod tests {
         let diagnostics = run_with_rules(sql, vec![RuleEnum::NoUnionDistinct(NoUnionDistinct)]);
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "no-union-distinct")
+            .find(|diag| diag.code == "no-union-distinct")
             .expect("should detect UNION DISTINCT");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -140,7 +140,7 @@ mod tests {
         assert!(
             diagnostics
                 .iter()
-                .all(|diag| diag.rule_id != "no-union-distinct"),
+                .all(|diag| diag.code != "no-union-distinct"),
             "UNION ALL should not trigger no-union-distinct rule"
         );
     }

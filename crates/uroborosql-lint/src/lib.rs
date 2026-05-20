@@ -1,6 +1,7 @@
 mod config;
 mod context;
 mod diagnostic;
+mod directive;
 mod linter;
 mod rule;
 mod rules;

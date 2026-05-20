@@ -37,9 +37,9 @@ impl SqlSpan {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
-    pub rule_id: &'static str,
+    pub code: &'static str,
     pub message: String,
     pub severity: Severity,
     pub span: SqlSpan,
@@ -47,13 +47,13 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn new(
-        rule_id: &'static str,
+        code: &'static str,
         severity: Severity,
         message: impl Into<String>,
         range: &Range,
     ) -> Self {
         Self {
-            rule_id,
+            code,
             severity,
             message: message.into(),
             span: SqlSpan::from_range(range),
