@@ -78,7 +78,7 @@ mod tests {
 
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "no-not-in")
+            .find(|diag| diag.code == "no-not-in")
             .expect("expected NOT IN to be detected");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -92,7 +92,7 @@ mod tests {
 
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.rule_id == "no-not-in")
+            .find(|diag| diag.code == "no-not-in")
             .expect("expected NOT IN to be detected");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -105,7 +105,7 @@ mod tests {
         let diagnostics = run_with_rules(sql, vec![RuleEnum::NoNotIn(NoNotIn)]);
 
         assert!(
-            diagnostics.iter().any(|diag| diag.rule_id == "no-not-in"),
+            diagnostics.iter().any(|diag| diag.code == "no-not-in"),
             "expected NOT IN subquery to be detected"
         );
     }
