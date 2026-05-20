@@ -33,8 +33,8 @@ Behavior:
 - `disable` suppresses rules for the whole file, but only when it appears in the file head comment section
 - The file head comment section is the leading sequence of blank lines and line comments
 - A block comment ends that file head section, so any later `disable` directive is ignored
-- Unknown rule names in directives produce an `invalid-lint-directive` warning on the comment
-- Missing rule names, trailing commas, and other invalid directive syntax also produce an `invalid-lint-directive` warning
+- Unknown rule names in directives produce an `invalid-lint-directive` warning on the comment, while known rules in the same directive still apply
+- Missing rule names, empty comma-separated elements, and trailing commas also produce an `invalid-lint-directive` warning
 
 Example:
 

@@ -97,7 +97,7 @@ async fn diagnostics_include_invalid_directive_warning() {
     server
         .send_request(build_did_open(
             &uri,
-            "-- uroborosql-lint-disable no-dstinct\nSELECT DISTINCT id FROM users;",
+            "-- uroborosql-lint-disable definitely-not-a-rule\nSELECT DISTINCT id FROM users;",
             1,
         ))
         .await;
