@@ -48,7 +48,11 @@ fn extract_directives<'tree>(root: &Node<'tree>) -> (Vec<LintDirective>, Vec<Dia
         match parse_directive(&comment) {
             ParsedDirective::NotDirective => {}
             ParsedDirective::Invalid(diagnostic) => diagnostics.push(diagnostic),
-            ParsedDirective::Valid(directive) => {
+            ParsedDirective::Valid {
+                directive,
+                diagnostics: mut directive_diagnostics,
+            } => {
+                diagnostics.append(&mut directive_diagnostics);
                 if directive.kind == LintDirectiveKind::Disable
                     && comment.range().start_byte >= file_head_comment_end_byte
                 {
@@ -83,7 +87,10 @@ fn file_head_comment_end_byte<'tree>(root: &Node<'tree>) -> usize {
 enum ParsedDirective {
     NotDirective,
     Invalid(Diagnostic),
-    Valid(LintDirective),
+    Valid {
+        directive: LintDirective,
+        diagnostics: Vec<Diagnostic>,
+    },
 }
 
 fn parse_directive<'tree>(comment: &Node<'tree>) -> ParsedDirective {
@@ -99,82 +106,72 @@ fn parse_directive<'tree>(comment: &Node<'tree>) -> ParsedDirective {
     let body_offset = comment_text.len() - body.len();
 
     if let Some(rest) = body.strip_prefix(DISABLE_NEXT_LINE) {
-        return parse_rules(comment, rest, body_offset + DISABLE_NEXT_LINE.len()).map_or(
-            ParsedDirective::NotDirective,
-            |parsed| match parsed {
-                ParsedRules::Valid(rules) => ParsedDirective::Valid(LintDirective {
+        return match parse_rules(comment, rest, body_offset + DISABLE_NEXT_LINE.len()) {
+            ParsedRules::Valid { rules, diagnostics } => ParsedDirective::Valid {
+                directive: LintDirective {
                     kind: LintDirectiveKind::DisableNextLine,
                     line,
                     rules,
-                }),
-                ParsedRules::Invalid(diagnostic) => ParsedDirective::Invalid(diagnostic),
-                ParsedRules::Ignore => ParsedDirective::NotDirective,
+                },
+                diagnostics,
             },
-        );
+            ParsedRules::Invalid(diagnostic) => ParsedDirective::Invalid(diagnostic),
+            ParsedRules::NotDirective => ParsedDirective::NotDirective,
+        };
     }
 
     if let Some(rest) = body.strip_prefix(DISABLE) {
-        return parse_rules(comment, rest, body_offset + DISABLE.len()).map_or(
-            ParsedDirective::NotDirective,
-            |parsed| match parsed {
-                ParsedRules::Valid(rules) => ParsedDirective::Valid(LintDirective {
+        return match parse_rules(comment, rest, body_offset + DISABLE.len()) {
+            ParsedRules::Valid { rules, diagnostics } => ParsedDirective::Valid {
+                directive: LintDirective {
                     kind: LintDirectiveKind::Disable,
                     line,
                     rules,
-                }),
-                ParsedRules::Invalid(diagnostic) => ParsedDirective::Invalid(diagnostic),
-                ParsedRules::Ignore => ParsedDirective::NotDirective,
+                },
+                diagnostics,
             },
-        );
+            ParsedRules::Invalid(diagnostic) => ParsedDirective::Invalid(diagnostic),
+            ParsedRules::NotDirective => ParsedDirective::NotDirective,
+        };
     }
 
     ParsedDirective::NotDirective
 }
 
 enum ParsedRules {
-    Valid(Vec<String>),
+    Valid {
+        rules: Vec<String>,
+        diagnostics: Vec<Diagnostic>,
+    },
     Invalid(Diagnostic),
-    Ignore,
+    NotDirective,
 }
 
-fn parse_rules<'tree>(
-    comment: &Node<'tree>,
-    rest: &str,
-    directive_offset: usize,
-) -> Option<ParsedRules> {
-    if rest.is_empty() {
-        return Some(ParsedRules::Invalid(invalid_syntax_diagnostic(
+fn parse_rules<'tree>(comment: &Node<'tree>, rest: &str, directive_offset: usize) -> ParsedRules {
+    if rest.trim().is_empty() {
+        return ParsedRules::Invalid(invalid_syntax_diagnostic(
             comment,
             "invalid lint directive syntax: expected one or more comma-separated rule names",
             0,
             comment.text().len(),
-        )));
+        ));
     }
 
     if !rest.starts_with(char::is_whitespace) {
-        return Some(ParsedRules::Ignore);
+        return ParsedRules::NotDirective;
     }
 
-    let mut seen = HashSet::new();
-    let mut rules = Vec::new();
     // Keep spans in original comment coordinates for directive diagnostics.
     let rules_offset = directive_offset + (rest.len() - rest.trim_start().len());
     let rest = rest.trim();
-
-    if rest.is_empty() {
-        return Some(ParsedRules::Invalid(invalid_syntax_diagnostic(
-            comment,
-            "invalid lint directive syntax: expected one or more comma-separated rule names",
-            rules_offset,
-            comment.text().len(),
-        )));
-    }
+    let mut seen = HashSet::new();
+    let mut rules = Vec::new();
+    let mut diagnostics = Vec::new();
 
     let mut offset = 0;
     for raw_name in rest.split(',') {
+        let name = raw_name.trim();
         let trimmed_start = raw_name.len() - raw_name.trim_start().len();
-        let trimmed_end = raw_name.trim_end().len();
-        let name = raw_name[trimmed_start..trimmed_end].trim();
 
         if name.is_empty() {
             let start = rules_offset + offset + trimmed_start;
@@ -188,31 +185,20 @@ fn parse_rules<'tree>(
             } else {
                 "invalid lint directive syntax: expected comma-separated rule names"
             };
-            return Some(ParsedRules::Invalid(invalid_syntax_diagnostic(
+            return ParsedRules::Invalid(invalid_syntax_diagnostic(
                 comment,
                 message,
                 start.saturating_sub(1),
                 end,
-            )));
-        }
-
-        if name.contains(char::is_whitespace) {
-            let start = rules_offset + offset + trimmed_start;
-            let end = start + name.len();
-            return Some(ParsedRules::Invalid(invalid_syntax_diagnostic(
-                comment,
-                "invalid lint directive syntax: expected comma-separated rule names",
-                start,
-                end,
-            )));
+            ));
         }
 
         if RuleEnum::from_name(name).is_none() {
             let start = rules_offset + offset + trimmed_start;
             let end = start + name.len();
-            return Some(ParsedRules::Invalid(unknown_rule_diagnostic(
-                comment, name, start, end,
-            )));
+            diagnostics.push(unknown_rule_diagnostic(comment, name, start, end));
+            offset += raw_name.len() + 1;
+            continue;
         }
 
         if seen.insert(name) {
@@ -222,7 +208,7 @@ fn parse_rules<'tree>(
         offset += raw_name.len() + 1;
     }
 
-    Some(ParsedRules::Valid(rules))
+    ParsedRules::Valid { rules, diagnostics }
 }
 
 fn unknown_rule_diagnostic<'tree>(
@@ -325,39 +311,48 @@ mod tests {
 
     #[test]
     fn parses_directive_with_optional_space_after_prefix() {
-        assert_eq!(
+        assert!(matches!(
             parse_comment_directive("-- uroborosql-lint-disable no-distinct"),
-            ParsedDirective::Valid(LintDirective {
-                kind: LintDirectiveKind::Disable,
-                line: 0,
-                rules: vec!["no-distinct".to_string()],
-            })
-        );
-        assert_eq!(
+            ParsedDirective::Valid {
+                directive: LintDirective {
+                    kind: LintDirectiveKind::Disable,
+                    line: 0,
+                    rules,
+                },
+                diagnostics,
+            } if rules == vec!["no-distinct".to_string()] && diagnostics.is_empty()
+        ));
+        assert!(matches!(
             parse_comment_directive("--uroborosql-lint-disable-next-line no-distinct"),
-            ParsedDirective::Valid(LintDirective {
-                kind: LintDirectiveKind::DisableNextLine,
-                line: 0,
-                rules: vec!["no-distinct".to_string()],
-            })
-        );
+            ParsedDirective::Valid {
+                directive: LintDirective {
+                    kind: LintDirectiveKind::DisableNextLine,
+                    line: 0,
+                    rules,
+                },
+                diagnostics,
+            } if rules == vec!["no-distinct".to_string()] && diagnostics.is_empty()
+        ));
     }
 
     #[test]
     fn parses_multiple_rules_and_deduplicates_them() {
-        assert_eq!(
+        assert!(matches!(
             parse_comment_directive(
                 "-- uroborosql-lint-disable no-distinct, no-wildcard-projection, no-distinct"
             ),
-            ParsedDirective::Valid(LintDirective {
-                kind: LintDirectiveKind::Disable,
-                line: 0,
-                rules: vec![
-                    "no-distinct".to_string(),
-                    "no-wildcard-projection".to_string(),
-                ],
-            })
-        );
+            ParsedDirective::Valid {
+                directive: LintDirective {
+                    kind: LintDirectiveKind::Disable,
+                    line: 0,
+                    rules,
+                },
+                diagnostics,
+            } if rules == vec![
+                "no-distinct".to_string(),
+                "no-wildcard-projection".to_string(),
+            ] && diagnostics.is_empty()
+        ));
     }
 
     #[test]
@@ -371,12 +366,26 @@ mod tests {
             ParsedDirective::Invalid(_)
         ));
         assert!(matches!(
-            parse_comment_directive("-- uroborosql-lint-disable unknown-rule"),
+            parse_comment_directive("-- uroborosql-lint-disable  , , "),
             ParsedDirective::Invalid(_)
         ));
+    }
+
+    #[test]
+    fn keeps_known_rules_when_unknown_rules_are_mixed_in() {
         assert!(matches!(
-            parse_comment_directive("-- uroborosql-lint-disable no-distinct because reason"),
-            ParsedDirective::Invalid(_)
+            parse_comment_directive("-- uroborosql-lint-disable no-distinct, clearly-not-a-rule"),
+            ParsedDirective::Valid {
+                directive: LintDirective {
+                    kind: LintDirectiveKind::Disable,
+                    line: 0,
+                    rules,
+                },
+                diagnostics,
+            } if rules == vec!["no-distinct".to_string()]
+                && diagnostics.len() == 1
+                && diagnostics[0].code == INVALID_LINT_DIRECTIVE_CODE
+                && diagnostics[0].message == "unknown lint directive rule `clearly-not-a-rule`"
         ));
     }
 

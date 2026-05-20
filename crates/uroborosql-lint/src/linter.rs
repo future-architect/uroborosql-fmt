@@ -181,7 +181,7 @@ SELECT DISTINCT id FROM users;"#;
     fn unknown_rule_in_directive_produces_warning_on_rule_name() {
         let resolved_config =
             resolve_from_rules(vec![(RuleEnum::NoDistinct(NoDistinct), Severity::Warning)]);
-        let sql = r#"-- uroborosql-lint-disable no-dstinct
+        let sql = r#"-- uroborosql-lint-disable definitely-not-a-rule
 SELECT DISTINCT id FROM users;"#;
 
         let diagnostics = Linter::new().run(sql, &resolved_config).expect("lint ok");
@@ -190,16 +190,33 @@ SELECT DISTINCT id FROM users;"#;
         assert_eq!(diagnostics[0].code, "invalid-lint-directive");
         assert_eq!(
             diagnostics[0].message,
-            "unknown lint directive rule `no-dstinct`"
+            "unknown lint directive rule `definitely-not-a-rule`"
         );
         assert_eq!(diagnostics[0].span.start.line, 0);
         assert_eq!(diagnostics[0].span.start.column, 27);
-        assert_eq!(diagnostics[0].span.end.column, 37);
+        assert_eq!(diagnostics[0].span.end.column, 48);
         assert_eq!(diagnostics[1].code, "no-distinct");
     }
 
     #[test]
-    fn invalid_directive_syntax_produces_warning() {
+    fn unknown_rule_does_not_prevent_known_rules_from_being_suppressed() {
+        let resolved_config =
+            resolve_from_rules(vec![(RuleEnum::NoDistinct(NoDistinct), Severity::Warning)]);
+        let sql = r#"-- uroborosql-lint-disable no-distinct, definitely-not-a-rule
+SELECT DISTINCT id FROM users;"#;
+
+        let diagnostics = Linter::new().run(sql, &resolved_config).expect("lint ok");
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "invalid-lint-directive");
+        assert_eq!(
+            diagnostics[0].message,
+            "unknown lint directive rule `definitely-not-a-rule`"
+        );
+    }
+
+    #[test]
+    fn malformed_rule_token_produces_unknown_rule_warning() {
         let resolved_config =
             resolve_from_rules(vec![(RuleEnum::NoDistinct(NoDistinct), Severity::Warning)]);
         let sql = r#"-- uroborosql-lint-disable no-distinct because reason
@@ -211,7 +228,7 @@ SELECT DISTINCT id FROM users;"#;
         assert_eq!(diagnostics[0].code, "invalid-lint-directive");
         assert_eq!(
             diagnostics[0].message,
-            "invalid lint directive syntax: expected comma-separated rule names"
+            "unknown lint directive rule `no-distinct because reason`"
         );
         assert_eq!(diagnostics[1].code, "no-distinct");
     }
