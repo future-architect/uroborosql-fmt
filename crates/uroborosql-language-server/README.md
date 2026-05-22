@@ -2,15 +2,33 @@
 
 Language server for `uroborosql-fmt`.
 
-## Embedded SQL formatting protocol
+## Overview
 
-This crate provides a custom language server request for formatting SQL selections embedded in non-SQL documents.
+`uroborosql-language-server` provides:
 
-Current first-party support is implemented by the VS Code extension, but the protocol is documented here so that other editor clients can implement the same behavior.
+- SQL document formatting
+- SQL range formatting
+- diagnostics
+- embedded SQL formatting via a custom request
 
-### Request method
+## Supported LSP methods
 
-`uroborosql/formatSelectionsAsSql`
+- `textDocument/formatting`
+- `textDocument/rangeFormatting`
+- `textDocument/didOpen`
+- `textDocument/didChange`
+- `textDocument/didSave`
+- `textDocument/didClose`
+- `workspace/didChangeConfiguration`
+- `workspace/didChangeWatchedFiles`
+
+## Server notifications
+
+- `textDocument/publishDiagnostics`
+
+## Custom requests
+
+### `uroborosql/formatSelectionsAsSql`
 
 ### Request
 
@@ -77,7 +95,6 @@ type FormatSelectionsAsSqlResult = {
 - Formatter configuration is resolved using `hostDocumentUri`, not the URI of a synthetic SQL document.
 - Relative `configuration_file_path` is resolved from the workspace root associated with the host document.
 - Client-provided formatter overrides follow the same merge behavior as ordinary document formatting.
-- Non-formatter path fields are excluded from the JSON overrides passed to the formatter core.
 
 ### Client responsibilities
 
