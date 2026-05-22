@@ -313,19 +313,15 @@ jobs:
       - name: Package
         run: |
           cd ${{ env.WORKING_DIR }}
-          mkdir -p repo
-          cp index.js repo/index.js
-          cp index.d.ts repo/index.d.ts
-          cp package.json repo/package.json
-          mv *.node repo
-          cd repo
+          ls -1 *.node
           npm pack
+          npm run show-packed
 
       - name: Upload .tgz to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${GITHUB_REF_NAME}" ${{ env.WORKING_DIR }}/repo/*.tgz --clobber
+          gh release upload "${GITHUB_REF_NAME}" ${{ env.WORKING_DIR }}/*.tgz --clobber
 
       - name: Notify Slack on Failure
         if: failure()
