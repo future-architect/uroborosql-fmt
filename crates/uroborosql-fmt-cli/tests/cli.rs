@@ -14,7 +14,7 @@ fn sample_sql() -> (&'static str, String) {
 /// 標準入力からSQLを読み込んでフォーマットする
 fn format_from_stdin() {
     let (raw, formatted) = sample_sql();
-    let mut cmd = Command::cargo_bin("uroborosql-fmt-cli").unwrap();
+    let mut cmd = Command::cargo_bin("uroborosql-fmt").unwrap();
     cmd.write_stdin(raw)
         .assert()
         .success()
@@ -24,7 +24,7 @@ fn format_from_stdin() {
 #[test]
 /// check モードと write モードは排他である
 fn check_and_write_mode_conflict() {
-    let mut cmd = Command::cargo_bin("uroborosql-fmt-cli").unwrap();
+    let mut cmd = Command::cargo_bin("uroborosql-fmt").unwrap();
     cmd.arg("--check").arg("--write").assert().failure();
 }
 
@@ -39,8 +39,8 @@ mod check_mode {
         let file = assert_fs::NamedTempFile::new("ok.sql").unwrap();
         file.write_str(&formatted).unwrap();
 
-        // uroborosql-fmt-cli --check ok.sql
-        Command::cargo_bin("uroborosql-fmt-cli")
+        // uroborosql-fmt --check ok.sql
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .arg("--check")
             .arg(file.path())
@@ -55,8 +55,8 @@ mod check_mode {
         let file = assert_fs::NamedTempFile::new("ng.sql").unwrap();
         file.write_str(raw).unwrap();
 
-        // uroborosql-fmt-cli --check ng.sql
-        Command::cargo_bin("uroborosql-fmt-cli")
+        // uroborosql-fmt --check ng.sql
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .arg("--check")
             .arg(file.path())
@@ -76,8 +76,8 @@ mod write_mode {
         let file = assert_fs::NamedTempFile::new("rewrite.sql").unwrap();
         file.write_str(raw).unwrap();
 
-        // uroborosql-fmt-cli -w rewrite.sql
-        Command::cargo_bin("uroborosql-fmt-cli")
+        // uroborosql-fmt -w rewrite.sql
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .arg("--write")
             .arg(file.path())
@@ -91,8 +91,8 @@ mod write_mode {
     #[test]
     /// write モードでパスが指定されていなければ失敗する
     fn write_mode_fails_without_path() {
-        // uroborosql-fmt-cli -w
-        Command::cargo_bin("uroborosql-fmt-cli")
+        // uroborosql-fmt -w
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .arg("--write")
             .assert()

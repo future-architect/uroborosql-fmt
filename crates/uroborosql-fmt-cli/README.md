@@ -1,5 +1,7 @@
 # uroborosql-fmt-cli
 
+CLI crate for uroborosql-fmt. The installed binary name is `uroborosql-fmt`.
+
 ## Install
 
 ```bash
@@ -9,7 +11,7 @@ cargo install --git https://github.com/future-architect/uroborosql-fmt
 ## Usage
 
 ```bash
-uroborosql-fmt-cli -- [OPTIONS] [INPUT]
+uroborosql-fmt -- [OPTIONS] [INPUT]
 ```
 
 ### Arguments
@@ -39,18 +41,18 @@ uroborosql-fmt-cli -- [OPTIONS] [INPUT]
 
 ```bash
 # Format a file and output to stdout
-uroborosql-fmt-cli query.sql
+uroborosql-fmt query.sql
 
 # Read from STDIN and format
-cat query.sql | uroborosql-fmt-cli
-uroborosql-fmt-cli < query.sql
+cat query.sql | uroborosql-fmt
+uroborosql-fmt < query.sql
 
 # Check formatting differences only
-uroborosql-fmt-cli --check query.sql
+uroborosql-fmt --check query.sql
 
 # Format and overwrite the file
-uroborosql-fmt-cli --write query.sql
+uroborosql-fmt --write query.sql
 
 # Format with a specific configuration file
-uroborosql-fmt-cli --config mycfg.json query.sql
+uroborosql-fmt --config mycfg.json query.sql
 ```

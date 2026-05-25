@@ -9,6 +9,10 @@ repository.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "uroborosql-fmt"
+path = "src/main.rs"
+
 [dependencies]
 uroborosql-fmt = { workspace = true }
 clap = { version = "4", features = ["derive"] }

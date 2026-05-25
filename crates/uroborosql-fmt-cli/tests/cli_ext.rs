@@ -15,8 +15,8 @@ fn file_to_stdout() {
     let file = assert_fs::NamedTempFile::new("input.sql").unwrap();
     file.write_str(raw).unwrap();
 
-    // uroborosql-fmt-cli input.sql
-    Command::cargo_bin("uroborosql-fmt-cli")
+    // uroborosql-fmt input.sql
+    Command::cargo_bin("uroborosql-fmt")
         .unwrap()
         .arg(file.path())
         .assert()
@@ -43,8 +43,8 @@ mod config {
         let config_file = NamedTempFile::new("mycfg.json").unwrap();
         config_file.write_str(config_json).unwrap();
 
-        // uroborosql-fmt-cli --config mycfg.json input.sql
-        Command::cargo_bin("uroborosql-fmt-cli")
+        // uroborosql-fmt --config mycfg.json input.sql
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .arg("--config")
             .arg(config_file.path())
@@ -70,8 +70,8 @@ mod config {
         let input_file = dir.child("q.sql");
         input_file.write_str(raw).unwrap();
 
-        // uroborosql-fmt-cli q.sql
-        Command::cargo_bin("uroborosql-fmt-cli")
+        // uroborosql-fmt q.sql
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .current_dir(&dir)
             .arg(input_file.path())
@@ -103,8 +103,8 @@ mod config {
         let input_file = dir.child("q.sql");
         input_file.write_str(raw).unwrap();
 
-        // uroborosql-fmt-cli --config exp.json q.sql
-        Command::cargo_bin("uroborosql-fmt-cli")
+        // uroborosql-fmt --config exp.json q.sql
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .current_dir(&dir)
             .arg("--config")
@@ -125,9 +125,9 @@ mod exit_code {
     fn parse_error_exit_code() {
         let invalid_sql = "SELECT FROM";
 
-        // uroborosql-fmt-cli < echo "SELECT FROM"
+        // uroborosql-fmt < echo "SELECT FROM"
         // error code 1
-        Command::cargo_bin("uroborosql-fmt-cli")
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .write_stdin(invalid_sql)
             .assert()
@@ -144,9 +144,9 @@ mod exit_code {
         let input_file = NamedTempFile::new("input.sql").unwrap();
         input_file.write_str("select 1;").unwrap();
 
-        // uroborosql-fmt-cli --config bad.json input.sql
+        // uroborosql-fmt --config bad.json input.sql
         // error code 2
-        Command::cargo_bin("uroborosql-fmt-cli")
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .arg("--config")
             .arg(config_file.path())
@@ -158,9 +158,9 @@ mod exit_code {
     #[test]
     /// 入力なしの場合、終了コード 2 (OtherError) を返す
     fn no_input_exit_other_error() {
-        // uroborosql-fmt-cli
+        // uroborosql-fmt
         // error code 2
-        Command::cargo_bin("uroborosql-fmt-cli")
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .assert()
             .code(2);
@@ -169,9 +169,9 @@ mod exit_code {
     #[test]
     /// 存在しないファイルの場合、終了コード 2 (OtherError) を返す
     fn nonexistent_file_exit_other_error() {
-        // uroborosql-fmt-cli no_such_file.sql
+        // uroborosql-fmt no_such_file.sql
         // error code 2
-        Command::cargo_bin("uroborosql-fmt-cli")
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .arg("no_such_file.sql")
             .assert()
@@ -190,9 +190,9 @@ mod exit_code {
         perm.set_readonly(true);
         fs::set_permissions(file.path(), perm).unwrap();
 
-        // uroborosql-fmt-cli -w ro.sql
+        // uroborosql-fmt -w ro.sql
         // error code 2
-        Command::cargo_bin("uroborosql-fmt-cli")
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .arg("-w")
             .arg(file.path())
@@ -203,9 +203,9 @@ mod exit_code {
     #[test]
     /// -w と --check が競合する場合、終了コード 2 (OtherError) を返す
     fn write_and_check_conflict() {
-        // uroborosql-fmt-cli -w --check
+        // uroborosql-fmt -w --check
         // error code 2
-        Command::cargo_bin("uroborosql-fmt-cli")
+        Command::cargo_bin("uroborosql-fmt")
             .unwrap()
             .arg("-w")
             .arg("--check")
