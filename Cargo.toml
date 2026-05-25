@@ -16,7 +16,7 @@ repository = "https://github.com/future-architect/uroborosql-fmt"
 
 [workspace.dependencies]
 # Internal crates
-uroborosql-fmt = { path = "./crates/uroborosql-fmt" }
+uroborosql-fmt = { path = "./crates/uroborosql-fmt", version = "1.0.1" }
 
 [profile.release]
 lto = true
