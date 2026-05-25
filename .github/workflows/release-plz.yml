@@ -15,7 +15,7 @@ jobs:
     if: github.repository == 'future-architect/uroborosql-fmt'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           # RELEASE_PLZ_TOKEN (PAT) が必須。
@@ -25,9 +25,11 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
 
       - name: Run release-plz
-        uses: release-plz/action@1528104d2ca23787631a1c1f022abb64b34c1e11 # v0.5
+        uses: release-plz/action@1528104d2ca23787631a1c1f022abb64b34c1e11 # v0.5.128
         with:
           # release ステップは workspace 内 path 依存があると cargo publish を試行して失敗する
           # 既知バグ (https://github.com/release-plz/release-plz/issues/2595) のワークアラウンドとして
