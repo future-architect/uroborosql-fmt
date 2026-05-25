@@ -28,5 +28,12 @@ jobs:
 
       - name: Run release-plz
         uses: release-plz/action@1528104d2ca23787631a1c1f022abb64b34c1e11 # v0.5
+        with:
+          # release ステップは workspace 内 path 依存があると cargo publish を試行して失敗する
+          # 既知バグ (https://github.com/release-plz/release-plz/issues/2595) のワークアラウンドとして
+          # release-pr のみ実行する。タグ・GitHub Release の作成は当面手動で行う。
+          # 根本fix の PR (https://github.com/release-plz/release-plz/pull/2789) が
+          # マージされたら command を外して自動化に戻す。
+          command: release-pr
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
