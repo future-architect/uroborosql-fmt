@@ -48,10 +48,10 @@ cargo install --git https://github.com/future-architect/uroborosql-fmt
 
 ```sh
 # Print formatted SQL to STDOUT (does not modify the file)
-uroborosql-fmt-cli input.sql
+uroborosql-fmt input.sql
 
 # Format the file
-uroborosql-fmt-cli -w input.sql
+uroborosql-fmt -w input.sql
 ```
 
 For detailed CLI usage, options, and examples, see the [CLI documentation](crates/uroborosql-fmt-cli/README.md).

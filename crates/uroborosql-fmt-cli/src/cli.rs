@@ -11,7 +11,7 @@ use uroborosql_fmt::format_sql;
 pub const DEFAULT_CONFIG_PATH: &str = ".uroborosqlfmtrc.json";
 
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(name = "uroborosql-fmt", version, about, long_about = None)]
 pub struct Cli {
     /// Input file. If omitted, read from STDIN.
     pub input: Option<PathBuf>,
@@ -66,9 +66,12 @@ pub fn run(cli: Cli) -> Result<(), ExitCode> {
     };
 
     // 3) Format SQL
-    let formatted = format_sql(&src, None, config_path).map_err(|e| match e {
-        UroboroSQLFmtError::ParseError(_) => ExitCode::ParseError,
-        _ => ExitCode::OtherError,
+    let formatted = format_sql(&src, None, config_path).map_err(|e| {
+        eprintln!("error: {e}");
+        match e {
+            UroboroSQLFmtError::ParseError(_) => ExitCode::ParseError,
+            _ => ExitCode::OtherError,
+        }
     })?;
 
     // 4) Option handling
@@ -107,7 +110,7 @@ pub fn run(cli: Cli) -> Result<(), ExitCode> {
                 Some(ref path) => {
                     eprintln!("{}", path.display());
                     eprintln!(
-                        "Code style issues found in the file. Run uroborosql-fmt-cli with --write to fix."
+                        "Code style issues found in the file. Run uroborosql-fmt with --write to fix."
                     );
                 }
                 None => {
