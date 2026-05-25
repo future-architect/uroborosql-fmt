@@ -22,7 +22,10 @@ repository = "https://github.com/future-architect/uroborosql-fmt"
 uroborosql-fmt = { path = "./crates/uroborosql-fmt", version = "1.0.1" }
 uroborosql-lint = { path = "./crates/uroborosql-lint" }
 uroborosql-language-server = { path = "./crates/uroborosql-language-server" }
-postgresql-cst-parser = { git = "https://github.com/future-architect/postgresql-cst-parser", branch = "feat/new-apis-for-linter" }
+
+# On Windows, this git dependency may require `git config --global core.longpaths true`.
+postgresql-cst-parser = { git = "https://github.com/future-architect/postgresql-cst-parser", branch = "feat/new-apis-for-linter", version = "0.2" }
+
 clap = { version = "4", features = ["derive"] }
 
 [profile.release]
