@@ -19,7 +19,7 @@ use tower_lsp_server::lsp_types::request::{
 };
 use tower_lsp_server::lsp_types::*;
 use tower_lsp_server::{Client, LanguageServer, LspService, Server};
-use uroborosql_language_server::Backend;
+use uroborosql_language_server::create_service;
 
 pub(crate) struct TestServer {
     req_stream: DuplexStream,
@@ -185,7 +185,24 @@ impl TestServer {
 }
 
 pub(crate) fn new_test_server() -> TestServer {
-    TestServer::new(Backend::new)
+    let (req_client, req_server) = tokio::io::duplex(2048);
+    let (res_server, res_client) = tokio::io::duplex(2048);
+
+    let (service, socket) = create_service();
+    tokio::spawn(async move {
+        Server::new(req_server, res_server, socket)
+            .serve(service)
+            .await
+    });
+
+    TestServer {
+        req_stream: req_client,
+        res_stream: res_client,
+        responses: VecDeque::new(),
+        notifications: VecDeque::new(),
+        server_requests: VecDeque::new(),
+        workspace_configuration_responses: VecDeque::new(),
+    }
 }
 
 pub(crate) fn build_initialize(id: i64) -> Request {
@@ -347,6 +364,22 @@ pub(crate) fn build_range_formatting(uri: &Uri, range: Range, id: i64) -> Reques
                 ..FormattingOptions::default()
             },
             work_done_progress_params: WorkDoneProgressParams::default(),
+        }))
+        .id(id)
+        .finish()
+}
+
+pub(crate) fn build_format_selections_as_sql(
+    uri: &Uri,
+    version: i32,
+    selections: serde_json::Value,
+    id: i64,
+) -> Request {
+    Request::build("uroborosql/formatSelectionsAsSql")
+        .params(json!({
+            "hostDocumentUri": uri,
+            "hostDocumentVersion": version,
+            "selections": selections,
         }))
         .id(id)
         .finish()

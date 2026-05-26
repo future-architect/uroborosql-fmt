@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tower_lsp_server::lsp_types::request::{Request, WorkspaceConfiguration};
-use tower_lsp_server::lsp_types::{ConfigurationItem, MessageType};
+use tower_lsp_server::lsp_types::{ConfigurationItem, MessageType, Uri};
 use uroborosql_fmt::config::PartialConfig;
 use uroborosql_lint::ConfigStore;
 
@@ -27,8 +27,7 @@ pub(crate) struct ClientConfig {
 }
 
 impl Backend {
-    pub(crate) async fn refresh_client_config(&self) {
-        let scope_uri = self.root_uri.read().unwrap().clone();
+    pub(crate) async fn fetch_client_config(&self, scope_uri: Option<Uri>) -> Option<ClientConfig> {
         let request_payload = vec![ConfigurationItem {
             scope_uri,
             section: Some(CONFIGURATION_SECTION.to_string()),
@@ -43,7 +42,7 @@ impl Backend {
                         format!("{} failed: {err}", WorkspaceConfiguration::METHOD),
                     )
                     .await;
-                return;
+                return None;
             }
         };
 
@@ -54,18 +53,15 @@ impl Backend {
                     &format!("{} returned empty result", WorkspaceConfiguration::METHOD),
                 )
                 .await;
-            return;
+            return None;
         };
 
         if received_config.is_null() {
-            *self.client_config.write().unwrap() = ClientConfig::default();
-            return;
+            return Some(ClientConfig::default());
         }
 
         match serde_json::from_value::<ClientConfig>(received_config) {
-            Ok(config) => {
-                *self.client_config.write().unwrap() = config;
-            }
+            Ok(config) => Some(config),
             Err(err) => {
                 self.client
                     .log_message(
@@ -73,7 +69,15 @@ impl Backend {
                         format!("failed to parse uroborosql-fmt config: {err}"),
                     )
                     .await;
+                None
             }
+        }
+    }
+
+    pub(crate) async fn refresh_client_config(&self) {
+        let scope_uri = self.root_uri.read().unwrap().clone();
+        if let Some(config) = self.fetch_client_config(scope_uri).await {
+            *self.client_config.write().unwrap() = config;
         }
     }
 
