@@ -19,3 +19,15 @@ git_tag_name = "v{{ version }}"
 git_release_enable = true
 changelog_update = true
 changelog_path = "CHANGELOG.md"
+
+[[package]]
+name = "uroborosql-fmt-cli"
+release = false
+
+[[package]]
+name = "uroborosql-fmt-napi"
+release = false
+
+[[package]]
+name = "uroborosql-fmt-wasm"
+release = false
