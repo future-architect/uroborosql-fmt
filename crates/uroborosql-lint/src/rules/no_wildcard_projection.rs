@@ -44,11 +44,11 @@ impl Rule for NoWildcardProjection {
 fn detect_wildcard(target_el_node: &Node<'_>) -> Option<Range> {
     assert_eq!(target_el_node.kind(), SyntaxKind::target_el);
 
-    // If the last node (including the entire subtree) under target_el is '*', it is considered a wildcard.
-    let last_node = target_el_node.last_node()?;
+    // If the last token under target_el is '*', it is considered a wildcard.
+    let last_token = target_el_node.last_token()?;
 
-    if last_node.kind() == SyntaxKind::Star {
-        return Some(last_node.range());
+    if last_token.kind() == SyntaxKind::Star {
+        return Some(last_token.range());
     }
 
     None
