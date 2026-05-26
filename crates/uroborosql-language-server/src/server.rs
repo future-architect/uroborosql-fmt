@@ -5,11 +5,10 @@ use tower_lsp_server::lsp_types::request::{
     RegisterCapability, Request as LspRequest, UnregisterCapability,
 };
 use tower_lsp_server::lsp_types::*;
-use uroborosql_fmt::format_sql;
 use uroborosql_lint::DEFAULT_CONFIG_FILENAME;
 
 use crate::Backend;
-use crate::document::{rope_char_index_to_position, rope_position_to_char_index};
+use crate::document::{rope_char_index_to_position, rope_range_to_char_index_range};
 
 impl LanguageServer for Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
@@ -150,12 +149,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
         let text = rope.to_string();
-
-        let fmt_config_path = self.resolve_fmt_config_path();
-        let fmt_config_path = fmt_config_path.as_ref().and_then(|path| path.to_str());
-        let client_config_json = self.client_config_json_explicit_only();
-
-        match format_sql(&text, Some(&client_config_json), fmt_config_path) {
+        match self.format_sql_with_uri(&text, &uri, "formatting").await {
             Ok(formatted) => {
                 if formatted == text {
                     return Ok(Some(vec![]));
@@ -171,10 +165,7 @@ impl LanguageServer for Backend {
             }
             Err(err) => {
                 self.client
-                    .log_message(
-                        MessageType::ERROR,
-                        format!("formatting failed for {}: {err}", uri.as_str()),
-                    )
+                    .log_message(MessageType::ERROR, err.to_string())
                     .await;
                 Ok(None)
             }
@@ -190,10 +181,8 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let Some(start_char) = rope_position_to_char_index(&rope, params.range.start) else {
-            return Ok(None);
-        };
-        let Some(end_char) = rope_position_to_char_index(&rope, params.range.end) else {
+        let Some((start_char, end_char)) = rope_range_to_char_index_range(&rope, &params.range)
+        else {
             return Ok(None);
         };
         if start_char > end_char || end_char > rope.len_chars() {
@@ -201,11 +190,10 @@ impl LanguageServer for Backend {
         }
 
         let slice = rope.slice(start_char..end_char).to_string();
-        let fmt_config_path = self.resolve_fmt_config_path();
-        let fmt_config_path = fmt_config_path.as_ref().and_then(|path| path.to_str());
-        let client_config_json = self.client_config_json_explicit_only();
-
-        match format_sql(&slice, Some(&client_config_json), fmt_config_path) {
+        match self
+            .format_sql_with_uri(&slice, &uri, "range formatting")
+            .await
+        {
             Ok(formatted) => Ok(Some(vec![TextEdit {
                 range: Range {
                     start: rope_char_index_to_position(&rope, start_char),
@@ -215,10 +203,7 @@ impl LanguageServer for Backend {
             }])),
             Err(err) => {
                 self.client
-                    .log_message(
-                        MessageType::ERROR,
-                        format!("range formatting failed for {}: {err}", uri.as_str()),
-                    )
+                    .log_message(MessageType::ERROR, err.to_string())
                     .await;
                 Ok(None)
             }
