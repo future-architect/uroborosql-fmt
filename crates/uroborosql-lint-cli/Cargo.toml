@@ -6,6 +6,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "uroborosql-lint"
+path = "src/main.rs"
+
 [dependencies]
 clap = { workspace = true }
 uroborosql-lint = { path = "../uroborosql-lint" }

@@ -1255,6 +1255,7 @@ dependencies = [
 name = "uroborosql-language-server"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "ropey",
  "serde",
  "serde_json",
