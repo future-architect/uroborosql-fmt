@@ -17,6 +17,7 @@ use uroborosql_lint::{ConfigStore, Linter};
 
 use crate::configuration::ClientConfig;
 use crate::document::DocumentState;
+use crate::formatting::FORMAT_SELECTIONS_AS_SQL_METHOD;
 
 const CONFIGURATION_SECTION: &str = "uroborosql-fmt";
 const DEFAULT_FMT_CONFIG_PATH: &str = ".uroborosqlfmtrc.json";
@@ -48,11 +49,20 @@ impl Backend {
     }
 }
 
+pub fn create_service() -> (LspService<Backend>, ClientSocket) {
+    LspService::build(Backend::new)
+        .custom_method(
+            FORMAT_SELECTIONS_AS_SQL_METHOD,
+            Backend::format_selections_as_sql,
+        )
+        .finish()
+}
+
 #[cfg(feature = "runtime-tokio")]
 pub async fn run_stdio() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::new(Backend::new);
+    let (service, socket) = create_service();
     Server::new(stdin, stdout, socket).serve(service).await;
 }
