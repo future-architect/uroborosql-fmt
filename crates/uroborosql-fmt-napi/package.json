@@ -20,8 +20,8 @@
   },
   "scripts": {
     "artifacts": "napi artifacts",
-    "build": "napi build --platform --release",
-    "build:debug": "napi build --platform",
+    "build": "napi build --platform --release --dts index.d.ts",
+    "build:debug": "napi build --platform --dts index.d.ts",
     "prepublishOnly": "napi prepublish -t npm",
     "test": "ava",
     "universal": "napi universal",

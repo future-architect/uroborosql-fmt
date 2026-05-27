@@ -18,10 +18,9 @@ pub enum UroboroSQLFmtError {
     Rendering(String),
     #[error("Runtime Error: {0}")]
     Runtime(String),
-    #[error("Validation Error: {error_msg}")]
+    #[error("Validation Error: {error_msg}\nformat_result: {format_result}")]
     Validation {
-        // テストでしか使用しておらず、clippy で警告が出るため _ を付与
-        _format_result: String,
+        format_result: String,
         error_msg: String,
     },
 }
