@@ -1,13 +1,18 @@
 [package]
 name = "uroborosql-language-server"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
+
+[[bin]]
+name = "uroborosql-language-server"
+path = "src/main.rs"
 
 [features]
 default = ["runtime-tokio"]
 runtime-tokio = ["tokio", "tower-lsp-server/runtime-tokio"]
 
 [dependencies]
+clap = { workspace = true }
 ropey = "1.6.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

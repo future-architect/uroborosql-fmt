@@ -4,7 +4,7 @@ use clap::Parser;
 use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, Severity};
 
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(name = "uroborosql-lint", version, about = "SQL linter")]
 struct Cli {
     /// Input SQL file
     pub input: PathBuf,
