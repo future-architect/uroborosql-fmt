@@ -1,5 +1,20 @@
 # uroborosql-lint
 
+The CLI binary name is `uroborosql-lint`.
+
+## Usage
+
+```bash
+uroborosql-lint [OPTIONS] <INPUT>
+```
+
+Examples:
+
+```bash
+uroborosql-lint query.sql
+uroborosql-lint --config .uroborosqllintrc.json query.sql
+```
+
 ## Configuration
 
 The default config file name is `.uroborosqllintrc.json`.
