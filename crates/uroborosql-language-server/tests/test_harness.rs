@@ -14,8 +14,8 @@ use tower_lsp_server::lsp_types::notification::{
     DidOpenTextDocument, DidSaveTextDocument, Initialized, LogMessage, Notification,
 };
 use tower_lsp_server::lsp_types::request::{
-    Formatting, Initialize, RangeFormatting, RegisterCapability, Request as LspRequest,
-    WorkspaceConfiguration,
+    CodeActionRequest, Formatting, Initialize, RangeFormatting, RegisterCapability,
+    Request as LspRequest, WorkspaceConfiguration,
 };
 use tower_lsp_server::lsp_types::*;
 use tower_lsp_server::{Client, LanguageServer, LspService, Server};
@@ -364,6 +364,29 @@ pub(crate) fn build_range_formatting(uri: &Uri, range: Range, id: i64) -> Reques
                 ..FormattingOptions::default()
             },
             work_done_progress_params: WorkDoneProgressParams::default(),
+        }))
+        .id(id)
+        .finish()
+}
+
+pub(crate) fn build_code_action(
+    uri: &Uri,
+    range: Range,
+    diagnostics: Vec<Diagnostic>,
+    only: Option<Vec<CodeActionKind>>,
+    id: i64,
+) -> Request {
+    Request::build(CodeActionRequest::METHOD)
+        .params(json!(CodeActionParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+            range,
+            context: CodeActionContext {
+                diagnostics,
+                only,
+                trigger_kind: None,
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
         }))
         .id(id)
         .finish()

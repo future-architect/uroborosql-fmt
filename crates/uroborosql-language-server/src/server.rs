@@ -55,6 +55,12 @@ impl LanguageServer for Backend {
                 text_document_sync: Some(TextDocumentSyncCapability::Options(sync_options)),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 document_range_formatting_provider: Some(OneOf::Left(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Options(
+                    CodeActionOptions {
+                        code_action_kinds: Some(vec![CodeActionKind::QUICKFIX]),
+                        ..CodeActionOptions::default()
+                    },
+                )),
                 ..ServerCapabilities::default()
             },
             server_info: Some(ServerInfo {
@@ -139,8 +145,8 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn code_action(&self, _: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        Ok(None)
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        Ok(crate::code_action::code_actions(self, params))
     }
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
