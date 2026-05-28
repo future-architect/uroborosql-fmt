@@ -8,7 +8,6 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "1.0.1"
 authors = ["Future Corporation"]
 edition = "2021"
 license = "BUSL-1.1"
@@ -16,7 +15,7 @@ repository = "https://github.com/future-architect/uroborosql-fmt"
 
 [workspace.dependencies]
 # Internal crates
-uroborosql-fmt = { path = "./crates/uroborosql-fmt", version = "1.0.1" }
+uroborosql-fmt = { path = "./crates/uroborosql-fmt" }
 
 [profile.release]
 lto = true
