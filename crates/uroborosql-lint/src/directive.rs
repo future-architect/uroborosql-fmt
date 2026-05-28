@@ -39,9 +39,9 @@ pub struct DirectiveParseDiagnostic {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParsedLineLintDirective {
-    NotDirective,
-    Directive {
+pub enum ParsedLineComment {
+    NotLintDirective,
+    LintDirective {
         kind: ParsedLintDirectiveKind,
         rules: Vec<String>,
         diagnostics: Vec<DirectiveParseDiagnostic>,
@@ -136,8 +136,8 @@ fn parse_directive<'tree>(comment: &Node<'tree>) -> ParsedDirective {
     let line = comment.range().start_position.row;
 
     match parse_line_comment_directive(comment_text) {
-        ParsedLineLintDirective::NotDirective => ParsedDirective::NotDirective,
-        ParsedLineLintDirective::Directive {
+        ParsedLineComment::NotLintDirective => ParsedDirective::NotDirective,
+        ParsedLineComment::LintDirective {
             kind,
             rules,
             diagnostics,
@@ -174,9 +174,9 @@ fn parse_directive<'tree>(comment: &Node<'tree>) -> ParsedDirective {
     }
 }
 
-pub fn parse_line_comment_directive(text: &str) -> ParsedLineLintDirective {
+pub fn parse_line_comment_directive(text: &str) -> ParsedLineComment {
     let Some(body) = text.strip_prefix("--") else {
-        return ParsedLineLintDirective::NotDirective;
+        return ParsedLineComment::NotLintDirective;
     };
     let body = body.trim_start_matches([' ', '\t']);
     let body_offset = text.len() - body.len();
@@ -199,7 +199,7 @@ pub fn parse_line_comment_directive(text: &str) -> ParsedLineLintDirective {
         );
     }
 
-    ParsedLineLintDirective::NotDirective
+    ParsedLineComment::NotLintDirective
 }
 
 fn parse_line_rules(
@@ -207,7 +207,7 @@ fn parse_line_rules(
     kind: ParsedLintDirectiveKind,
     rest: &str,
     directive_offset: usize,
-) -> ParsedLineLintDirective {
+) -> ParsedLineComment {
     if rest.trim().is_empty() {
         return syntax_error_directive(
             kind,
@@ -218,7 +218,7 @@ fn parse_line_rules(
     }
 
     if !rest.starts_with(char::is_whitespace) {
-        return ParsedLineLintDirective::NotDirective;
+        return ParsedLineComment::NotLintDirective;
     }
 
     let rules_offset = directive_offset + (rest.len() - rest.trim_start().len());
@@ -268,7 +268,7 @@ fn parse_line_rules(
         }
     }
 
-    ParsedLineLintDirective::Directive {
+    ParsedLineComment::LintDirective {
         kind,
         rules,
         diagnostics,
@@ -328,8 +328,8 @@ fn syntax_error_directive(
     message: impl Into<String>,
     start_offset: usize,
     end_offset: usize,
-) -> ParsedLineLintDirective {
-    ParsedLineLintDirective::Directive {
+) -> ParsedLineComment {
+    ParsedLineComment::LintDirective {
         kind,
         rules: Vec::new(),
         diagnostics: vec![DirectiveParseDiagnostic {
@@ -445,7 +445,7 @@ mod tests {
 
         assert!(matches!(
             parsed,
-            ParsedLineLintDirective::Directive {
+            ParsedLineComment::LintDirective {
                 kind: ParsedLintDirectiveKind::Disable,
                 rules,
                 diagnostics,
@@ -470,7 +470,7 @@ mod tests {
 
         assert!(matches!(
             parsed,
-            ParsedLineLintDirective::Directive {
+            ParsedLineComment::LintDirective {
                 has_syntax_error: true,
                 append_byte: None,
                 diagnostics,

@@ -3,7 +3,7 @@ use tower_lsp_server::lsp_types::{
     CodeAction, CodeActionKind, Diagnostic, NumberOrString, Position, Range, TextEdit, Uri,
 };
 use uroborosql_lint::{
-    DirectiveParseDiagnosticKind, ParsedLineLintDirective, parse_line_comment_directive,
+    DirectiveParseDiagnosticKind, ParsedLineComment, parse_line_comment_directive,
 };
 
 use super::{INVALID_LINT_DIRECTIVE_CODE, LINT_SOURCE, directive_line, workspace_edit};
@@ -29,7 +29,7 @@ pub(in crate::code_action) fn remove_unknown_rule_action(
     let diagnostic_line = diagnostic.range.start.line;
     let line_text = rope_line_text_without_ending(rope, diagnostic_line)?;
     let (directive_text, directive_offset) = directive_line::directive_text_with_offset(&line_text);
-    let ParsedLineLintDirective::Directive { diagnostics, .. } =
+    let ParsedLineComment::LintDirective { diagnostics, .. } =
         parse_line_comment_directive(directive_text)
     else {
         return None;

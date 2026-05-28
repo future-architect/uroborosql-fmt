@@ -6,8 +6,8 @@ use tower_lsp_server::lsp_types::{
     WorkspaceEdit,
 };
 use uroborosql_lint::{
-    DISABLE_NEXT_LINE_DIRECTIVE_KEYWORD, ParsedLineLintDirective, ParsedLintDirectiveKind,
-    RuleEnum, parse_line_comment_directive,
+    DISABLE_NEXT_LINE_DIRECTIVE_KEYWORD, ParsedLineComment, ParsedLintDirectiveKind, RuleEnum,
+    parse_line_comment_directive,
 };
 
 use super::{INVALID_LINT_DIRECTIVE_CODE, LINT_SOURCE, directive_line, workspace_edit};
@@ -88,7 +88,7 @@ fn find_existing_disable_next_line_directive(
     let line_text = rope_line_text_without_ending(rope, directive_line)?;
     let (directive_text, directive_offset) = directive_line::directive_text_with_offset(&line_text);
     match parse_line_comment_directive(directive_text) {
-        ParsedLineLintDirective::Directive {
+        ParsedLineComment::LintDirective {
             kind: ParsedLintDirectiveKind::DisableNextLine,
             rules,
             append_byte,
@@ -110,11 +110,11 @@ fn find_existing_disable_next_line_directive(
             )?;
             Some(ExistingDisableNextLineDirective::Append(position))
         }
-        ParsedLineLintDirective::Directive {
+        ParsedLineComment::LintDirective {
             kind: ParsedLintDirectiveKind::Disable,
             ..
         }
-        | ParsedLineLintDirective::NotDirective => {
+        | ParsedLineComment::NotLintDirective => {
             Some(ExistingDisableNextLineDirective::NotDirective)
         }
     }
