@@ -44,6 +44,54 @@ pub(crate) fn rope_range_to_char_index_range(rope: &Rope, range: &Range) -> Opti
     Some((start, end))
 }
 
+pub(crate) fn rope_line_exists(rope: &Rope, line: u32) -> bool {
+    (line as usize) < rope.len_lines()
+}
+
+pub(crate) fn rope_line_text_without_ending(rope: &Rope, line: u32) -> Option<String> {
+    if !rope_line_exists(rope, line) {
+        return None;
+    }
+    let mut text = rope.line(line as usize).to_string();
+    if text.ends_with('\n') {
+        text.pop();
+        if text.ends_with('\r') {
+            text.pop();
+        }
+    }
+    Some(text)
+}
+
+pub(crate) fn rope_line_has_ending(rope: &Rope, line: u32) -> bool {
+    rope_line_exists(rope, line) && rope.line(line as usize).to_string().ends_with('\n')
+}
+
+pub(crate) fn rope_line_byte_to_position(
+    rope: &Rope,
+    line: u32,
+    line_text: &str,
+    byte: usize,
+) -> Option<Position> {
+    if !line_text.is_char_boundary(byte) {
+        return None;
+    }
+    let line_start = rope.line_to_char(line as usize);
+    let char_offset = line_text[..byte].chars().count();
+    Some(rope_char_index_to_position(rope, line_start + char_offset))
+}
+
+pub(crate) fn rope_line_byte_range_to_range(
+    rope: &Rope,
+    line: u32,
+    line_text: &str,
+    range: std::ops::Range<usize>,
+) -> Option<Range> {
+    Some(Range::new(
+        rope_line_byte_to_position(rope, line, line_text, range.start)?,
+        rope_line_byte_to_position(rope, line, line_text, range.end)?,
+    ))
+}
+
 impl Backend {
     pub(crate) fn upsert_document(&self, uri: &Uri, text: &str, version: Option<i32>) {
         let version = version
@@ -118,5 +166,44 @@ impl Backend {
                     .collect()
             })
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rope(text: &str) -> Rope {
+        Rope::from_str(text)
+    }
+
+    #[test]
+    fn rope_line_text_without_ending_strips_lf_and_crlf() {
+        let rope = rope("first\r\nsecond\nthird");
+
+        assert_eq!(
+            rope_line_text_without_ending(&rope, 0).as_deref(),
+            Some("first")
+        );
+        assert_eq!(
+            rope_line_text_without_ending(&rope, 1).as_deref(),
+            Some("second")
+        );
+        assert_eq!(
+            rope_line_text_without_ending(&rope, 2).as_deref(),
+            Some("third")
+        );
+    }
+
+    #[test]
+    fn rope_line_byte_to_position_returns_utf16_position() {
+        let rope = rope("😀 SELECT\n");
+        let line_text = rope_line_text_without_ending(&rope, 0).unwrap();
+        let byte_after_emoji = "😀".len();
+
+        assert_eq!(
+            rope_line_byte_to_position(&rope, 0, &line_text, byte_after_emoji),
+            Some(Position::new(0, 2))
+        );
     }
 }

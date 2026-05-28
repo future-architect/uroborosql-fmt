@@ -10,7 +10,45 @@ use crate::{
     rules::RuleEnum,
 };
 
-const INVALID_LINT_DIRECTIVE_CODE: &str = "invalid-lint-directive";
+pub const LINT_SOURCE: &str = "uroborosql-lint";
+pub const INVALID_LINT_DIRECTIVE_CODE: &str = "invalid-lint-directive";
+pub const DISABLE_NEXT_LINE_DIRECTIVE_KEYWORD: &str = "uroborosql-lint-disable-next-line";
+pub const DISABLE_DIRECTIVE_KEYWORD: &str = "uroborosql-lint-disable";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParsedLintDirectiveKind {
+    Disable,
+    DisableNextLine,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DirectiveParseDiagnosticKind {
+    UnknownRule {
+        rule: String,
+        removal_span: std::ops::Range<usize>,
+    },
+    SyntaxError {
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirectiveParseDiagnostic {
+    pub kind: DirectiveParseDiagnosticKind,
+    pub span: std::ops::Range<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParsedLineComment {
+    NotLintDirective,
+    LintDirective {
+        kind: ParsedLintDirectiveKind,
+        rules: Vec<String>,
+        diagnostics: Vec<DirectiveParseDiagnostic>,
+        append_byte: Option<usize>,
+        has_syntax_error: bool,
+    },
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LintDirectiveKind {
@@ -94,151 +132,241 @@ enum ParsedDirective {
 }
 
 fn parse_directive<'tree>(comment: &Node<'tree>) -> ParsedDirective {
-    const DISABLE_NEXT_LINE: &str = "uroborosql-lint-disable-next-line";
-    const DISABLE: &str = "uroborosql-lint-disable";
-
     let comment_text = comment.text();
     let line = comment.range().start_position.row;
-    let Some(body) = comment_text.strip_prefix("--") else {
-        return ParsedDirective::NotDirective;
+
+    match parse_line_comment_directive(comment_text) {
+        ParsedLineComment::NotLintDirective => ParsedDirective::NotDirective,
+        ParsedLineComment::LintDirective {
+            kind,
+            rules,
+            diagnostics,
+            has_syntax_error,
+            ..
+        } => {
+            let diagnostics = diagnostics
+                .into_iter()
+                .map(|diagnostic| to_lint_diagnostic(comment, diagnostic))
+                .collect::<Vec<_>>();
+            if has_syntax_error {
+                ParsedDirective::Invalid(
+                    diagnostics
+                        .into_iter()
+                        .next()
+                        .expect("syntax diagnostic should be present"),
+                )
+            } else {
+                ParsedDirective::Valid {
+                    directive: LintDirective {
+                        kind: match kind {
+                            ParsedLintDirectiveKind::Disable => LintDirectiveKind::Disable,
+                            ParsedLintDirectiveKind::DisableNextLine => {
+                                LintDirectiveKind::DisableNextLine
+                            }
+                        },
+                        line,
+                        rules,
+                    },
+                    diagnostics,
+                }
+            }
+        }
+    }
+}
+
+pub fn parse_line_comment_directive(text: &str) -> ParsedLineComment {
+    let Some(body) = text.strip_prefix("--") else {
+        return ParsedLineComment::NotLintDirective;
     };
     let body = body.trim_start_matches([' ', '\t']);
-    let body_offset = comment_text.len() - body.len();
+    let body_offset = text.len() - body.len();
 
-    if let Some(rest) = body.strip_prefix(DISABLE_NEXT_LINE) {
-        return match parse_rules(comment, rest, body_offset + DISABLE_NEXT_LINE.len()) {
-            ParsedRules::Valid { rules, diagnostics } => ParsedDirective::Valid {
-                directive: LintDirective {
-                    kind: LintDirectiveKind::DisableNextLine,
-                    line,
-                    rules,
-                },
-                diagnostics,
-            },
-            ParsedRules::Invalid(diagnostic) => ParsedDirective::Invalid(diagnostic),
-            ParsedRules::NotDirective => ParsedDirective::NotDirective,
-        };
+    if let Some(rest) = body.strip_prefix(DISABLE_NEXT_LINE_DIRECTIVE_KEYWORD) {
+        return parse_line_rules(
+            text,
+            ParsedLintDirectiveKind::DisableNextLine,
+            rest,
+            body_offset + DISABLE_NEXT_LINE_DIRECTIVE_KEYWORD.len(),
+        );
     }
 
-    if let Some(rest) = body.strip_prefix(DISABLE) {
-        return match parse_rules(comment, rest, body_offset + DISABLE.len()) {
-            ParsedRules::Valid { rules, diagnostics } => ParsedDirective::Valid {
-                directive: LintDirective {
-                    kind: LintDirectiveKind::Disable,
-                    line,
-                    rules,
-                },
-                diagnostics,
-            },
-            ParsedRules::Invalid(diagnostic) => ParsedDirective::Invalid(diagnostic),
-            ParsedRules::NotDirective => ParsedDirective::NotDirective,
-        };
+    if let Some(rest) = body.strip_prefix(DISABLE_DIRECTIVE_KEYWORD) {
+        return parse_line_rules(
+            text,
+            ParsedLintDirectiveKind::Disable,
+            rest,
+            body_offset + DISABLE_DIRECTIVE_KEYWORD.len(),
+        );
     }
 
-    ParsedDirective::NotDirective
+    ParsedLineComment::NotLintDirective
 }
 
-enum ParsedRules {
-    Valid {
-        rules: Vec<String>,
-        diagnostics: Vec<Diagnostic>,
-    },
-    Invalid(Diagnostic),
-    NotDirective,
-}
-
-fn parse_rules<'tree>(comment: &Node<'tree>, rest: &str, directive_offset: usize) -> ParsedRules {
+fn parse_line_rules(
+    text: &str,
+    kind: ParsedLintDirectiveKind,
+    rest: &str,
+    directive_offset: usize,
+) -> ParsedLineComment {
     if rest.trim().is_empty() {
-        return ParsedRules::Invalid(invalid_syntax_diagnostic(
-            comment,
+        return syntax_error_directive(
+            kind,
             "invalid lint directive syntax: expected one or more comma-separated rule names",
             0,
-            comment.text().len(),
-        ));
+            text.len(),
+        );
     }
 
     if !rest.starts_with(char::is_whitespace) {
-        return ParsedRules::NotDirective;
+        return ParsedLineComment::NotLintDirective;
     }
 
-    // Keep spans in original comment coordinates for directive diagnostics.
     let rules_offset = directive_offset + (rest.len() - rest.trim_start().len());
-    let rest = rest.trim();
+    let rest = rest.trim_start().trim_end();
     let mut seen = HashSet::new();
     let mut rules = Vec::new();
     let mut diagnostics = Vec::new();
+    let segments = split_rule_segments(rest);
 
-    let mut offset = 0;
-    for raw_name in rest.split(',') {
-        let name = raw_name.trim();
-        let trimmed_start = raw_name.len() - raw_name.trim_start().len();
+    for (index, segment) in segments.iter().enumerate() {
+        let raw_name = &rest[segment.start..segment.end];
+        let name = raw_name.trim_matches([' ', '\t']);
+        let trimmed_start = raw_name.len() - raw_name.trim_start_matches([' ', '\t']).len();
 
         if name.is_empty() {
-            let start = rules_offset + offset + trimmed_start;
-            let end = if offset + raw_name.len() == rest.len() {
+            let start = rules_offset + segment.start + trimmed_start;
+            let end = if segment.end == rest.len() {
                 start.saturating_sub(1)
             } else {
                 start + raw_name.len()
             };
-            let message = if offset + raw_name.len() == rest.len() {
+            let message = if segment.end == rest.len() {
                 "invalid lint directive syntax: trailing comma is not allowed"
             } else {
                 "invalid lint directive syntax: expected comma-separated rule names"
             };
-            return ParsedRules::Invalid(invalid_syntax_diagnostic(
-                comment,
-                message,
-                start.saturating_sub(1),
-                end,
-            ));
+            return syntax_error_directive(kind, message, start.saturating_sub(1), end);
         }
 
         if RuleEnum::from_name(name).is_none() {
-            let start = rules_offset + offset + trimmed_start;
+            let start = rules_offset + segment.start + trimmed_start;
             let end = start + name.len();
-            diagnostics.push(unknown_rule_diagnostic(comment, name, start, end));
-            offset += raw_name.len() + 1;
+            let removal_span = unknown_rule_removal_span(text, rest, &segments, index);
+            diagnostics.push(DirectiveParseDiagnostic {
+                kind: DirectiveParseDiagnosticKind::UnknownRule {
+                    rule: name.to_string(),
+                    removal_span: removal_span.start + rules_offset
+                        ..removal_span.end + rules_offset,
+                },
+                span: start..end,
+            });
             continue;
         }
 
         if seen.insert(name) {
             rules.push(name.to_string());
         }
-
-        offset += raw_name.len() + 1;
     }
 
-    ParsedRules::Valid { rules, diagnostics }
+    ParsedLineComment::LintDirective {
+        kind,
+        rules,
+        diagnostics,
+        append_byte: Some(rules_offset + rest.len()),
+        has_syntax_error: false,
+    }
 }
 
-fn unknown_rule_diagnostic<'tree>(
-    comment: &Node<'tree>,
-    unknown_rule: &str,
-    start_offset: usize,
-    end_offset: usize,
-) -> Diagnostic {
-    let range = subrange_in_comment(comment, start_offset, end_offset);
-    Diagnostic::new(
-        INVALID_LINT_DIRECTIVE_CODE,
-        Severity::Warning,
-        format!("unknown lint directive rule `{unknown_rule}`"),
-        &range,
-    )
+#[derive(Debug)]
+struct RuleSegment {
+    start: usize,
+    end: usize,
 }
 
-fn invalid_syntax_diagnostic<'tree>(
-    comment: &Node<'tree>,
+fn split_rule_segments(rest: &str) -> Vec<RuleSegment> {
+    let mut segments = Vec::new();
+    let mut start = 0;
+    for (idx, _) in rest.match_indices(',') {
+        segments.push(RuleSegment { start, end: idx });
+        start = idx + 1;
+    }
+    segments.push(RuleSegment {
+        start,
+        end: rest.len(),
+    });
+    segments
+}
+
+fn unknown_rule_removal_span(
+    text: &str,
+    rest: &str,
+    segments: &[RuleSegment],
+    index: usize,
+) -> std::ops::Range<usize> {
+    if segments.len() == 1 {
+        return 0..text.len();
+    }
+
+    let segment = &segments[index];
+    if index + 1 < segments.len() {
+        let raw_name = &rest[segment.start..segment.end];
+        let trimmed_start = raw_name.len() - raw_name.trim_start_matches([' ', '\t']).len();
+        let next = &segments[index + 1];
+        let next_raw = &rest[next.start..next.end];
+        let next_trimmed_start = next_raw.len() - next_raw.trim_start_matches([' ', '\t']).len();
+        segment.start + trimmed_start..next.start + next_trimmed_start
+    } else {
+        let previous = &segments[index - 1];
+        let previous_raw = &rest[previous.start..previous.end];
+        let previous_trimmed_end = previous_raw.trim_end_matches([' ', '\t']).len();
+        previous.start + previous_trimmed_end..segment.end
+    }
+}
+
+fn syntax_error_directive(
+    kind: ParsedLintDirectiveKind,
     message: impl Into<String>,
     start_offset: usize,
     end_offset: usize,
+) -> ParsedLineComment {
+    ParsedLineComment::LintDirective {
+        kind,
+        rules: Vec::new(),
+        diagnostics: vec![DirectiveParseDiagnostic {
+            kind: DirectiveParseDiagnosticKind::SyntaxError {
+                message: message.into(),
+            },
+            span: start_offset..end_offset.max(start_offset + 1),
+        }],
+        append_byte: None,
+        has_syntax_error: true,
+    }
+}
+
+fn to_lint_diagnostic<'tree>(
+    comment: &Node<'tree>,
+    diagnostic: DirectiveParseDiagnostic,
 ) -> Diagnostic {
-    let range = subrange_in_comment(comment, start_offset, end_offset.max(start_offset + 1));
-    Diagnostic::new(
-        INVALID_LINT_DIRECTIVE_CODE,
-        Severity::Warning,
-        message,
-        &range,
-    )
+    match diagnostic.kind {
+        DirectiveParseDiagnosticKind::UnknownRule { rule, .. } => {
+            let range = subrange_in_comment(comment, diagnostic.span.start, diagnostic.span.end);
+            Diagnostic::new(
+                INVALID_LINT_DIRECTIVE_CODE,
+                Severity::Warning,
+                format!("unknown lint directive rule `{rule}`"),
+                &range,
+            )
+        }
+        DirectiveParseDiagnosticKind::SyntaxError { message } => {
+            let range = subrange_in_comment(comment, diagnostic.span.start, diagnostic.span.end);
+            Diagnostic::new(
+                INVALID_LINT_DIRECTIVE_CODE,
+                Severity::Warning,
+                message,
+                &range,
+            )
+        }
+    }
 }
 
 fn subrange_in_comment<'tree>(
@@ -307,6 +435,54 @@ mod tests {
             .find(|node| node.kind() == SyntaxKind::SQL_COMMENT)
             .expect("sql comment");
         parse_directive(&comment_node)
+    }
+
+    #[test]
+    fn line_parser_returns_known_rules_and_unknown_diagnostics() {
+        let parsed = parse_line_comment_directive(
+            "-- uroborosql-lint-disable no-distinct, clearly-not-a-rule",
+        );
+
+        assert!(matches!(
+            parsed,
+            ParsedLineComment::LintDirective {
+                kind: ParsedLintDirectiveKind::Disable,
+                rules,
+                diagnostics,
+                append_byte: Some(58),
+                has_syntax_error: false,
+            } if rules == vec!["no-distinct".to_string()]
+                && matches!(
+                    &diagnostics[..],
+                    [DirectiveParseDiagnostic {
+                        kind: DirectiveParseDiagnosticKind::UnknownRule { rule, removal_span },
+                        span,
+                    }] if rule == "clearly-not-a-rule"
+                        && removal_span == &(38..58)
+                        && span == &(40..58)
+                )
+        ));
+    }
+
+    #[test]
+    fn line_parser_reports_syntax_error_without_append_position() {
+        let parsed = parse_line_comment_directive("-- uroborosql-lint-disable no-distinct,");
+
+        assert!(matches!(
+            parsed,
+            ParsedLineComment::LintDirective {
+                has_syntax_error: true,
+                append_byte: None,
+                diagnostics,
+                ..
+            } if matches!(
+                &diagnostics[..],
+                [DirectiveParseDiagnostic {
+                    kind: DirectiveParseDiagnosticKind::SyntaxError { message },
+                    ..
+                }] if message == "invalid lint directive syntax: trailing comma is not allowed"
+            )
+        ));
     }
 
     #[test]

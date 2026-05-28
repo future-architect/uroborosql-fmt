@@ -1,3 +1,4 @@
+mod code_action;
 mod configuration;
 mod document;
 mod formatting;
