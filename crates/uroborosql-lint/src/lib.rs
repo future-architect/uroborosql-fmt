@@ -13,7 +13,7 @@ pub use config::{
 pub use diagnostic::{Diagnostic, Severity, SqlSpan};
 pub use directive::{
     parse_line_comment_directive, DirectiveParseDiagnostic, DirectiveParseDiagnosticKind,
-    ParsedLineLintDirective, ParsedLintDirectiveKind, DISABLE_DIRECTIVE_KEYWORD,
+    ParsedLineComment, ParsedLintDirectiveKind, DISABLE_DIRECTIVE_KEYWORD,
     DISABLE_NEXT_LINE_DIRECTIVE_KEYWORD, INVALID_LINT_DIRECTIVE_CODE, LINT_SOURCE,
 };
 pub use linter::{LintError, Linter};
