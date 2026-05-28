@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "rust",
+  "plugins": ["cargo-workspace"],
+  "packages": {
+    "crates/uroborosql-fmt": {
+      "package-name": "uroborosql-fmt",
+      "tag-name": "v${version}",
+      "changelog-path": "../../CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "crates/uroborosql-fmt-napi/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}
