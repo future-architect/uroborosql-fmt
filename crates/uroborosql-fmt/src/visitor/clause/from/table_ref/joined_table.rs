@@ -142,11 +142,10 @@ impl Visitor {
 
                 // comments_after_join_keywordの最後の要素が置換文字列かどうか調べ、
                 // 置換文字列であればrightにセットする
-                if let Some(comment) = comments_after_join_keyword.last() {
-                    if comment.is_block_comment() && comment.loc().is_next_to(&right.loc()) {
-                        // last()がSome()であるため、pop().unwrap()は必ず成功する
-                        right.set_head_comment(comments_after_join_keyword.pop().unwrap());
-                    }
+                if let Some(comment) = comments_after_join_keyword.pop_if(|comment| {
+                    comment.is_block_comment() && comment.loc().is_next_to(&right.loc())
+                }) {
+                    right.set_head_comment(comment);
                 }
 
                 cursor.goto_next_sibling();
