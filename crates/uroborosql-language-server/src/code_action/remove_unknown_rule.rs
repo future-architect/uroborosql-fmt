@@ -3,7 +3,8 @@ use tower_lsp_server::lsp_types::{
     CodeAction, CodeActionKind, Diagnostic, NumberOrString, Position, Range, TextEdit, Uri,
 };
 use uroborosql_lint::{
-    DirectiveParseDiagnosticKind, ParsedLineComment, parse_line_comment_directive,
+    DirectiveParseDiagnosticKind, ParsedLineComment, UnknownRuleRemovalRange,
+    parse_line_comment_directive,
 };
 
 use super::{INVALID_LINT_DIRECTIVE_CODE, LINT_SOURCE, directive_line, workspace_edit};
@@ -36,7 +37,7 @@ pub(in crate::code_action) fn remove_unknown_rule_action(
     };
 
     for parse_diagnostic in diagnostics {
-        let DirectiveParseDiagnosticKind::UnknownRule { removal_span, .. } = parse_diagnostic.kind
+        let DirectiveParseDiagnosticKind::UnknownRule { removal_range, .. } = parse_diagnostic.kind
         else {
             continue;
         };
@@ -50,14 +51,9 @@ pub(in crate::code_action) fn remove_unknown_rule_action(
             continue;
         }
 
-        let removal_span = directive_line::removal_span_with_offset(
-            &line_text,
-            directive_text,
-            removal_span,
-            directive_offset,
-        );
+        let removal_range = line_removal_range_with_offset(removal_range, directive_offset);
         let edit_range =
-            removal_range_to_lsp_range(rope, diagnostic_line, &line_text, removal_span)?;
+            removal_range_to_lsp_range(rope, diagnostic_line, &line_text, removal_range)?;
         return Some(CodeAction {
             title: "Remove unknown lint rule".into(),
             kind: Some(CodeActionKind::QUICKFIX),
@@ -76,22 +72,36 @@ pub(in crate::code_action) fn remove_unknown_rule_action(
     None
 }
 
+fn line_removal_range_with_offset(
+    removal_range: UnknownRuleRemovalRange,
+    directive_offset: usize,
+) -> UnknownRuleRemovalRange {
+    match removal_range {
+        UnknownRuleRemovalRange::FullLine => UnknownRuleRemovalRange::FullLine,
+        UnknownRuleRemovalRange::PartialLine(range) => UnknownRuleRemovalRange::PartialLine(
+            directive_line::add_offset(range, directive_offset),
+        ),
+    }
+}
+
 fn removal_range_to_lsp_range(
     rope: &Rope,
     line: u32,
     line_text: &str,
-    removal_span: std::ops::Range<usize>,
+    removal_range: UnknownRuleRemovalRange,
 ) -> Option<Range> {
-    if removal_span.start == 0
-        && removal_span.end == line_text.len()
-        && rope_line_has_ending(rope, line)
-    {
-        return Some(Range::new(
+    match removal_range {
+        UnknownRuleRemovalRange::FullLine if rope_line_has_ending(rope, line) => Some(Range::new(
             Position::new(line, 0),
             Position::new(line + 1, 0),
-        ));
+        )),
+        UnknownRuleRemovalRange::FullLine => {
+            rope_line_byte_range_to_range(rope, line, line_text, 0..line_text.len())
+        }
+        UnknownRuleRemovalRange::PartialLine(range) => {
+            rope_line_byte_range_to_range(rope, line, line_text, range)
+        }
     }
-    rope_line_byte_range_to_range(rope, line, line_text, removal_span)
 }
 
 #[cfg(test)]
@@ -109,7 +119,7 @@ mod tests {
             &rope,
             0,
             "-- uroborosql-lint-disable-next-line definitely-not-a-rule",
-            0..58,
+            UnknownRuleRemovalRange::FullLine,
         )
         .unwrap();
 

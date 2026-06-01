@@ -25,11 +25,17 @@ pub enum ParsedLintDirectiveKind {
 pub enum DirectiveParseDiagnosticKind {
     UnknownRule {
         rule: String,
-        removal_span: std::ops::Range<usize>,
+        removal_range: UnknownRuleRemovalRange,
     },
     SyntaxError {
         message: String,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnknownRuleRemovalRange {
+    FullLine,
+    PartialLine(std::ops::Range<usize>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -251,12 +257,18 @@ fn parse_line_rules(
         if RuleEnum::from_name(name).is_none() {
             let start = rules_offset + segment.start + trimmed_start;
             let end = start + name.len();
-            let removal_span = unknown_rule_removal_span(text, rest, &segments, index);
+            let removal_range = unknown_rule_removal_range(rest, &segments, index);
             diagnostics.push(DirectiveParseDiagnostic {
                 kind: DirectiveParseDiagnosticKind::UnknownRule {
                     rule: name.to_string(),
-                    removal_span: removal_span.start + rules_offset
-                        ..removal_span.end + rules_offset,
+                    removal_range: match removal_range {
+                        UnknownRuleRemovalRange::FullLine => UnknownRuleRemovalRange::FullLine,
+                        UnknownRuleRemovalRange::PartialLine(range) => {
+                            UnknownRuleRemovalRange::PartialLine(
+                                range.start + rules_offset..range.end + rules_offset,
+                            )
+                        }
+                    },
                 },
                 span: start..end,
             });
@@ -297,14 +309,13 @@ fn split_rule_segments(rest: &str) -> Vec<RuleSegment> {
     segments
 }
 
-fn unknown_rule_removal_span(
-    text: &str,
+fn unknown_rule_removal_range(
     rest: &str,
     segments: &[RuleSegment],
     index: usize,
-) -> std::ops::Range<usize> {
+) -> UnknownRuleRemovalRange {
     if segments.len() == 1 {
-        return 0..text.len();
+        return UnknownRuleRemovalRange::FullLine;
     }
 
     let segment = &segments[index];
@@ -314,12 +325,14 @@ fn unknown_rule_removal_span(
         let next = &segments[index + 1];
         let next_raw = &rest[next.start..next.end];
         let next_trimmed_start = next_raw.len() - next_raw.trim_start_matches([' ', '\t']).len();
-        segment.start + trimmed_start..next.start + next_trimmed_start
+        UnknownRuleRemovalRange::PartialLine(
+            segment.start + trimmed_start..next.start + next_trimmed_start,
+        )
     } else {
         let previous = &segments[index - 1];
         let previous_raw = &rest[previous.start..previous.end];
         let previous_trimmed_end = previous_raw.trim_end_matches([' ', '\t']).len();
-        previous.start + previous_trimmed_end..segment.end
+        UnknownRuleRemovalRange::PartialLine(previous.start + previous_trimmed_end..segment.end)
     }
 }
 
@@ -455,10 +468,11 @@ mod tests {
                 && matches!(
                     &diagnostics[..],
                     [DirectiveParseDiagnostic {
-                        kind: DirectiveParseDiagnosticKind::UnknownRule { rule, removal_span },
+                        kind: DirectiveParseDiagnosticKind::UnknownRule { rule, removal_range },
                         span,
                     }] if rule == "clearly-not-a-rule"
-                        && removal_span == &(38..58)
+                        && removal_range
+                            == &UnknownRuleRemovalRange::PartialLine(38..58)
                         && span == &(40..58)
                 )
         ));
