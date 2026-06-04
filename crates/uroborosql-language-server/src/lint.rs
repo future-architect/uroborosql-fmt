@@ -4,7 +4,8 @@ use tower_lsp_server::lsp_types::{
     Diagnostic, DiagnosticSeverity, MessageType, NumberOrString, Position, Range, Uri,
 };
 use uroborosql_lint::{
-    DEFAULT_CONFIG_FILENAME, Diagnostic as SqlDiagnostic, LintError, Severity as SqlSeverity,
+    DEFAULT_CONFIG_FILENAME, Diagnostic as SqlDiagnostic, LINT_SOURCE, LintError,
+    Severity as SqlSeverity,
 };
 
 use crate::Backend;
@@ -97,7 +98,7 @@ fn to_lsp_diagnostic(diag: SqlDiagnostic, rope: Option<&ropey::Rope>) -> Diagnos
         range,
         severity,
         code: Some(NumberOrString::String(diag.code.to_string())),
-        source: Some("uroborosql-lint".into()),
+        source: Some(LINT_SOURCE.into()),
         message: diag.message,
         ..Diagnostic::default()
     }
@@ -111,7 +112,7 @@ fn to_parse_error(err: LintError) -> Diagnostic {
     Diagnostic {
         range: Range::default(),
         severity: Some(DiagnosticSeverity::ERROR),
-        source: Some("uroborosql-lint".into()),
+        source: Some(LINT_SOURCE.into()),
         message,
         ..Diagnostic::default()
     }
