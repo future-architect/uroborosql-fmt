@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf, process};
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, Severity};
 
 #[derive(Parser, Debug)]
@@ -12,30 +12,89 @@ struct Cli {
     /// Path to configuration file
     #[arg(long, value_name = "FILE")]
     pub config: Option<PathBuf>,
+
+    /// Minimum diagnostic severity that causes a non-zero exit code
+    #[arg(long, value_enum, default_value_t = FailLevel::Error)]
+    pub fail_level: FailLevel,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+enum FailLevel {
+    None,
+    Info,
+    Warning,
+    Error,
+}
+
+impl FailLevel {
+    fn matches(self, severity: Severity) -> bool {
+        match self {
+            Self::None => false,
+            Self::Info => matches!(
+                severity,
+                Severity::Info | Severity::Warning | Severity::Error
+            ),
+            Self::Warning => matches!(severity, Severity::Warning | Severity::Error),
+            Self::Error => matches!(severity, Severity::Error),
+        }
+    }
+}
+
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum ExitCode {
+    Ok = 0,
+    IssuesFound = 1,
+    ExecutionError = 2,
+}
+
+#[derive(Debug)]
+struct CliError {
+    code: ExitCode,
+    message: Option<String>,
+}
+
+impl CliError {
+    fn issues_found() -> Self {
+        Self {
+            code: ExitCode::IssuesFound,
+            message: None,
+        }
+    }
+
+    fn execution(message: impl Into<String>) -> Self {
+        Self {
+            code: ExitCode::ExecutionError,
+            message: Some(message.into()),
+        }
+    }
 }
 
 fn main() {
     if let Err(err) = run() {
-        eprintln!("{err}");
-        process::exit(1);
+        if let Some(message) = err.message {
+            eprintln!("{message}");
+        }
+        process::exit(err.code as i32);
     }
+
+    process::exit(ExitCode::Ok as i32);
 }
 
-fn run() -> Result<(), String> {
+fn run() -> Result<(), CliError> {
     let cli = Cli::parse();
 
     let linter = Linter::new();
-    let mut exit_with_error = false;
-
-    let cwd = env::current_dir().map_err(|err| format!("Failed to get cwd: {err}"))?;
+    let cwd = env::current_dir()
+        .map_err(|err| CliError::execution(format!("Failed to get cwd: {err}")))?;
     let path = resolve_input_path(cli.input, &cwd)?;
     let display = path.display().to_string();
 
-    let sql =
-        fs::read_to_string(&path).map_err(|err| format!("Failed to read {}: {}", display, err))?;
+    let sql = fs::read_to_string(&path)
+        .map_err(|err| CliError::execution(format!("Failed to read {}: {}", display, err)))?;
 
-    let config_store =
-        ConfigStore::new(cwd, cli.config).map_err(|err| format!("Failed to load config: {err}"))?;
+    let config_store = ConfigStore::new(cwd, cli.config)
+        .map_err(|err| CliError::execution(format!("Failed to load config: {err}")))?;
 
     if config_store.is_ignored(&path) {
         return Ok(());
@@ -45,32 +104,43 @@ fn run() -> Result<(), String> {
 
     match linter.run(&sql, &resolved_config) {
         Ok(diagnostics) => {
-            for diagnostic in diagnostics {
-                print_diagnostic(&display, &diagnostic);
+            let should_fail = diagnostics
+                .iter()
+                .any(|diagnostic| cli.fail_level.matches(diagnostic.severity));
+
+            for diagnostic in &diagnostics {
+                print_diagnostic(&display, diagnostic);
+            }
+
+            if should_fail {
+                return Err(CliError::issues_found());
             }
         }
         Err(LintError::ParseError(message)) => {
-            eprintln!("{}: error: failed to parse SQL: {}", display, message);
-            exit_with_error = true;
+            return Err(CliError::execution(format!(
+                "{}: error: failed to parse SQL: {}",
+                display, message
+            )));
         }
     }
 
-    if exit_with_error {
-        Err("Linting finished with errors".into())
-    } else {
-        Ok(())
-    }
+    Ok(())
 }
 
-fn resolve_input_path(path: PathBuf, cwd: &std::path::Path) -> Result<PathBuf, String> {
+fn resolve_input_path(path: PathBuf, cwd: &std::path::Path) -> Result<PathBuf, CliError> {
     let path = if path.is_absolute() {
         path
     } else {
         cwd.join(path)
     };
 
-    path.canonicalize()
-        .map_err(|err| format!("Failed to resolve input path {}: {}", path.display(), err))
+    path.canonicalize().map_err(|err| {
+        CliError::execution(format!(
+            "Failed to resolve input path {}: {}",
+            path.display(),
+            err
+        ))
+    })
 }
 
 fn print_diagnostic(file: &str, diagnostic: &Diagnostic) {
