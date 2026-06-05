@@ -169,7 +169,8 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::resolve_input_path;
+    use super::{resolve_input_path, FailLevel};
+    use uroborosql_lint::Severity;
 
     #[test]
     fn resolves_relative_input_path_from_cwd() {
@@ -198,5 +199,19 @@ mod tests {
             resolve_input_path(input.clone(), temp.path()).expect("resolve absolute input");
 
         assert_eq!(resolved, input.canonicalize().expect("canonicalize input"));
+    }
+
+    #[test]
+    fn fail_level_none_never_matches() {
+        assert!(!FailLevel::None.matches(Severity::Info));
+        assert!(!FailLevel::None.matches(Severity::Warning));
+        assert!(!FailLevel::None.matches(Severity::Error));
+    }
+
+    #[test]
+    fn fail_level_info_matches_all_current_severities() {
+        assert!(FailLevel::Info.matches(Severity::Info));
+        assert!(FailLevel::Info.matches(Severity::Warning));
+        assert!(FailLevel::Info.matches(Severity::Error));
     }
 }

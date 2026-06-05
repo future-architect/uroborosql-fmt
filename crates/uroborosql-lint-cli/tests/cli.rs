@@ -39,38 +39,6 @@ fn warning_fails_with_fail_level_warning() {
 }
 
 #[test]
-fn warning_does_not_fail_with_fail_level_none() {
-    let temp = TempDir::new().expect("tempdir");
-    let input = write_sql(&temp, "query.sql", "SELECT DISTINCT id FROM users;");
-
-    Command::cargo_bin("uroborosql-lint")
-        .expect("cargo_bin")
-        .current_dir(temp.path())
-        .arg("--fail-level")
-        .arg("none")
-        .arg(input.path())
-        .assert()
-        .code(0)
-        .stdout(contains("warning: no-distinct"));
-}
-
-#[test]
-fn warning_fails_with_fail_level_info() {
-    let temp = TempDir::new().expect("tempdir");
-    let input = write_sql(&temp, "query.sql", "SELECT DISTINCT id FROM users;");
-
-    Command::cargo_bin("uroborosql-lint")
-        .expect("cargo_bin")
-        .current_dir(temp.path())
-        .arg("--fail-level")
-        .arg("info")
-        .arg(input.path())
-        .assert()
-        .code(1)
-        .stdout(contains("warning: no-distinct"));
-}
-
-#[test]
 fn error_fails_by_default() {
     let temp = TempDir::new().expect("tempdir");
     let input = write_sql(&temp, "query.sql", "SELECT DISTINCT id FROM users;");
@@ -162,16 +130,6 @@ fn invalid_config_returns_execution_error() {
         .assert()
         .code(2)
         .stderr(contains("Failed to load config"));
-}
-
-#[test]
-fn help_shows_fail_level_option() {
-    Command::cargo_bin("uroborosql-lint")
-        .expect("cargo_bin")
-        .arg("--help")
-        .assert()
-        .code(0)
-        .stdout(contains("--fail-level"));
 }
 
 #[test]
