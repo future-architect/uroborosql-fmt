@@ -1,0 +1,6 @@
+{
+  "crates/uroborosql-fmt": "1.0.1",
+  "crates/uroborosql-fmt-cli": "1.0.1",
+  "crates/uroborosql-fmt-napi": "1.0.1",
+  "crates/uroborosql-fmt-wasm": "1.0.1"
+}
