@@ -1,0 +1,18 @@
+[package]
+name = "uroborosql-fmt-wasm-cabi"
+version.workspace = true
+description = "Crate to build uroborosql-fmt as a minimal C-ABI wasm (no wasm-bindgen / no JS glue); usable from non-JS hosts such as JVM WebAssembly runtimes (e.g. Chicory)"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+uroborosql-fmt = { workspace = true }
+
+[profile.release]
+# wasm のサイズ最適化（uroborosql-fmt-wasm と同様）
+opt-level = "s"

@@ -248,6 +248,37 @@ jobs:
         with:
           webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
+  # uroborosql-fmt-wasm-cabi (最小 C-ABI wasm) をビルドして workflow artifact にアップロード
+  # (wasm-pack ではなく素の cargo build。wasm-bindgen を使わないため)
+  build-wasm-cabi:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup cargo
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - name: Build
+        run: cargo build -p uroborosql-fmt-wasm-cabi --target wasm32-unknown-unknown --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-cabi
+          path: target/wasm32-unknown-unknown/release/uroborosql_fmt_wasm_cabi.wasm
+          if-no-files-found: error
+
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: ./.github/actions/slack-failure-notify
+        with:
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          status: failure
+
   # NAPI バイナリを npm pack して GitHub Release のアセットにアップロード
   upload-napi-to-release:
     if: github.repository == 'future-architect/uroborosql-fmt' &&
