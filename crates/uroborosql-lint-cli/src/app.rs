@@ -7,7 +7,6 @@ use crate::args::Cli;
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ExitCode {
-    Ok = 0,
     IssuesFound = 1,
     ExecutionError = 2,
 }
