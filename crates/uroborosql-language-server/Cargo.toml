@@ -1,6 +1,6 @@
 [package]
 name = "uroborosql-language-server"
-version.workspace = true
+version = "1.0.0"
 edition = "2024"
 
 [[bin]]

@@ -1253,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-language-server"
-version = "1.0.1"
+version = "1.0.0"
 dependencies = [
  "clap",
  "ropey",
@@ -1267,7 +1267,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-lint"
-version = "1.0.1"
+version = "0.1.0"
 dependencies = [
  "globset",
  "postgresql-cst-parser",
@@ -1279,7 +1279,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-lint-cli"
-version = "1.0.1"
+version = "0.1.0"
 dependencies = [
  "assert_cmd",
  "assert_fs",
