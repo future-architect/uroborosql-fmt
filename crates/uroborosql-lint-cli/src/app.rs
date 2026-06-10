@@ -4,7 +4,7 @@ use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, Severity};
 
 use crate::args::Cli;
 
-#[repr(i32)]
+#[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) enum ExitCode {
     IssuesFound = 1,
