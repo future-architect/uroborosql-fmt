@@ -51,6 +51,24 @@
       "component": "uroborosql-fmt-wasm",
       "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md"
+    },
+    "crates/uroborosql-lint": {
+      "package-name": "uroborosql-lint",
+      "component": "uroborosql-lint",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "crates/uroborosql-lint-cli": {
+      "package-name": "uroborosql-lint-cli",
+      "component": "uroborosql-lint-cli",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "crates/uroborosql-language-server": {
+      "package-name": "uroborosql-language-server",
+      "component": "uroborosql-language-server",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
     }
   }
 }
