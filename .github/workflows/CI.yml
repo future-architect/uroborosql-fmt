@@ -10,7 +10,11 @@ permissions:
 "on":
   push:
     branches: [main]
-    tags: ["v*"]
+    tags:
+      - "uroborosql-fmt-v*"
+      - "uroborosql-fmt-cli-v*"
+      - "uroborosql-fmt-napi-v*"
+      - "uroborosql-fmt-wasm-v*"
     paths-ignore:
       - "**/*.md"
       - LICENSE
@@ -24,6 +28,7 @@ jobs:
     uses: ./.github/workflows/test.yml
     secrets: inherit
   build-napi:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/') || startsWith(github.ref_name, 'uroborosql-fmt-napi-v') }}
     needs: test
     strategy:
       fail-fast: false
@@ -148,6 +153,7 @@ jobs:
 
   # CLI バイナリ (uroborosql-fmt) を各プラットフォーム向けにビルド
   build-cli:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/') || startsWith(github.ref_name, 'uroborosql-fmt-cli-v') }}
     needs: test
     strategy:
       fail-fast: false
@@ -213,6 +219,7 @@ jobs:
           status: failure
 
   build-wasm:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/') || startsWith(github.ref_name, 'uroborosql-fmt-wasm-v') }}
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -251,7 +258,7 @@ jobs:
   # NAPI バイナリを npm pack して GitHub Release のアセットにアップロード
   upload-napi-to-release:
     if: github.repository == 'future-architect/uroborosql-fmt' &&
-      startsWith(github.ref, 'refs/tags/v')
+      startsWith(github.ref_name, 'uroborosql-fmt-napi-v')
     needs: build-napi
     runs-on: ubuntu-latest
     steps:
@@ -271,7 +278,7 @@ jobs:
       # npm pack がタグと一致するファイル名（例: uroborosql-fmt-napi-1.0.2.tgz）を生成するために必要
       - name: Sync NAPI package.json version from tag
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=${GITHUB_REF_NAME#uroborosql-fmt-napi-v}
           echo "Syncing NAPI package.json version to ${VERSION}"
           jq --arg v "$VERSION" '.version = $v' ${{ env.WORKING_DIR }}/package.json > tmp.json
           mv tmp.json ${{ env.WORKING_DIR }}/package.json
@@ -330,7 +337,7 @@ jobs:
   # CLI バイナリを GitHub Release のアセットにアップロード
   upload-cli-to-release:
     if: github.repository == 'future-architect/uroborosql-fmt' &&
-      startsWith(github.ref, 'refs/tags/v')
+      startsWith(github.ref_name, 'uroborosql-fmt-cli-v')
     needs: build-cli
     runs-on: ubuntu-latest
     steps:
@@ -356,7 +363,7 @@ jobs:
   # WASM デモページを GitHub Pages にデプロイ
   deploy-wasm-to-gh-pages:
     if: github.repository == 'future-architect/uroborosql-fmt' &&
-      startsWith(github.ref, 'refs/tags/v')
+      startsWith(github.ref_name, 'uroborosql-fmt-wasm-v')
     needs: build-wasm
     runs-on: ubuntu-latest
     steps:

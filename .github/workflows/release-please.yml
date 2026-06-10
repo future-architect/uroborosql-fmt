@@ -1,0 +1,23 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    # fork からの実行を防止
+    if: github.repository == 'future-architect/uroborosql-fmt'
+    steps:
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+        with:
+          # PAT が必須。GITHUB_TOKEN で作成した component 付きタグ push は後続 workflow を発火しないため。
+          # 現在は RELEASE_PLZ_TOKEN を流用。将来 RELEASE_PLEASE_TOKEN へ移行予定。
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
