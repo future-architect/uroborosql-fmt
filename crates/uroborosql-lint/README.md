@@ -1,19 +1,8 @@
 # uroborosql-lint
 
-The CLI binary name is `uroborosql-lint`.
+Lint engine and rule/configuration crate for `uroborosql-lint`.
 
-## Usage
-
-```bash
-uroborosql-lint [OPTIONS] <INPUT>
-```
-
-Examples:
-
-```bash
-uroborosql-lint query.sql
-uroborosql-lint --config .uroborosqllintrc.json query.sql
-```
+For CLI usage, exit codes, and `--fail-level`, see the [`uroborosql-lint-cli` README](../uroborosql-lint-cli/README.md).
 
 ## Configuration
 

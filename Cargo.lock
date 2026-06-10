@@ -1281,7 +1281,10 @@ dependencies = [
 name = "uroborosql-lint-cli"
 version = "1.0.1"
 dependencies = [
+ "assert_cmd",
+ "assert_fs",
  "clap",
+ "predicates",
  "tempfile",
  "uroborosql-lint",
 ]

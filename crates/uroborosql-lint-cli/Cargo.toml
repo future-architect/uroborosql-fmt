@@ -15,4 +15,7 @@ clap = { workspace = true }
 uroborosql-lint = { path = "../uroborosql-lint" }
 
 [dev-dependencies]
+assert_cmd = "2"
+assert_fs = "1"
+predicates = "3"
 tempfile = "3"
