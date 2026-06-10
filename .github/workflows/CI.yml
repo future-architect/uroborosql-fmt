@@ -315,7 +315,6 @@ jobs:
           cd ${{ env.WORKING_DIR }}
           ls -1 *.node
           npm pack
-          npm run show-packed
 
       - name: Upload .tgz to GitHub Release
         env:

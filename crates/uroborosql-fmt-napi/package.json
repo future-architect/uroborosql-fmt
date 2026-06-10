@@ -23,7 +23,6 @@
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
     "prepublishOnly": "napi prepublish -t npm",
-    "show-packed": "tar -tf $(ls -t uroborosql-fmt-napi-*.tgz | head -n 1)",
     "test": "ava",
     "universal": "napi universal",
     "version": "napi version"
