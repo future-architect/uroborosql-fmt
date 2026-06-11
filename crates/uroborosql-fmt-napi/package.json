@@ -26,5 +26,10 @@
     "test": "ava",
     "universal": "napi universal",
     "version": "napi version"
-  }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node"
+  ]
 }
