@@ -44,7 +44,7 @@ jobs:
               strip -x *.node
           - host: windows-latest
             build: |
-              git config --system core.longpaths true 
+              git config --system core.longpaths true
               yarn build
             target: x86_64-pc-windows-msvc
           - host: macos-latest
@@ -61,7 +61,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
             build: |-
-
               rustup install 1.88.0 &&
               rustup default 1.88.0 &&
               set -e &&
