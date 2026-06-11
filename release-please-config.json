@@ -3,7 +3,6 @@
   "release-type": "rust",
   "bootstrap-sha": "c2b2b58ebbe1bd1a41cbacc92efa17728c731566",
   "separate-pull-requests": false,
-  "group-pull-request-title-pattern": "chore: release",
   "plugins": ["cargo-workspace"],
   "packages": {
     "crates/uroborosql-fmt": {
