@@ -74,10 +74,9 @@ fn run_lint(args: LintArgs) -> Result<(), CliError> {
         .map_err(|err| CliError::execution(format!("Failed to load config: {err}")))?;
 
     let Some(config_store) = config_store else {
-        eprintln!(
-            "No lint config found. Create .uroborosqllintrc.json or run `uroborosql-lint init`."
-        );
-        return Ok(());
+        return Err(CliError::execution(
+            "No lint config found. Create .uroborosqllintrc.json or run `uroborosql-lint init`.",
+        ));
     };
 
     if config_store.is_ignored(&path) {

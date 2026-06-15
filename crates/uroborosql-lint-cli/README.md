@@ -18,8 +18,8 @@ uroborosql-lint --fail-level warning query.sql
 uroborosql-lint init
 ```
 
-If no lint config can be resolved, the CLI exits successfully without emitting diagnostics and prints
-guidance to create one. Create `.uroborosqllintrc.json` in the current working directory, run
+If no lint config can be resolved, the CLI exits with an execution error and prints guidance to
+create one. Create `.uroborosqllintrc.json` in the current working directory, run
 `uroborosql-lint init`, or pass `--config`, to enable linting.
 
 For config file structure, rule settings, and directive details, see the
@@ -34,7 +34,7 @@ directory. If the file already exists, the command fails without overwriting it.
 
 - `0`: lint succeeded and no diagnostics at or above `--fail-level` were found
 - `1`: lint succeeded and at least one diagnostic at or above `--fail-level` was found
-- `2`: lint could not complete because of a usage or execution failure such as invalid CLI arguments, invalid config, I/O failure, or SQL parse failure
+- `2`: lint could not complete because of a usage or execution failure such as missing config, invalid CLI arguments, invalid config, I/O failure, or SQL parse failure
 
 ### Fail Level
 

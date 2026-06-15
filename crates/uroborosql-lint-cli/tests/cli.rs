@@ -9,7 +9,7 @@ fn write_sql(temp: &TempDir, name: &str, sql: &str) -> ChildPath {
 }
 
 #[test]
-fn missing_config_is_noop_by_default() {
+fn missing_config_returns_execution_error() {
     let temp = TempDir::new().expect("tempdir");
     let input = write_sql(&temp, "query.sql", "SELECT DISTINCT id FROM users;");
 
@@ -18,7 +18,7 @@ fn missing_config_is_noop_by_default() {
         .current_dir(temp.path())
         .arg(input.path())
         .assert()
-        .code(0)
+        .code(2)
         .stdout("")
         .stderr(contains("No lint config found"));
 }
@@ -126,7 +126,7 @@ fn invalid_directive_warning_fails_with_fail_level_warning() {
 }
 
 #[test]
-fn parse_failure_is_noop_without_config() {
+fn parse_failure_returns_missing_config_error_without_config() {
     let temp = TempDir::new().expect("tempdir");
     let input = write_sql(&temp, "query.sql", "SELECT FROM");
 
@@ -135,7 +135,7 @@ fn parse_failure_is_noop_without_config() {
         .current_dir(temp.path())
         .arg(input.path())
         .assert()
-        .code(0)
+        .code(2)
         .stdout("")
         .stderr(contains("No lint config found"));
 }
