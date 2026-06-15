@@ -1,8 +1,7 @@
 mod test_harness;
 
-use std::str::FromStr;
-
 use serde_json::Value;
+use tower_lsp_server::UriExt;
 use tower_lsp_server::lsp_types::notification::{Notification, PublishDiagnostics};
 use tower_lsp_server::lsp_types::*;
 
@@ -22,9 +21,13 @@ async fn initialize_declares_quickfix_code_action_provider() {
 #[tokio::test]
 async fn lint_diagnostic_returns_disable_next_line_quickfix() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///code-action.sql").unwrap();
+    let root_dir = initialize_server_with_default_lint_config(
+        &mut server,
+        "uroborosql-lsp-code-action-disable",
+    )
+    .await;
+    let uri = Uri::from_file_path(root_dir.join("code-action.sql")).unwrap();
 
-    initialize_server(&mut server).await;
     server
         .send_request(build_did_open(
             &uri,
@@ -64,11 +67,15 @@ async fn lint_diagnostic_returns_disable_next_line_quickfix() {
 #[tokio::test]
 async fn existing_disable_next_line_is_appended() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///append.sql").unwrap();
+    let root_dir = initialize_server_with_default_lint_config(
+        &mut server,
+        "uroborosql-lsp-code-action-append",
+    )
+    .await;
+    let uri = Uri::from_file_path(root_dir.join("append.sql")).unwrap();
     let text = "-- uroborosql-lint-disable-next-line no-distinct\nSELECT DISTINCT * FROM users;\n";
     let diagnostic = lint_diagnostic("no-wildcard-projection", 1, 16, 1, 17);
 
-    initialize_server(&mut server).await;
     server.send_request(build_did_open(&uri, text, 1)).await;
     let _ = server.receive_notification().await;
 
@@ -93,12 +100,16 @@ async fn existing_disable_next_line_is_appended() {
 #[tokio::test]
 async fn indented_existing_disable_next_line_is_appended() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///append-indented.sql").unwrap();
+    let root_dir = initialize_server_with_default_lint_config(
+        &mut server,
+        "uroborosql-lsp-code-action-append-indented",
+    )
+    .await;
+    let uri = Uri::from_file_path(root_dir.join("append-indented.sql")).unwrap();
     let text =
         "    -- uroborosql-lint-disable-next-line no-distinct\n    SELECT DISTINCT * FROM users;\n";
     let diagnostic = lint_diagnostic("no-wildcard-projection", 1, 20, 1, 21);
 
-    initialize_server(&mut server).await;
     server.send_request(build_did_open(&uri, text, 1)).await;
     let _ = server.receive_notification().await;
 
@@ -123,10 +134,14 @@ async fn indented_existing_disable_next_line_is_appended() {
 #[tokio::test]
 async fn unknown_rule_directive_returns_remove_quickfix() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///unknown-rule.sql").unwrap();
+    let root_dir = initialize_server_with_default_lint_config(
+        &mut server,
+        "uroborosql-lsp-code-action-unknown",
+    )
+    .await;
+    let uri = Uri::from_file_path(root_dir.join("unknown-rule.sql")).unwrap();
     let text = "-- uroborosql-lint-disable-next-line no-distinct, definitely-not-a-rule\nSELECT DISTINCT id FROM users;\n";
 
-    initialize_server(&mut server).await;
     server.send_request(build_did_open(&uri, text, 1)).await;
     let diagnostics = receive_diagnostics(&mut server).await;
     let diagnostic = diagnostic_with_code(&diagnostics, "invalid-lint-directive");
@@ -156,10 +171,14 @@ async fn unknown_rule_directive_returns_remove_quickfix() {
 #[tokio::test]
 async fn indented_unknown_rule_directive_returns_remove_quickfix() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///unknown-rule-indented.sql").unwrap();
+    let root_dir = initialize_server_with_default_lint_config(
+        &mut server,
+        "uroborosql-lsp-code-action-unknown-indented",
+    )
+    .await;
+    let uri = Uri::from_file_path(root_dir.join("unknown-rule-indented.sql")).unwrap();
     let text = "    -- uroborosql-lint-disable-next-line no-distinct, definitely-not-a-rule\nSELECT DISTINCT id FROM users;\n";
 
-    initialize_server(&mut server).await;
     server.send_request(build_did_open(&uri, text, 1)).await;
     let diagnostics = receive_diagnostics(&mut server).await;
     let diagnostic = diagnostic_with_code(&diagnostics, "invalid-lint-directive");
@@ -189,10 +208,12 @@ async fn indented_unknown_rule_directive_returns_remove_quickfix() {
 #[tokio::test]
 async fn non_quickfix_only_returns_empty_actions() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///only.sql").unwrap();
+    let root_dir =
+        initialize_server_with_default_lint_config(&mut server, "uroborosql-lsp-code-action-only")
+            .await;
+    let uri = Uri::from_file_path(root_dir.join("only.sql")).unwrap();
     let diagnostic = lint_diagnostic("no-distinct", 0, 0, 0, 15);
 
-    initialize_server(&mut server).await;
     server
         .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;\n", 1))
         .await;

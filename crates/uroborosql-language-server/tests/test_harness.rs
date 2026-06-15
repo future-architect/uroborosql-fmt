@@ -7,6 +7,7 @@ use std::time::SystemTime;
 
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
+use tower_lsp_server::UriExt;
 use tower_lsp_server::jsonrpc::{Request, Response};
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::lsp_types::notification::{
@@ -20,6 +21,7 @@ use tower_lsp_server::lsp_types::request::{
 use tower_lsp_server::lsp_types::*;
 use tower_lsp_server::{Client, LanguageServer, LspService, Server};
 use uroborosql_language_server::create_service;
+use uroborosql_lint::DEFAULT_CONFIG_FILENAME;
 
 pub(crate) struct TestServer {
     req_stream: DuplexStream,
@@ -461,4 +463,15 @@ pub(crate) fn write_file(path: &std::path::Path, contents: &str) {
         fs::create_dir_all(parent).unwrap();
     }
     fs::write(path, contents).unwrap();
+}
+
+pub(crate) async fn initialize_server_with_default_lint_config(
+    server: &mut TestServer,
+    prefix: &str,
+) -> std::path::PathBuf {
+    let root_dir = unique_temp_dir(prefix);
+    write_file(&root_dir.join(DEFAULT_CONFIG_FILENAME), "{}");
+    let root_uri = Uri::from_file_path(&root_dir).unwrap();
+    initialize_server_with_root_uri(server, root_uri, None).await;
+    root_dir
 }

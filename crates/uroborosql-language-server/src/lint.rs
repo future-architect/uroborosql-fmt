@@ -30,22 +30,25 @@ impl Backend {
             return;
         }
 
-        let Some(config_store) = self.lint_config_store.read().unwrap().as_ref().cloned() else {
-            self.client
-                .log_message(
-                    MessageType::INFO,
-                    "lint config store is not initialized; skipping lint",
-                )
-                .await;
-            return;
-        };
-
         let Some(path) = file_uri_to_path(uri) else {
             self.client
                 .log_message(
                     MessageType::INFO,
                     "file URI is not a file URI; skipping lint",
                 )
+                .await;
+            return;
+        };
+
+        let Some(config_store) = self.lint_config_store.read().unwrap().as_ref().cloned() else {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    "lint config store is not initialized; clearing diagnostics",
+                )
+                .await;
+            self.client
+                .publish_diagnostics(uri.clone(), vec![], version)
                 .await;
             return;
         };

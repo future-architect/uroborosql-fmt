@@ -1,13 +1,34 @@
 use std::path::PathBuf;
 
-use clap::{Parser, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use uroborosql_lint::Severity;
 
 #[derive(Parser, Debug)]
-#[command(name = "uroborosql-lint", version, about = "SQL linter")]
+#[command(
+    name = "uroborosql-lint",
+    version,
+    about = "SQL linter",
+    args_conflicts_with_subcommands = true,
+    subcommand_negates_reqs = true
+)]
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Command>,
+
+    #[command(flatten)]
+    pub lint: LintArgs,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Command {
+    /// Create a starter lint config file in the current working directory
+    Init,
+}
+
+#[derive(Args, Debug)]
+pub struct LintArgs {
     /// Input SQL file
-    pub input: PathBuf,
+    pub input: Option<PathBuf>,
 
     /// Path to configuration file
     #[arg(long, value_name = "FILE")]

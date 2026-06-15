@@ -1,7 +1,6 @@
 mod test_harness;
 
-use std::str::FromStr;
-
+use tower_lsp_server::UriExt;
 use tower_lsp_server::lsp_types::notification::{Notification, PublishDiagnostics};
 use tower_lsp_server::lsp_types::{Position, Range, Uri};
 
@@ -10,9 +9,10 @@ use test_harness::*;
 #[tokio::test]
 async fn utf16_range_change_should_not_corrupt_text() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///utf16.sql").unwrap();
-
-    initialize_server(&mut server).await;
+    let root_dir =
+        initialize_server_with_default_lint_config(&mut server, "uroborosql-lsp-utf16-change")
+            .await;
+    let uri = Uri::from_file_path(root_dir.join("utf16.sql")).unwrap();
 
     let original = "select '😀' as v;";
     server.send_request(build_did_open(&uri, original, 1)).await;
@@ -51,9 +51,10 @@ async fn utf16_range_change_should_not_corrupt_text() {
 #[tokio::test]
 async fn diagnostics_range_uses_utf16_columns() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///utf16-diagnostics.sql").unwrap();
-
-    initialize_server(&mut server).await;
+    let root_dir =
+        initialize_server_with_default_lint_config(&mut server, "uroborosql-lsp-utf16-diagnostics")
+            .await;
+    let uri = Uri::from_file_path(root_dir.join("utf16-diagnostics.sql")).unwrap();
 
     let original = "SELECT DISTINCT '😀a';";
     server.send_request(build_did_open(&uri, original, 1)).await;
@@ -76,9 +77,9 @@ async fn diagnostics_range_uses_utf16_columns() {
 #[tokio::test]
 async fn utf16_range_formatting_returns_utf16_safe_range() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///utf16-range.sql").unwrap();
-
-    initialize_server(&mut server).await;
+    let root_dir =
+        initialize_server_with_default_lint_config(&mut server, "uroborosql-lsp-utf16-range").await;
+    let uri = Uri::from_file_path(root_dir.join("utf16-range.sql")).unwrap();
 
     let original = "select '😀a';";
     server.send_request(build_did_open(&uri, original, 1)).await;

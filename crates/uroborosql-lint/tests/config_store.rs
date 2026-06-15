@@ -39,6 +39,38 @@ fn reads_config_from_root_file() {
 }
 
 #[test]
+fn try_new_returns_none_when_default_config_is_missing() {
+    let temp = tempdir().expect("tempdir");
+
+    let store = ConfigStore::try_new(temp.path().to_path_buf(), None).expect("config store");
+
+    assert!(store.is_none());
+}
+
+#[test]
+fn try_new_returns_store_when_default_config_exists() {
+    let temp = tempdir().expect("tempdir");
+    write_config(
+        temp.path(),
+        r#"{
+  "rules": {
+    "no-distinct": "error"
+  }
+}"#,
+    );
+
+    let store = ConfigStore::try_new(temp.path().to_path_buf(), None)
+        .expect("config store")
+        .expect("store should exist");
+    let state = store.resolve(&temp.path().join("src/query.sql"));
+
+    assert_eq!(
+        severity_for_rule(&state, "no-distinct"),
+        Some(Severity::Error)
+    );
+}
+
+#[test]
 fn applies_overrides_by_path() {
     let temp = tempdir().expect("tempdir");
     write_config(

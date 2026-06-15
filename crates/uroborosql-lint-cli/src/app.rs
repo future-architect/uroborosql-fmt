@@ -2,7 +2,9 @@ use std::{env, fs, path::PathBuf};
 
 use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, Severity};
 
-use crate::args::Cli;
+use crate::args::{Cli, Command, LintArgs};
+
+const DEFAULT_CONFIG_CONTENTS: &str = "{}\n";
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -44,17 +46,39 @@ impl CliError {
 }
 
 pub fn run(cli: Cli) -> Result<(), CliError> {
+    if let Some(command) = cli.command {
+        return match command {
+            Command::Init => run_init(),
+        };
+    }
+
+    run_lint(cli.lint)
+}
+
+fn run_lint(args: LintArgs) -> Result<(), CliError> {
     let linter = Linter::new();
     let cwd = env::current_dir()
         .map_err(|err| CliError::execution(format!("Failed to get cwd: {err}")))?;
-    let path = resolve_input_path(cli.input, &cwd)?;
+    let input = args.input.ok_or_else(|| {
+        CliError::execution(
+            "Missing input SQL file. Provide <INPUT> or run `uroborosql-lint init`.",
+        )
+    })?;
+    let path = resolve_input_path(input, &cwd)?;
     let display = path.display().to_string();
 
     let sql = fs::read_to_string(&path)
         .map_err(|err| CliError::execution(format!("Failed to read {}: {}", display, err)))?;
 
-    let config_store = ConfigStore::new(cwd, cli.config)
+    let config_store = ConfigStore::try_new(cwd, args.config)
         .map_err(|err| CliError::execution(format!("Failed to load config: {err}")))?;
+
+    let Some(config_store) = config_store else {
+        eprintln!(
+            "No lint config found. Create .uroborosqllintrc.json or run `uroborosql-lint init`."
+        );
+        return Ok(());
+    };
 
     if config_store.is_ignored(&path) {
         return Ok(());
@@ -66,7 +90,7 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         Ok(diagnostics) => {
             let should_fail = diagnostics
                 .iter()
-                .any(|diagnostic| cli.fail_level.matches(diagnostic.severity));
+                .any(|diagnostic| args.fail_level.matches(diagnostic.severity));
 
             for diagnostic in &diagnostics {
                 print_diagnostic(&display, diagnostic);
@@ -84,6 +108,30 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
         }
     }
 
+    Ok(())
+}
+
+fn run_init() -> Result<(), CliError> {
+    let cwd = env::current_dir()
+        .map_err(|err| CliError::execution(format!("Failed to get cwd: {err}")))?;
+    let config_path = cwd.join(uroborosql_lint::DEFAULT_CONFIG_FILENAME);
+
+    if config_path.exists() {
+        return Err(CliError::execution(format!(
+            "Config already exists at {}.",
+            config_path.display()
+        )));
+    }
+
+    fs::write(&config_path, DEFAULT_CONFIG_CONTENTS).map_err(|err| {
+        CliError::execution(format!(
+            "Failed to write {}: {}",
+            config_path.display(),
+            err
+        ))
+    })?;
+
+    println!("Created {}", config_path.display());
     Ok(())
 }
 

@@ -87,9 +87,9 @@ impl Backend {
         };
 
         let resolved_path = self.resolve_lint_config_path();
-        match ConfigStore::new(root_dir, resolved_path) {
+        match ConfigStore::try_new(root_dir, resolved_path) {
             Ok(store) => {
-                *self.lint_config_store.write().unwrap() = Some(store);
+                *self.lint_config_store.write().unwrap() = store;
             }
             Err(err) => {
                 self.client

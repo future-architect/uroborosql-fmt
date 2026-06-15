@@ -8,8 +8,11 @@ Language server for `uroborosql-fmt`.
 
 - SQL document formatting
 - SQL range formatting
-- diagnostics
+- diagnostics when a lint config is available
 - embedded SQL formatting via a custom request
+
+Lint diagnostics are config-gated.
+The server only publishes lint diagnostics when it can resolve a lint config file such as `.uroborosqllintrc.json`.
 
 ## Supported LSP methods
 
