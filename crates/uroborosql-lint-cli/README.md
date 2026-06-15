@@ -22,6 +22,9 @@ If no lint config can be resolved, the CLI exits successfully without emitting d
 guidance to create one. Create `.uroborosqllintrc.json` in the current working directory, run
 `uroborosql-lint init`, or pass `--config`, to enable linting.
 
+For config file structure, rule settings, and directive details, see the
+[`uroborosql-lint` README](../uroborosql-lint/README.md).
+
 ### Init
 
 Use `uroborosql-lint init` to create a starter `.uroborosqllintrc.json` in the current working
@@ -41,5 +44,3 @@ Use `--fail-level <none|info|warning|error>` to control which diagnostics cause 
 - `info` currently behaves the same as `warning` because the implemented diagnostics are `warning` or `error` today; it exists so the CLI can stay aligned if `info` diagnostics are added later
 - `warning` is useful for CI when warnings, including lint directive warnings, should fail the run
 - `none` keeps diagnostics visible without failing the process
-
-For lint rule configuration and directive details, see the [`uroborosql-lint` README](../uroborosql-lint/README.md).
