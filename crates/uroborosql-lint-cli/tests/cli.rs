@@ -148,7 +148,7 @@ fn init_creates_default_config_file() {
     Command::cargo_bin("uroborosql-lint")
         .expect("cargo_bin")
         .current_dir(temp.path())
-        .arg("init")
+        .arg("--init")
         .assert()
         .code(0)
         .stdout(contains("Created"));
@@ -167,12 +167,27 @@ fn init_does_not_overwrite_existing_file() {
     Command::cargo_bin("uroborosql-lint")
         .expect("cargo_bin")
         .current_dir(temp.path())
-        .arg("init")
+        .arg("--init")
         .assert()
         .code(2)
         .stderr(contains("Config already exists"));
 
     config.assert("{\n  \"rules\": {}\n}\n");
+}
+
+#[test]
+fn init_conflicts_with_input() {
+    let temp = TempDir::new().expect("tempdir");
+    let input = write_sql(&temp, "query.sql", "SELECT 1;");
+
+    Command::cargo_bin("uroborosql-lint")
+        .expect("cargo_bin")
+        .current_dir(temp.path())
+        .arg("--init")
+        .arg(input.path())
+        .assert()
+        .code(2)
+        .stderr(contains("cannot be used with"));
 }
 
 #[test]

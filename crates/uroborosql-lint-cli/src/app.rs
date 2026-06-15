@@ -2,7 +2,7 @@ use std::{env, fs, path::PathBuf};
 
 use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, Severity};
 
-use crate::args::{Cli, Command, LintArgs};
+use crate::args::Cli;
 
 const DEFAULT_CONFIG_CONTENTS: &str = "{}\n";
 
@@ -46,24 +46,20 @@ impl CliError {
 }
 
 pub fn run(cli: Cli) -> Result<(), CliError> {
-    if let Some(command) = cli.command {
-        return match command {
-            Command::Init => run_init(),
-        };
+    if cli.init {
+        return run_init();
     }
 
-    run_lint(cli.lint)
+    run_lint(cli)
 }
 
-fn run_lint(args: LintArgs) -> Result<(), CliError> {
+fn run_lint(args: Cli) -> Result<(), CliError> {
     let linter = Linter::new();
     let cwd = env::current_dir()
         .map_err(|err| CliError::execution(format!("Failed to get cwd: {err}")))?;
-    let input = args.input.ok_or_else(|| {
-        CliError::execution(
-            "Missing input SQL file. Provide <INPUT> or run `uroborosql-lint init`.",
-        )
-    })?;
+    let input = args
+        .input
+        .expect("clap should require <INPUT> unless --init is set");
     let path = resolve_input_path(input, &cwd)?;
     let display = path.display().to_string();
 
@@ -75,7 +71,7 @@ fn run_lint(args: LintArgs) -> Result<(), CliError> {
 
     let Some(config_store) = config_store else {
         return Err(CliError::execution(
-            "No lint config found. Create .uroborosqllintrc.json or run `uroborosql-lint init`.",
+            "No lint config found. Create .uroborosqllintrc.json or run `uroborosql-lint --init`.",
         ));
     };
 

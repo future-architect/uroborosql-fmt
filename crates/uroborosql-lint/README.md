@@ -11,7 +11,7 @@ The default config file name is `.uroborosqllintrc.json`.
 If you use the CLI, you can create a starter config with:
 
 ```bash
-uroborosql-lint init
+uroborosql-lint --init
 ```
 
 ## Configuration
