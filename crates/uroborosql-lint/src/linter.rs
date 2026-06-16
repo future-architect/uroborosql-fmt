@@ -2,11 +2,54 @@ use crate::{
     context::LintContext, diagnostic::Diagnostic, directive::suppress_diagnostics,
     tree::collect_preorder, ResolvedLintConfig,
 };
-use postgresql_cst_parser::tree_sitter;
+use postgresql_cst_parser::{tree_sitter, ParserError, ScanReport};
 
 #[derive(Debug)]
 pub enum LintError {
-    ParseError(String),
+    ParseError {
+        message: String,
+        /// `None` when the position is unavailable.
+        span: Option<ParseErrorByteSpan>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParseErrorByteSpan {
+    pub start_byte: usize,
+    pub end_byte: usize,
+}
+
+impl LintError {
+    fn from_parser_error(err: ParserError) -> Self {
+        match err {
+            ParserError::ParseError {
+                message,
+                start_byte_pos,
+                end_byte_pos,
+            } => LintError::ParseError {
+                message,
+                span: Some(ParseErrorByteSpan {
+                    start_byte: start_byte_pos,
+                    end_byte: end_byte_pos,
+                }),
+            },
+            ParserError::ScanReport(ScanReport {
+                message,
+                position_in_bytes,
+                ..
+            }) => LintError::ParseError {
+                message,
+                span: Some(ParseErrorByteSpan {
+                    start_byte: position_in_bytes,
+                    end_byte: position_in_bytes,
+                }),
+            },
+            ParserError::ScanError { message } => LintError::ParseError {
+                message,
+                span: None,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -22,8 +65,7 @@ impl Linter {
         sql: &str,
         resolved_config: &ResolvedLintConfig,
     ) -> Result<Vec<Diagnostic>, LintError> {
-        let tree = tree_sitter::parse_2way(sql)
-            .map_err(|err| LintError::ParseError(format!("{err:?}")))?;
+        let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
         let root = tree.root_node();
         let nodes = collect_preorder(root.clone());
         let mut ctx = LintContext::new(sql);
@@ -231,5 +273,33 @@ SELECT DISTINCT id FROM users;"#;
             "unknown lint directive rule `no-distinct because reason`"
         );
         assert_eq!(diagnostics[1].code, "no-distinct");
+    }
+
+    #[test]
+    fn parse_error_carries_byte_span_at_error_location() {
+        let cfg = resolve_from_rules(vec![]);
+        // WHERE has no condition, so it errors at EOF.
+        let err = Linter::new()
+            .run("SELECT id FROM users WHERE", &cfg)
+            .expect_err("should fail to parse");
+
+        let LintError::ParseError { span, .. } = err;
+        let span = span.expect("parse error should carry a byte span");
+        assert_eq!(span.start_byte, 26);
+        assert_ne!(span.start_byte, 0);
+    }
+
+    #[test]
+    fn parse_error_span_points_at_offending_token() {
+        let cfg = resolve_from_rules(vec![]);
+        // `+` has no right operand, so it errors at the `;`.
+        let err = Linter::new()
+            .run("SELECT 1 + ;", &cfg)
+            .expect_err("should fail to parse");
+
+        let LintError::ParseError { span, .. } = err;
+        let span = span.expect("parse error should carry a byte span");
+        assert_eq!(span.start_byte, 11);
+        assert_eq!(span.end_byte, 12);
     }
 }
