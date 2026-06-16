@@ -8,15 +8,41 @@ Language server for `uroborosql-fmt`.
 
 - SQL document formatting
 - SQL range formatting
+- quickfix code actions for lint directives
 - diagnostics when a lint config is available
 - embedded SQL formatting via a custom request
 
 The server only publishes lint diagnostics when it can resolve a lint config file such as `.uroborosqllintrc.json`.
+Lint diagnostics are refreshed on document open/save and when workspace configuration or watched lint config files change.
+
+## Getting started
+
+Install the language server:
+
+```sh
+cargo install --git https://github.com/future-architect/uroborosql-fmt uroborosql-language-server
+```
+
+`uroborosql-language-server` is a standard stdio-based LSP server, so it can be used from any editor or client that can launch an external language server process.
+
+Basic command:
+
+```sh
+uroborosql-language-server
+```
+
+Typical client setup should:
+
+- start `uroborosql-language-server` over stdio
+- enable `textDocument/formatting` and `textDocument/rangeFormatting`
+- enable `textDocument/codeAction` for lint quickfixes
+- provide a `.uroborosqllintrc.json` file when lint diagnostics are desired
 
 ## Supported LSP methods
 
 - `textDocument/formatting`
 - `textDocument/rangeFormatting`
+- `textDocument/codeAction`
 - `textDocument/didOpen`
 - `textDocument/didChange`
 - `textDocument/didSave`
@@ -27,6 +53,12 @@ The server only publishes lint diagnostics when it can resolve a lint config fil
 ## Server notifications
 
 - `textDocument/publishDiagnostics`
+
+## Code actions
+
+- `quickfix`
+  - Add `uroborosql-lint-disable-next-line` directives for lint diagnostics.
+  - Remove unknown rule names from existing lint directives.
 
 ## Custom requests
 
