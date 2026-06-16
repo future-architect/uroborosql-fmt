@@ -2,6 +2,29 @@
 
 CLI crate for `uroborosql-lint`. The installed binary name is `uroborosql-lint`.
 
+## Getting Started
+
+`uroborosql-lint` only runs when a lint config file can be resolved.
+
+### 1. Create a starter config file
+
+```bash
+uroborosql-lint --init
+```
+
+This creates `.uroborosqllintrc.json` in the current working directory.
+
+### 2. Run lint
+
+```bash
+uroborosql-lint query.sql
+```
+
+You can also create `.uroborosqllintrc.json` manually or pass a config path with `--config`.
+
+For config file structure, rule settings, and directive details, see the
+[`uroborosql-lint` README](../uroborosql-lint/README.md).
+
 ## Usage
 
 ```bash
@@ -19,11 +42,7 @@ uroborosql-lint --init
 ```
 
 If no lint config can be resolved, the CLI exits with an execution error and prints guidance to
-create one. Create `.uroborosqllintrc.json` in the current working directory, run
-`uroborosql-lint --init`, or pass `--config`, to enable linting.
-
-For config file structure, rule settings, and directive details, see the
-[`uroborosql-lint` README](../uroborosql-lint/README.md).
+create one.
 
 ### Init
 
