@@ -82,25 +82,16 @@ pub enum ConfigError {
 }
 
 impl ConfigStore {
-    pub fn new(
+    pub fn try_new(
         root_dir: impl Into<PathBuf>,
         config_path: Option<PathBuf>,
-    ) -> Result<Self, ConfigError> {
+    ) -> Result<Option<Self>, ConfigError> {
         let root_dir = root_dir.into();
-        let config_path = config_path
-            .map(|path| {
-                if path.is_absolute() {
-                    path
-                } else {
-                    root_dir.join(path)
-                }
-            })
-            .map(|path| {
-                path.canonicalize()
-                    .map_err(|err| ConfigError::Io(path, err))
-            })
-            .transpose()?;
-        let loaded_config = load_config(&root_dir, config_path)?;
+        let Some(config_path) = resolve_existing_config_path(&root_dir, config_path)? else {
+            return Ok(None);
+        };
+
+        let loaded_config = load_config(&root_dir, Some(config_path))?;
         let config_base_dir = loaded_config
             .origin
             .as_deref()
@@ -108,10 +99,10 @@ impl ConfigStore {
             .unwrap_or(&root_dir);
         let unresolved_config =
             LintConfig::from_lint_config_object(loaded_config.config, config_base_dir)?;
-        Ok(Self {
+        Ok(Some(Self {
             root_dir,
             unresolved_config,
-        })
+        }))
     }
 
     pub fn resolve(&self, file: &Path) -> ResolvedLintConfig {
@@ -159,6 +150,34 @@ impl ConfigStore {
     pub fn root_dir(&self) -> &Path {
         &self.root_dir
     }
+}
+
+fn resolve_existing_config_path(
+    root_dir: &Path,
+    config_path: Option<PathBuf>,
+) -> Result<Option<PathBuf>, ConfigError> {
+    if let Some(path) = config_path {
+        let path = if path.is_absolute() {
+            path
+        } else {
+            root_dir.join(path)
+        };
+
+        return path
+            .canonicalize()
+            .map(Some)
+            .map_err(|err| ConfigError::Io(path, err));
+    }
+
+    let path = root_dir.join(DEFAULT_CONFIG_FILENAME);
+    if path.exists() {
+        return path
+            .canonicalize()
+            .map(Some)
+            .map_err(|err| ConfigError::Io(path, err));
+    }
+
+    Ok(None)
 }
 
 impl LintConfig {

@@ -3,6 +3,7 @@ mod test_harness;
 use std::str::FromStr;
 use std::time::Duration;
 
+use tower_lsp_server::UriExt;
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::lsp_types::notification::{Notification, PublishDiagnostics};
 
@@ -11,9 +12,9 @@ use test_harness::*;
 #[tokio::test]
 async fn diagnostics_publish_on_open_and_save() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///test.sql").unwrap();
-
-    initialize_server(&mut server).await;
+    let root_dir =
+        initialize_server_with_default_lint_config(&mut server, "uroborosql-lsp-diag-open").await;
+    let uri = Uri::from_file_path(root_dir.join("test.sql")).unwrap();
 
     server
         .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
@@ -44,9 +45,9 @@ async fn diagnostics_publish_on_open_and_save() {
 #[tokio::test]
 async fn did_close_clears_diagnostics() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///close.sql").unwrap();
-
-    initialize_server(&mut server).await;
+    let root_dir =
+        initialize_server_with_default_lint_config(&mut server, "uroborosql-lsp-diag-close").await;
+    let uri = Uri::from_file_path(root_dir.join("close.sql")).unwrap();
 
     server
         .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
@@ -69,9 +70,10 @@ async fn did_close_clears_diagnostics() {
 #[tokio::test]
 async fn did_change_watched_files_relints_open_documents() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///watched.sql").unwrap();
-
-    initialize_server(&mut server).await;
+    let root_dir =
+        initialize_server_with_default_lint_config(&mut server, "uroborosql-lsp-diag-watched")
+            .await;
+    let uri = Uri::from_file_path(root_dir.join("watched.sql")).unwrap();
 
     server
         .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
@@ -90,9 +92,10 @@ async fn did_change_watched_files_relints_open_documents() {
 #[tokio::test]
 async fn diagnostics_include_invalid_directive_warning() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///directive.sql").unwrap();
-
-    initialize_server(&mut server).await;
+    let root_dir =
+        initialize_server_with_default_lint_config(&mut server, "uroborosql-lsp-diag-directive")
+            .await;
+    let uri = Uri::from_file_path(root_dir.join("directive.sql")).unwrap();
 
     server
         .send_request(build_did_open(
@@ -119,4 +122,26 @@ async fn diagnostics_include_invalid_directive_warning() {
         Some(27)
     );
     assert_eq!(diagnostics[1]["code"].as_str(), Some("no-distinct"));
+}
+
+#[tokio::test]
+async fn diagnostics_are_empty_when_lint_config_is_missing() {
+    let mut server = new_test_server();
+    let root_dir = unique_temp_dir("uroborosql-lsp-diag-no-config");
+    let root_uri = Uri::from_file_path(&root_dir).unwrap();
+    let uri = Uri::from_file_path(root_dir.join("no-config.sql")).unwrap();
+
+    initialize_server_with_root_uri(&mut server, root_uri, None).await;
+
+    server
+        .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let diag_notification = server.receive_notification().await;
+    assert_eq!(diag_notification.method(), PublishDiagnostics::METHOD);
+    assert!(
+        diag_notification.params().unwrap()["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }

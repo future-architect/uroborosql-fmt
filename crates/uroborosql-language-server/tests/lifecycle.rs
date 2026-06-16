@@ -1,7 +1,5 @@
 mod test_harness;
 
-use std::str::FromStr;
-
 use tower_lsp_server::UriExt;
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::lsp_types::notification::{Notification, PublishDiagnostics};
@@ -15,6 +13,7 @@ use test_harness::*;
 async fn initialize_uses_root_uri_when_workspace_folders_are_missing() {
     let mut server = new_test_server();
     let root_dir = unique_temp_dir("uroborosql-lsp-root-uri");
+    write_file(&root_dir.join(".uroborosqllintrc.json"), "{}");
     let root_uri = Uri::from_file_path(&root_dir).unwrap();
     let uri = Uri::from_file_path(root_dir.join("root-uri.sql")).unwrap();
 
@@ -45,9 +44,10 @@ async fn initialize_uses_root_uri_when_workspace_folders_are_missing() {
 #[tokio::test]
 async fn did_change_configuration_requests_workspace_configuration_again() {
     let mut server = new_test_server();
-    let uri = Uri::from_str("file:///config.sql").unwrap();
-
-    initialize_server(&mut server).await;
+    let root_dir =
+        initialize_server_with_default_lint_config(&mut server, "uroborosql-lsp-lifecycle-config")
+            .await;
+    let uri = Uri::from_file_path(root_dir.join("config.sql")).unwrap();
 
     server
         .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))

@@ -6,8 +6,13 @@ use uroborosql_lint::Severity;
 #[derive(Parser, Debug)]
 #[command(name = "uroborosql-lint", version, about = "SQL linter")]
 pub struct Cli {
+    /// Create a starter lint config file in the current working directory
+    #[arg(long, conflicts_with_all = ["config", "fail_level", "input"])]
+    pub init: bool,
+
     /// Input SQL file
-    pub input: PathBuf,
+    #[arg(required_unless_present = "init")]
+    pub input: Option<PathBuf>,
 
     /// Path to configuration file
     #[arg(long, value_name = "FILE")]
