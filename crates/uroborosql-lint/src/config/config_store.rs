@@ -105,38 +105,6 @@ impl ConfigStore {
         }))
     }
 
-    pub fn new(
-        root_dir: impl Into<PathBuf>,
-        config_path: Option<PathBuf>,
-    ) -> Result<Self, ConfigError> {
-        let root_dir = root_dir.into();
-        let config_path = config_path
-            .map(|path| {
-                if path.is_absolute() {
-                    path
-                } else {
-                    root_dir.join(path)
-                }
-            })
-            .map(|path| {
-                path.canonicalize()
-                    .map_err(|err| ConfigError::Io(path, err))
-            })
-            .transpose()?;
-        let loaded_config = load_config(&root_dir, config_path)?;
-        let config_base_dir = loaded_config
-            .origin
-            .as_deref()
-            .and_then(Path::parent)
-            .unwrap_or(&root_dir);
-        let unresolved_config =
-            LintConfig::from_lint_config_object(loaded_config.config, config_base_dir)?;
-        Ok(Self {
-            root_dir,
-            unresolved_config,
-        })
-    }
-
     pub fn resolve(&self, file: &Path) -> ResolvedLintConfig {
         let rel_path = file.strip_prefix(&self.root_dir).unwrap_or(file);
         let mut rules = self.unresolved_config.rules.clone();

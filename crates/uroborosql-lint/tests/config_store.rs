@@ -29,7 +29,9 @@ fn reads_config_from_root_file() {
 }"#,
     );
 
-    let store = ConfigStore::new(temp.path().to_path_buf(), None).expect("config store");
+    let store = ConfigStore::try_new(temp.path().to_path_buf(), None)
+        .expect("config store")
+        .expect("store should exist");
     let state = store.resolve(&temp.path().join("src/query.sql"));
 
     assert_eq!(
@@ -90,7 +92,9 @@ fn applies_overrides_by_path() {
 }"#,
     );
 
-    let store = ConfigStore::new(temp.path().to_path_buf(), None).expect("config store");
+    let store = ConfigStore::try_new(temp.path().to_path_buf(), None)
+        .expect("config store")
+        .expect("store should exist");
     let state_src = store.resolve(&temp.path().join("src/main.sql"));
     let state_test = store.resolve(&temp.path().join("test/case.sql"));
 
@@ -111,7 +115,9 @@ fn ignores_paths_matching_ignore_globs() {
 }"#,
     );
 
-    let store = ConfigStore::new(temp.path().to_path_buf(), None).expect("config store");
+    let store = ConfigStore::try_new(temp.path().to_path_buf(), None)
+        .expect("config store")
+        .expect("store should exist");
 
     assert!(store.is_ignored(&temp.path().join("dist/app.sql")));
     assert!(!store.is_ignored(&temp.path().join("src/app.sql")));
@@ -152,7 +158,9 @@ fn keeps_cwd_as_root_dir_for_explicit_config() {
     );
 
     let config_path = config_root.join(DEFAULT_CONFIG_FILENAME);
-    let store = ConfigStore::new(cwd.clone(), Some(config_path)).expect("config store");
+    let store = ConfigStore::try_new(cwd.clone(), Some(config_path))
+        .expect("config store")
+        .expect("store should exist");
 
     assert_eq!(store.root_dir(), cwd.as_path());
     assert!(store.is_ignored(&dist_file.canonicalize().expect("canonicalize dist file")));
@@ -185,7 +193,9 @@ fn resolves_db_file_path_relative_to_explicit_config() {
     );
 
     let config_path = config_root.join(DEFAULT_CONFIG_FILENAME);
-    let store = ConfigStore::new(cwd, Some(config_path)).expect("config store");
+    let store = ConfigStore::try_new(cwd, Some(config_path))
+        .expect("config store")
+        .expect("store should exist");
     let state = store.resolve(temp_root.join("anywhere/query.sql").as_path());
 
     let db = state.db.expect("resolved db config");
@@ -208,7 +218,8 @@ fn rejects_unknown_rule_in_root_rules() {
 }"#,
     );
 
-    let err = ConfigStore::new(temp.path().to_path_buf(), None).expect_err("unknown rule error");
+    let err =
+        ConfigStore::try_new(temp.path().to_path_buf(), None).expect_err("unknown rule error");
 
     assert!(matches!(
         err,
@@ -241,7 +252,8 @@ fn rejects_unknown_rule_in_override_rules() {
 }"#,
     );
 
-    let err = ConfigStore::new(temp.path().to_path_buf(), None).expect_err("unknown rule error");
+    let err =
+        ConfigStore::try_new(temp.path().to_path_buf(), None).expect_err("unknown rule error");
 
     assert!(matches!(
         err,
