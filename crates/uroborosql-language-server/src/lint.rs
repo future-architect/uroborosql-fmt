@@ -10,7 +10,7 @@ use uroborosql_lint::{
 
 use crate::Backend;
 use crate::configuration::resolve_config_path;
-use crate::document::rope_char_index_to_position;
+use crate::document::{rope_byte_to_position, rope_char_index_to_position};
 use crate::paths::file_uri_to_path;
 
 impl Backend {
@@ -61,15 +61,23 @@ impl Backend {
         }
 
         let resolved_config = config_store.resolve(&path);
+        let rope = self.document_rope(uri);
+        if rope.is_none() {
+            // lint_and_publish is always called with the document already tracked,
+            // so a missing rope means the document store lock is poisoned.
+            self.client
+                .log_message(
+                    MessageType::WARNING,
+                    "document rope is unavailable; diagnostic positions may be imprecise",
+                )
+                .await;
+        }
         let diagnostics = match self.linter.run(text, &resolved_config) {
-            Ok(diags) => {
-                let rope = self.document_rope(uri);
-                diags
-                    .into_iter()
-                    .map(|diag| to_lsp_diagnostic(diag, rope.as_ref()))
-                    .collect()
-            }
-            Err(err) => vec![to_parse_error(err)],
+            Ok(diags) => diags
+                .into_iter()
+                .map(|diag| to_lsp_diagnostic(diag, rope.as_ref()))
+                .collect(),
+            Err(err) => vec![to_parse_error(err, rope.as_ref())],
         };
 
         self.client
@@ -87,8 +95,8 @@ fn to_lsp_diagnostic(diag: SqlDiagnostic, rope: Option<&ropey::Rope>) -> Diagnos
 
     let range = if let Some(rope) = rope {
         Range {
-            start: rope_char_index_to_position(rope, rope.byte_to_char(diag.span.start.byte)),
-            end: rope_char_index_to_position(rope, rope.byte_to_char(diag.span.end.byte)),
+            start: rope_byte_to_position(rope, diag.span.start.byte),
+            end: rope_byte_to_position(rope, diag.span.end.byte),
         }
     } else {
         Range {
@@ -107,16 +115,33 @@ fn to_lsp_diagnostic(diag: SqlDiagnostic, rope: Option<&ropey::Rope>) -> Diagnos
     }
 }
 
-fn to_parse_error(err: LintError) -> Diagnostic {
-    let message = match err {
-        LintError::ParseError(reason) => format!("Failed to parse SQL: {reason}"),
+fn to_parse_error(err: LintError, rope: Option<&ropey::Rope>) -> Diagnostic {
+    let LintError::ParseError { message, span } = err;
+
+    let range = match rope {
+        Some(rope) => match span {
+            Some(span) => {
+                let start = rope_byte_to_position(rope, span.start_byte);
+                let end = rope_byte_to_position(rope, span.end_byte);
+                Range { start, end }
+            }
+            // Unknown position: point at the end of the file (zero-width range).
+            None => {
+                let eof = rope_char_index_to_position(rope, rope.len_chars());
+                Range {
+                    start: eof,
+                    end: eof,
+                }
+            }
+        },
+        None => Range::default(),
     };
 
     Diagnostic {
-        range: Range::default(),
+        range,
         severity: Some(DiagnosticSeverity::ERROR),
         source: Some(LINT_SOURCE.into()),
-        message,
+        message: format!("Failed to parse SQL: {message}"),
         ..Diagnostic::default()
     }
 }

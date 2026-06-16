@@ -125,6 +125,38 @@ async fn diagnostics_include_invalid_directive_warning() {
 }
 
 #[tokio::test]
+async fn parse_error_diagnostic_points_at_error_location() {
+    let mut server = new_test_server();
+    let root_dir =
+        initialize_server_with_default_lint_config(&mut server, "uroborosql-lsp-diag-parse-error")
+            .await;
+    let uri = Uri::from_file_path(root_dir.join("invalid.sql")).unwrap();
+
+    // Invalid SQL: the WHERE on line 2 has no condition, so it errors at end of input.
+    server
+        .send_request(build_did_open(&uri, "SELECT id\nFROM users WHERE", 1))
+        .await;
+    let diag_notification = server.receive_notification().await;
+    assert_eq!(diag_notification.method(), PublishDiagnostics::METHOD);
+
+    let diagnostics = diag_notification.params().unwrap()["diagnostics"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(diagnostics.len(), 1);
+
+    let range = &diagnostics[0]["range"];
+    let start_line = range["start"]["line"].as_u64();
+    let start_character = range["start"]["character"].as_u64();
+    assert_eq!(start_line, Some(1));
+    assert_eq!(start_character, Some(16));
+    assert!(
+        !(start_line == Some(0) && start_character == Some(0)),
+        "parse error must not collapse to 0,0"
+    );
+}
+
+#[tokio::test]
 async fn diagnostics_are_empty_when_lint_config_is_missing() {
     let mut server = new_test_server();
     let root_dir = unique_temp_dir("uroborosql-lsp-diag-no-config");
