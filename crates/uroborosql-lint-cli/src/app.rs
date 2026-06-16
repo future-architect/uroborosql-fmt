@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf};
 
-use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, Severity};
+use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, ParseErrorByteSpan, Severity};
 
 use crate::args::Cli;
 
@@ -95,10 +95,10 @@ fn run_lint(args: Cli) -> Result<(), CliError> {
                 return Err(CliError::issues_found());
             }
         }
-        Err(LintError::ParseError(message)) => {
+        Err(LintError::ParseError { message, span }) => {
+            let (line, column) = parse_error_line_column(&sql, span);
             return Err(CliError::execution(format!(
-                "{}: error: failed to parse SQL: {}",
-                display, message
+                "{display}:{line}:{column}: error: failed to parse SQL: {message}"
             )));
         }
     }
@@ -146,6 +146,26 @@ fn resolve_input_path(path: PathBuf, cwd: &std::path::Path) -> Result<PathBuf, C
     })
 }
 
+/// 位置不明（`span` が `None`）のときは入力末尾にフォールバックする。
+fn parse_error_line_column(sql: &str, span: Option<ParseErrorByteSpan>) -> (usize, usize) {
+    let byte = span.map_or(sql.len(), |span| span.start_byte);
+    byte_to_line_column(sql, byte)
+}
+
+/// 1-based の (line, column) を返す。column は文字数で数える。
+fn byte_to_line_column(sql: &str, byte: usize) -> (usize, usize) {
+    // char 境界・範囲外に対して安全になるよう、直近の境界まで丸める。
+    let mut boundary = byte.min(sql.len());
+    while !sql.is_char_boundary(boundary) {
+        boundary -= 1;
+    }
+
+    let prefix = &sql[..boundary];
+    let line = prefix.matches('\n').count() + 1;
+    let column = prefix.rsplit('\n').next().map_or(0, |s| s.chars().count()) + 1;
+    (line, column)
+}
+
 fn print_diagnostic(file: &str, diagnostic: &Diagnostic) {
     let line = diagnostic.span.start.line + 1;
     let column = diagnostic.span.start.column + 1;
@@ -172,7 +192,41 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::resolve_input_path;
+    use uroborosql_lint::ParseErrorByteSpan;
+
+    use super::{byte_to_line_column, parse_error_line_column, resolve_input_path};
+
+    #[test]
+    fn byte_to_line_column_is_one_based() {
+        let sql = "SELECT id\nFROM users";
+        assert_eq!(byte_to_line_column(sql, 0), (1, 1));
+        assert_eq!(byte_to_line_column(sql, 7), (1, 8));
+        assert_eq!(byte_to_line_column(sql, 10), (2, 1));
+    }
+
+    #[test]
+    fn byte_to_line_column_counts_columns_in_characters() {
+        let sql = "あいう x";
+        // `x` はマルチバイト 3 文字＋空白の後ろなので 5 文字目。
+        let byte = "あいう ".len();
+        assert_eq!(byte_to_line_column(sql, byte), (1, 5));
+    }
+
+    #[test]
+    fn parse_error_line_column_falls_back_to_end_of_input() {
+        let sql = "SELECT id\nFROM users";
+        assert_eq!(parse_error_line_column(sql, None), (2, 11));
+    }
+
+    #[test]
+    fn parse_error_line_column_uses_span_start() {
+        let sql = "SELECT 1 + ;";
+        let span = Some(ParseErrorByteSpan {
+            start_byte: 11,
+            end_byte: 12,
+        });
+        assert_eq!(parse_error_line_column(sql, span), (1, 12));
+    }
 
     #[test]
     fn resolves_relative_input_path_from_cwd() {
