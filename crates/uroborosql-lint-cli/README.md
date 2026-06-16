@@ -1,6 +1,14 @@
-# uroborosql-lint-cli
+# uroborosql-lint-cli (Beta)
 
-CLI for `uroborosql-lint`. The installed binary name is `uroborosql-lint`.
+Beta CLI for `uroborosql-lint`.
+
+## Install
+
+```sh
+cargo install --git https://github.com/future-architect/uroborosql-fmt uroborosql-lint-cli
+```
+
+The installed binary name is `uroborosql-lint`.
 
 ## Getting Started
 

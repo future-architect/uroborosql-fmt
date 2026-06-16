@@ -1,6 +1,6 @@
-# uroborosql-lint
+# uroborosql-lint (Beta)
 
-Lint engine and rule/configuration crate for `uroborosql-lint`.
+Beta lint engine and rule/configuration crate for `uroborosql-lint`.
 
 For CLI usage, see the [`uroborosql-lint-cli` README](../uroborosql-lint-cli/README.md).
 
