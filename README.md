@@ -58,6 +58,17 @@ For detailed CLI usage, options, and examples, see the [CLI documentation](crate
 
 You can try uroborosql-fmt in your browser with our [WebAssembly demo](https://future-architect.github.io/uroborosql-fmt/), which requires no installation.
 
+## Tools
+
+This repository contains several tools around `uroborosql-fmt`:
+
+- [`uroborosql-fmt` CLI](crates/uroborosql-fmt-cli/README.md)
+  - CLI formatter for PostgreSQL and 2way-SQL.
+- [`uroborosql-lint` CLI (Beta)](crates/uroborosql-lint-cli/README.md)
+  - CLI for linting SQL files.
+- [`uroborosql-language-server`](crates/uroborosql-language-server/README.md)
+  - Language server for formatting and lint diagnostics in editors.
+
 ### Configuration options
 
 Create `.uroborosqlfmtrc.json` in the directory where you run the command and write the configuration there.
