@@ -2,17 +2,7 @@
 
 Lint engine and rule/configuration crate for `uroborosql-lint`.
 
-For CLI usage, exit codes, and `--fail-level`, see the [`uroborosql-lint-cli` README](../uroborosql-lint-cli/README.md).
-
-## Getting Started
-
-The default config file name is `.uroborosqllintrc.json`.
-
-If you use the CLI, you can create a starter config with:
-
-```bash
-uroborosql-lint --init
-```
+For CLI usage, see the [`uroborosql-lint-cli` README](../uroborosql-lint-cli/README.md).
 
 ## Configuration
 

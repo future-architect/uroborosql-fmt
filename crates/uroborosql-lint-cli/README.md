@@ -1,6 +1,6 @@
 # uroborosql-lint-cli
 
-CLI crate for `uroborosql-lint`. The installed binary name is `uroborosql-lint`.
+CLI for `uroborosql-lint`. The installed binary name is `uroborosql-lint`.
 
 ## Getting Started
 
