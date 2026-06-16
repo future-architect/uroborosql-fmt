@@ -1,6 +1,8 @@
 use std::{env, fs, path::PathBuf};
 
-use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, ParseErrorByteSpan, Severity};
+use uroborosql_lint::{
+    ConfigStore, Diagnostic, LintError, Linter, OneBasedPosition, ParseErrorByteSpan, Severity,
+};
 
 use crate::args::Cli;
 
@@ -96,9 +98,9 @@ fn run_lint(args: Cli) -> Result<(), CliError> {
             }
         }
         Err(LintError::ParseError { message, span }) => {
-            let (line, column) = parse_error_line_column(&sql, span);
+            let position = parse_error_position(&sql, span);
             return Err(CliError::execution(format!(
-                "{display}:{line}:{column}: error: failed to parse SQL: {message}"
+                "{display}:{position}: error: failed to parse SQL: {message}"
             )));
         }
     }
@@ -146,32 +148,17 @@ fn resolve_input_path(path: PathBuf, cwd: &std::path::Path) -> Result<PathBuf, C
     })
 }
 
-/// 位置不明（`span` が `None`）のときは入力末尾にフォールバックする。
-fn parse_error_line_column(sql: &str, span: Option<ParseErrorByteSpan>) -> (usize, usize) {
+/// Falls back to the end of input when the position is unknown (`span` is `None`).
+fn parse_error_position(sql: &str, span: Option<ParseErrorByteSpan>) -> OneBasedPosition {
     let byte = span.map_or(sql.len(), |span| span.start_byte);
-    byte_to_line_column(sql, byte)
-}
-
-/// 1-based の (line, column) を返す。column は文字数で数える。
-fn byte_to_line_column(sql: &str, byte: usize) -> (usize, usize) {
-    // char 境界・範囲外に対して安全になるよう、直近の境界まで丸める。
-    let mut boundary = byte.min(sql.len());
-    while !sql.is_char_boundary(boundary) {
-        boundary -= 1;
-    }
-
-    let prefix = &sql[..boundary];
-    let line = prefix.matches('\n').count() + 1;
-    let column = prefix.rsplit('\n').next().map_or(0, |s| s.chars().count()) + 1;
-    (line, column)
+    OneBasedPosition::from_byte_offset(sql, byte)
 }
 
 fn print_diagnostic(file: &str, diagnostic: &Diagnostic) {
-    let line = diagnostic.span.start.line + 1;
-    let column = diagnostic.span.start.column + 1;
+    let position = OneBasedPosition::from(diagnostic.span.start);
 
     println!(
-        "{file}:{line}:{column}: {severity_label}: {code}: {message}",
+        "{file}:{position}: {severity_label}: {code}: {message}",
         severity_label = severity_label(diagnostic.severity),
         code = diagnostic.code,
         message = diagnostic.message
@@ -192,40 +179,28 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use uroborosql_lint::ParseErrorByteSpan;
+    use uroborosql_lint::{OneBasedPosition, ParseErrorByteSpan};
 
-    use super::{byte_to_line_column, parse_error_line_column, resolve_input_path};
+    use super::{parse_error_position, resolve_input_path};
+
+    fn pos(line: usize, column: usize) -> OneBasedPosition {
+        OneBasedPosition { line, column }
+    }
 
     #[test]
-    fn byte_to_line_column_is_one_based() {
+    fn parse_error_position_falls_back_to_end_of_input() {
         let sql = "SELECT id\nFROM users";
-        assert_eq!(byte_to_line_column(sql, 0), (1, 1));
-        assert_eq!(byte_to_line_column(sql, 7), (1, 8));
-        assert_eq!(byte_to_line_column(sql, 10), (2, 1));
+        assert_eq!(parse_error_position(sql, None), pos(2, 11));
     }
 
     #[test]
-    fn byte_to_line_column_counts_columns_in_characters() {
-        let sql = "あいう x";
-        // `x` はマルチバイト 3 文字＋空白の後ろなので 5 文字目。
-        let byte = "あいう ".len();
-        assert_eq!(byte_to_line_column(sql, byte), (1, 5));
-    }
-
-    #[test]
-    fn parse_error_line_column_falls_back_to_end_of_input() {
-        let sql = "SELECT id\nFROM users";
-        assert_eq!(parse_error_line_column(sql, None), (2, 11));
-    }
-
-    #[test]
-    fn parse_error_line_column_uses_span_start() {
+    fn parse_error_position_uses_span_start() {
         let sql = "SELECT 1 + ;";
         let span = Some(ParseErrorByteSpan {
             start_byte: 11,
             end_byte: 12,
         });
-        assert_eq!(parse_error_line_column(sql, span), (1, 12));
+        assert_eq!(parse_error_position(sql, span), pos(1, 12));
     }
 
     #[test]

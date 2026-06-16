@@ -10,7 +10,7 @@ mod tree;
 pub use config::{
     ConfigError, ConfigStore, ResolvedLintConfig, RuleLevel, RuleSetting, DEFAULT_CONFIG_FILENAME,
 };
-pub use diagnostic::{Diagnostic, Severity, SqlSpan};
+pub use diagnostic::{Diagnostic, OneBasedPosition, Severity, SqlSpan};
 pub use directive::{
     parse_line_comment_directive, DirectiveParseDiagnostic, DirectiveParseDiagnosticKind,
     ParsedLineComment, ParsedLintDirectiveKind, UnknownRuleRemovalRange, DISABLE_DIRECTIVE_KEYWORD,
