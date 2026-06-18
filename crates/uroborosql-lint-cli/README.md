@@ -71,3 +71,13 @@ Use `--fail-level <none|info|warning|error>` to control which diagnostics cause 
 - `info` currently behaves the same as `warning` because the implemented diagnostics are `warning` or `error` today; it exists so the CLI can stay aligned if `info` diagnostics are added later
 - `warning` is useful for CI when warnings, including lint directive warnings, should fail the run
 - `none` keeps diagnostics visible without failing the process
+
+## Limitations
+
+`uroborosql-lint` is in beta and currently has the following limitations:
+
+- It accepts exactly one SQL file per invocation (`<INPUT>`).
+  - Directory, glob, and multiple-file arguments are not supported yet.
+  - Standard input is not supported; pass a file path instead.
+
+To lint multiple files, invoke the command once per file (for example, from a shell loop or your build tool).
