@@ -38,6 +38,12 @@ pub(crate) fn rope_char_index_to_position(rope: &Rope, idx: usize) -> Position {
     Position::new(line as u32, utf16_col as u32)
 }
 
+/// Converts a byte offset to a UTF-16 position. An out-of-range byte is clamped to the end.
+pub(crate) fn rope_byte_to_position(rope: &Rope, byte: usize) -> Position {
+    let clamped = byte.min(rope.len_bytes());
+    rope_char_index_to_position(rope, rope.byte_to_char(clamped))
+}
+
 pub(crate) fn rope_range_to_char_index_range(rope: &Rope, range: &Range) -> Option<(usize, usize)> {
     let start = rope_position_to_char_index(rope, range.start)?;
     let end = rope_position_to_char_index(rope, range.end)?;

@@ -1,6 +1,8 @@
 use std::{env, fs, path::PathBuf};
 
-use uroborosql_lint::{ConfigStore, Diagnostic, LintError, Linter, Severity};
+use uroborosql_lint::{
+    ConfigStore, Diagnostic, LintError, Linter, OneBasedPosition, ParseErrorByteSpan, Severity,
+};
 
 use crate::args::Cli;
 
@@ -95,10 +97,10 @@ fn run_lint(args: Cli) -> Result<(), CliError> {
                 return Err(CliError::issues_found());
             }
         }
-        Err(LintError::ParseError(message)) => {
+        Err(LintError::ParseError { message, span }) => {
+            let position = parse_error_position(&sql, span);
             return Err(CliError::execution(format!(
-                "{}: error: failed to parse SQL: {}",
-                display, message
+                "{display}:{position}: error: failed to parse SQL: {message}"
             )));
         }
     }
@@ -146,12 +148,17 @@ fn resolve_input_path(path: PathBuf, cwd: &std::path::Path) -> Result<PathBuf, C
     })
 }
 
+/// Falls back to the end of input when the position is unknown (`span` is `None`).
+fn parse_error_position(sql: &str, span: Option<ParseErrorByteSpan>) -> OneBasedPosition {
+    let byte = span.map_or(sql.len(), |span| span.start_byte);
+    OneBasedPosition::from_byte_offset(sql, byte)
+}
+
 fn print_diagnostic(file: &str, diagnostic: &Diagnostic) {
-    let line = diagnostic.span.start.line + 1;
-    let column = diagnostic.span.start.column + 1;
+    let position = OneBasedPosition::from(diagnostic.span.start);
 
     println!(
-        "{file}:{line}:{column}: {severity_label}: {code}: {message}",
+        "{file}:{position}: {severity_label}: {code}: {message}",
         severity_label = severity_label(diagnostic.severity),
         code = diagnostic.code,
         message = diagnostic.message
@@ -172,7 +179,29 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::resolve_input_path;
+    use uroborosql_lint::{OneBasedPosition, ParseErrorByteSpan};
+
+    use super::{parse_error_position, resolve_input_path};
+
+    fn pos(line: usize, column: usize) -> OneBasedPosition {
+        OneBasedPosition { line, column }
+    }
+
+    #[test]
+    fn parse_error_position_falls_back_to_end_of_input() {
+        let sql = "SELECT id\nFROM users";
+        assert_eq!(parse_error_position(sql, None), pos(2, 11));
+    }
+
+    #[test]
+    fn parse_error_position_uses_span_start() {
+        let sql = "SELECT 1 + ;";
+        let span = Some(ParseErrorByteSpan {
+            start_byte: 11,
+            end_byte: 12,
+        });
+        assert_eq!(parse_error_position(sql, span), pos(1, 12));
+    }
 
     #[test]
     fn resolves_relative_input_path_from_cwd() {
