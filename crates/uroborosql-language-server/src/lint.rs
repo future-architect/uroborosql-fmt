@@ -118,23 +118,21 @@ fn to_lsp_diagnostic(diag: SqlDiagnostic, rope: Option<&ropey::Rope>) -> Diagnos
 fn to_parse_error(err: LintError, rope: Option<&ropey::Rope>) -> Diagnostic {
     let LintError::ParseError { message, span } = err;
 
-    let range = match rope {
-        Some(rope) => match span {
-            Some(span) => {
-                let start = rope_byte_to_position(rope, span.start_byte);
-                let end = rope_byte_to_position(rope, span.end_byte);
-                Range { start, end }
+    let range = match (rope, span) {
+        (Some(rope), Some(span)) => {
+            let start = rope_byte_to_position(rope, span.start_byte);
+            let end = rope_byte_to_position(rope, span.end_byte);
+            Range { start, end }
+        }
+        // Unknown position: point at the end of the file (zero-width range).
+        (Some(rope), None) => {
+            let eof = rope_char_index_to_position(rope, rope.len_chars());
+            Range {
+                start: eof,
+                end: eof,
             }
-            // Unknown position: point at the end of the file (zero-width range).
-            None => {
-                let eof = rope_char_index_to_position(rope, rope.len_chars());
-                Range {
-                    start: eof,
-                    end: eof,
-                }
-            }
-        },
-        None => Range::default(),
+        }
+        (None, _) => Range::default(),
     };
 
     Diagnostic {
