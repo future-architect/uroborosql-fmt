@@ -113,6 +113,54 @@ async fn formatting_merges_config_file_with_explicit_client_overrides() {
 }
 
 #[tokio::test]
+async fn formatting_resolves_relative_config_against_document_workspace() {
+    let mut server = new_test_server();
+    let other_dir = unique_temp_dir("uroborosql-lsp-fmt-multi-other");
+    let project_dir = unique_temp_dir("uroborosql-lsp-fmt-multi-project");
+    write_file(
+        &project_dir.join(".uroborosqlfmtrc.json"),
+        r#"{ "keyword_case": "upper", "identifier_case": "upper" }"#,
+    );
+
+    let uri = Uri::from_file_path(project_dir.join("format.sql")).unwrap();
+    initialize_server_with_workspace_folders(
+        &mut server,
+        vec![
+            workspace_folder(Uri::from_file_path(&other_dir).unwrap(), "other"),
+            workspace_folder(Uri::from_file_path(&project_dir).unwrap(), "project"),
+        ],
+        Some(json!([
+            {
+                "configurationFilePath": ".uroborosqlfmtrc.json",
+                "lintConfigurationFilePath": ""
+            }
+        ])),
+    )
+    .await;
+
+    server
+        .send_request(build_did_open(&uri, "select distinct id from users;", 1))
+        .await;
+    let _ = server.receive_notification().await;
+
+    server.send_request(build_formatting(&uri, 2)).await;
+    let response = server.receive_response().await;
+    assert!(response.is_ok());
+
+    let value = serde_json::to_value(&response).unwrap();
+    let edits = value["result"]
+        .as_array()
+        .expect("formatting against project config should return edits");
+    let new_text = edits[0]["newText"]
+        .as_str()
+        .expect("text edit should contain newText");
+    // Upper-casing proves the project's config file was used (not the empty
+    // first folder, which would have left the file unconfigured / null).
+    assert!(new_text.contains("ID"));
+    assert!(new_text.contains("USERS"));
+}
+
+#[tokio::test]
 async fn formatting_returns_null_when_explicit_config_file_is_missing() {
     let mut server = new_test_server();
     let root_dir = unique_temp_dir("uroborosql-lsp-missing-config");

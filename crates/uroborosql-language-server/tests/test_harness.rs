@@ -11,8 +11,9 @@ use tower_lsp_server::UriExt;
 use tower_lsp_server::jsonrpc::{Request, Response};
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::lsp_types::notification::{
-    DidChangeConfiguration, DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument,
-    DidOpenTextDocument, DidSaveTextDocument, Initialized, LogMessage, Notification,
+    DidChangeConfiguration, DidChangeTextDocument, DidChangeWatchedFiles,
+    DidChangeWorkspaceFolders, DidCloseTextDocument, DidOpenTextDocument, DidSaveTextDocument,
+    Initialized, LogMessage, Notification,
 };
 use tower_lsp_server::lsp_types::request::{
     CodeActionRequest, Formatting, Initialize, RangeFormatting, RegisterCapability,
@@ -244,6 +245,51 @@ pub(crate) fn build_initialize_with_root_uri(
         .finish()
 }
 
+pub(crate) fn workspace_folder(uri: Uri, name: &str) -> WorkspaceFolder {
+    WorkspaceFolder {
+        uri,
+        name: name.into(),
+    }
+}
+
+#[allow(deprecated)]
+pub(crate) fn build_initialize_with_workspace_folders(
+    id: i64,
+    workspace_folders: Vec<WorkspaceFolder>,
+    root_uri: Option<Uri>,
+) -> Request {
+    let params = InitializeParams {
+        root_uri,
+        workspace_folders: Some(workspace_folders),
+        capabilities: ClientCapabilities {
+            workspace: Some(WorkspaceClientCapabilities {
+                did_change_watched_files: Some(DidChangeWatchedFilesClientCapabilities {
+                    dynamic_registration: Some(true),
+                    relative_pattern_support: Some(false),
+                }),
+                ..WorkspaceClientCapabilities::default()
+            }),
+            ..ClientCapabilities::default()
+        },
+        ..InitializeParams::default()
+    };
+    Request::build(Initialize::METHOD)
+        .params(json!(params))
+        .id(id)
+        .finish()
+}
+
+pub(crate) fn build_did_change_workspace_folders(
+    added: Vec<WorkspaceFolder>,
+    removed: Vec<WorkspaceFolder>,
+) -> Request {
+    Request::build(DidChangeWorkspaceFolders::METHOD)
+        .params(json!(DidChangeWorkspaceFoldersParams {
+            event: WorkspaceFoldersChangeEvent { added, removed },
+        }))
+        .finish()
+}
+
 pub(crate) fn build_initialized() -> Request {
     Request::build(Initialized::METHOD)
         .params(json!(InitializedParams {}))
@@ -443,6 +489,52 @@ pub(crate) async fn initialize_server_with_root_uri(
 
     let config_request = server.receive_server_request().await;
     assert_eq!(config_request.method(), WorkspaceConfiguration::METHOD);
+
+    let register_request = server.receive_server_request().await;
+    assert_eq!(register_request.method(), RegisterCapability::METHOD);
+}
+
+pub(crate) async fn initialize_server_with_workspace_folders(
+    server: &mut TestServer,
+    workspace_folders: Vec<WorkspaceFolder>,
+    workspace_config: Option<serde_json::Value>,
+) {
+    initialize_server_with_workspace_folder_configs(
+        server,
+        workspace_folders,
+        workspace_config.into_iter().collect(),
+    )
+    .await;
+}
+
+/// Like [`initialize_server_with_workspace_folders`], but enqueues one
+/// `workspace/configuration` response per root (in root order). The server
+/// fetches config once per root during `initialized`, so the responses are
+/// consumed in the same order the folders are passed.
+pub(crate) async fn initialize_server_with_workspace_folder_configs(
+    server: &mut TestServer,
+    workspace_folders: Vec<WorkspaceFolder>,
+    workspace_configs: Vec<serde_json::Value>,
+) {
+    for workspace_config in workspace_configs {
+        server.push_workspace_configuration_response(workspace_config);
+    }
+
+    let folder_count = workspace_folders.len();
+    server
+        .send_request(build_initialize_with_workspace_folders(
+            1,
+            workspace_folders,
+            None,
+        ))
+        .await;
+    assert!(server.receive_response().await.is_ok());
+    server.send_request(build_initialized()).await;
+
+    for _ in 0..folder_count {
+        let config_request = server.receive_server_request().await;
+        assert_eq!(config_request.method(), WorkspaceConfiguration::METHOD);
+    }
 
     let register_request = server.receive_server_request().await;
     assert_eq!(register_request.method(), RegisterCapability::METHOD);
