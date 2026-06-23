@@ -200,29 +200,33 @@ mod tests {
 
     #[test]
     fn resolve_workspace_roots_prefers_folders() {
+        let other = env::temp_dir().join("uroborosql-workspace-other");
+        let project = env::temp_dir().join("uroborosql-workspace-project");
         let folders = vec![
             WorkspaceFolder {
-                uri: Uri::from_str("file:///work/other").expect("uri"),
+                uri: Uri::from_file_path(&other).expect("uri"),
                 name: "other".into(),
             },
             WorkspaceFolder {
-                uri: Uri::from_str("file:///work/project").expect("uri"),
+                uri: Uri::from_file_path(&project).expect("uri"),
                 name: "project".into(),
             },
         ];
-        let root_uri = Uri::from_str("file:///fallback").expect("uri");
+        let fallback = env::temp_dir().join("uroborosql-workspace-fallback");
+        let root_uri = Uri::from_file_path(&fallback).expect("uri");
         let roots = resolve_workspace_roots(Some(&folders), Some(&root_uri));
         assert_eq!(roots.len(), 2);
-        assert_eq!(roots[0].path, PathBuf::from("/work/other"));
-        assert_eq!(roots[1].path, PathBuf::from("/work/project"));
+        assert_eq!(roots[0].path, other);
+        assert_eq!(roots[1].path, project);
     }
 
     #[test]
     fn resolve_workspace_roots_falls_back_to_root_uri() {
-        let root_uri = Uri::from_str("file:///fallback").expect("uri");
+        let fallback = env::temp_dir().join("uroborosql-workspace-fallback");
+        let root_uri = Uri::from_file_path(&fallback).expect("uri");
         let roots = resolve_workspace_roots(None, Some(&root_uri));
         assert_eq!(roots.len(), 1);
-        assert_eq!(roots[0].path, PathBuf::from("/fallback"));
+        assert_eq!(roots[0].path, fallback);
     }
 
     #[test]
@@ -231,10 +235,11 @@ mod tests {
             uri: Uri::from_str("untitled:scratch").expect("uri"),
             name: "scratch".into(),
         }];
-        let root_uri = Uri::from_str("file:///fallback").expect("uri");
+        let fallback = env::temp_dir().join("uroborosql-workspace-fallback");
+        let root_uri = Uri::from_file_path(&fallback).expect("uri");
         let roots = resolve_workspace_roots(Some(&folders), Some(&root_uri));
         assert_eq!(roots.len(), 1);
-        assert_eq!(roots[0].path, PathBuf::from("/fallback"));
+        assert_eq!(roots[0].path, fallback);
     }
 
     #[test]
