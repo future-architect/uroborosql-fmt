@@ -40,9 +40,13 @@ pub(crate) struct FormatSelectionsAsSqlResult {
 }
 
 impl Backend {
-    pub(crate) fn resolve_fmt_config_path_for(&self, config: &ClientConfig) -> Option<PathBuf> {
+    pub(crate) fn resolve_fmt_config_path_for_uri(
+        &self,
+        uri: &Uri,
+        config: &ClientConfig,
+    ) -> Option<PathBuf> {
         let raw_path = config.configuration_file_path.clone();
-        let root_dir = self.root_dir();
+        let root_dir = self.workspace_dir_for_uri(uri);
         resolve_config_path(root_dir.as_deref(), raw_path, DEFAULT_FMT_CONFIG_PATH)
     }
 
@@ -57,9 +61,9 @@ impl Backend {
         let config = self
             .fetch_client_config(Some(scope_uri.clone()))
             .await
-            .unwrap_or_else(|| self.client_config.read().unwrap().clone());
+            .unwrap_or_else(|| self.cached_workspace_config_for_uri(scope_uri));
         (
-            self.resolve_fmt_config_path_for(&config),
+            self.resolve_fmt_config_path_for_uri(scope_uri, &config),
             self.client_config_json_explicit_only_for(&config),
         )
     }

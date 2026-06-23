@@ -7,6 +7,7 @@ mod paths;
 mod server;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 pub use tower_lsp_server::ClientSocket;
@@ -19,6 +20,7 @@ use uroborosql_lint::{ConfigStore, Linter};
 use crate::configuration::ClientConfig;
 use crate::document::DocumentState;
 use crate::formatting::FORMAT_SELECTIONS_AS_SQL_METHOD;
+use crate::paths::WorkspaceRoot;
 
 const CONFIGURATION_SECTION: &str = "uroborosql-fmt";
 const DEFAULT_FMT_CONFIG_PATH: &str = ".uroborosqlfmtrc.json";
@@ -28,9 +30,17 @@ pub struct Backend {
     client: Client,
     linter: Arc<Linter>,
     documents: Arc<RwLock<HashMap<Uri, DocumentState>>>,
-    client_config: Arc<RwLock<ClientConfig>>,
-    lint_config_store: Arc<RwLock<Option<ConfigStore>>>,
-    root_uri: Arc<RwLock<Option<Uri>>>,
+    /// Client config fetched per workspace root, so each root resolves its own
+    /// `lintConfigurationFilePath`. Also reused as the formatting fallback when a
+    /// live config fetch fails.
+    workspace_configs: Arc<RwLock<HashMap<PathBuf, ClientConfig>>>,
+    /// Lint config stores keyed by the normalized workspace root path.
+    /// `None` distinguishes "no `.uroborosqllintrc.json` for this root" from
+    /// "this root has not been resolved yet".
+    lint_config_stores: Arc<RwLock<HashMap<PathBuf, Option<ConfigStore>>>>,
+    /// Normalized workspace roots resolved from `workspaceFolders` (or the
+    /// `rootUri` fallback). All config resolution is scoped through these.
+    workspace_roots: Arc<RwLock<Vec<WorkspaceRoot>>>,
     supports_dynamic_watched_files: Arc<RwLock<bool>>,
     has_watched_files_registration: Arc<RwLock<bool>>,
 }
@@ -41,9 +51,9 @@ impl Backend {
             client,
             linter: Arc::new(Linter::new()),
             documents: Arc::new(RwLock::new(HashMap::new())),
-            client_config: Arc::new(RwLock::new(ClientConfig::default())),
-            lint_config_store: Arc::new(RwLock::new(None)),
-            root_uri: Arc::new(RwLock::new(None)),
+            workspace_configs: Arc::new(RwLock::new(HashMap::new())),
+            lint_config_stores: Arc::new(RwLock::new(HashMap::new())),
+            workspace_roots: Arc::new(RwLock::new(Vec::new())),
             supports_dynamic_watched_files: Arc::new(RwLock::new(false)),
             has_watched_files_registration: Arc::new(RwLock::new(false)),
         }
