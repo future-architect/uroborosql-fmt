@@ -4,18 +4,24 @@ Language server for `uroborosql-fmt`.
 
 ## Overview
 
-`uroborosql-language-server` provides:
+`uroborosql-language-server` is the editor-facing entry point for formatting SQL with
+`uroborosql-fmt` over LSP.
+
+It provides:
 
 - SQL document formatting
 - SQL range formatting
+- lint diagnostics when a lint config is available
 - quickfix code actions for lint directives
-- diagnostics when a lint config is available
 - embedded SQL formatting via a custom request
 
-The server only publishes lint diagnostics when it can resolve a lint config file such as `.uroborosqllintrc.json`.
-Lint diagnostics are refreshed on document open/save and when workspace configuration or watched lint config files change.
+If you use VS Code, use the dedicated extension:
+[`vscode-uroborosql-fmt`](https://github.com/future-architect/vscode-uroborosql-fmt).
 
-## Getting started
+If you want to wire the language server into another editor yourself, this README is the starting
+point.
+
+## Getting Started
 
 Install the language server:
 
@@ -23,22 +29,84 @@ Install the language server:
 cargo install --git https://github.com/future-architect/uroborosql-fmt uroborosql-language-server
 ```
 
-`uroborosql-language-server` is a standard stdio-based LSP server, so it can be used from any editor or client that can launch an external language server process.
-
-Basic command:
+Run it over stdio:
 
 ```sh
 uroborosql-language-server
 ```
 
-Typical client setup should:
+### Lint Is Opt-In
 
-- start `uroborosql-language-server` over stdio
-- enable `textDocument/formatting` and `textDocument/rangeFormatting`
-- enable `textDocument/codeAction` for lint quickfixes
-- provide a `.uroborosqllintrc.json` file when lint diagnostics are desired
+Lint diagnostics are published only when the server can resolve a lint config file such as
+`.uroborosqllintrc.json`.
 
-## Supported LSP methods
+Without a lint config file, the server still provides formatting, but it publishes no lint
+diagnostics.
+
+To create a starter lint config file, run:
+
+```sh
+uroborosql-lint --init
+```
+
+See the [`uroborosql-lint` CLI README](../uroborosql-lint-cli/README.md) for lint CLI usage and
+config details.
+
+### Current Diagnostic Timing
+
+Lint diagnostics are refreshed when:
+
+- a document is opened
+- a document is saved
+- workspace configuration changes
+- watched lint config files change
+
+This server does not currently re-lint on every `textDocument/didChange` notification.
+
+## Editor Setup Examples
+
+These are manual setup examples for people integrating the language server outside VS Code.
+
+### Neovim
+
+Example using Neovim's built-in LSP:
+
+```lua
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "sql",
+  callback = function(args)
+    local root = vim.fs.root(args.buf, {
+      ".uroborosqllintrc.json",
+      ".uroborosqlfmtrc.json",
+    }) or vim.uv.cwd()
+
+    vim.lsp.start({
+      name = "uroborosql-language-server",
+      cmd = { "uroborosql-language-server" },
+      root_dir = root,
+    })
+  end,
+})
+```
+
+### Emacs
+
+Example using `Eglot`:
+
+```elisp
+(require 'eglot)
+
+(add-to-list 'eglot-server-programs
+             '(sql-mode . ("uroborosql-language-server")))
+
+(add-hook 'sql-mode-hook #'eglot-ensure)
+
+(setq eglot-autoshutdown t)
+```
+
+## What The Server Supports
+
+Supported LSP methods:
 
 - `textDocument/formatting`
 - `textDocument/rangeFormatting`
@@ -50,89 +118,24 @@ Typical client setup should:
 - `workspace/didChangeConfiguration`
 - `workspace/didChangeWatchedFiles`
 
-## Server notifications
+Server notifications:
 
 - `textDocument/publishDiagnostics`
 
-## Code actions
+Available code actions:
 
-- `quickfix`
-  - Add `uroborosql-lint-disable-next-line` directives for lint diagnostics.
-  - Remove unknown rule names from existing lint directives.
+- add `uroborosql-lint-disable-next-line` directives for lint diagnostics
+- remove unknown rule names from existing lint directives
 
-## Custom requests
+The server does not currently provide features such as completion, hover, or semantic tokens.
 
-### `uroborosql/formatSelectionsAsSql`
+## Related Projects
 
-### Request
+- [`vscode-uroborosql-fmt`](https://github.com/future-architect/vscode-uroborosql-fmt)
+- [`uroborosql-fmt` CLI](../uroborosql-fmt-cli/README.md)
+- [`uroborosql-lint` CLI](../uroborosql-lint-cli/README.md)
 
-```ts
-type FormatSelectionsAsSqlParams = {
-  hostDocumentUri: string;
-  hostDocumentVersion: number;
-  selections: {
-    range: Range;
-    text: string;
-  }[];
-};
-```
+## Protocol Details
 
-#### Field semantics
-
-- `hostDocumentUri`
-  - Required.
-  - URI of the host document that owns the selections.
-  - The language server resolves formatter configuration using this URI as the configuration scope.
-- `hostDocumentVersion`
-  - Required.
-  - Version of the host document when the client collected the selections.
-  - The server echoes this value in the response so clients can detect stale results before applying edits.
-- `selections`
-  - Required.
-  - One or more independent SQL fragments to format.
-  - Each item contains:
-    - `range`: the range to replace in the host document
-    - `text`: the exact selected text to format as SQL
-
-### Response
-
-```ts
-type FormatSelectionsAsSqlResult = {
-  hostDocumentVersion: number;
-  edits: {
-    range: Range;
-    newText: string;
-  }[];
-};
-```
-
-#### Response semantics
-
-- `hostDocumentVersion`
-  - Echo of the request field.
-  - Clients should compare this value with the current document version before applying edits.
-- `edits`
-  - Replacement edits in the same order as the request `selections`.
-  - Each `range` matches the corresponding input selection range.
-  - Each `newText` contains the formatted SQL fragment for that selection.
-
-### Error handling
-
-- `selections` must not be empty. An empty list is rejected as invalid params.
-- The request is intentionally all-or-nothing.
-  - If formatting any single selection fails, the server returns an error for the whole request.
-  - The server does not return partial success.
-  - This allows clients to avoid reconciling partially formatted multi-selection edits.
-
-### Configuration resolution
-
-- Formatter configuration is resolved using `hostDocumentUri`, not the URI of a synthetic SQL document.
-- Relative `configuration_file_path` is resolved from the workspace root associated with the host document.
-- Client-provided formatter overrides follow the same merge behavior as ordinary document formatting.
-
-### Client responsibilities
-
-- Collect the exact selected text and send it in `selections[].text`.
-- Avoid sending overlapping selections.
-- Avoid applying returned edits if the host document version has changed since the request was sent.
-- Treat the request as a formatting operation on independent SQL fragments. The server does not infer surrounding language context.
+For the embedded SQL request, configuration resolution details, and other integration notes, see
+[docs/protocol.md](docs/protocol.md).
