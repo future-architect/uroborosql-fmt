@@ -11,7 +11,12 @@ use uroborosql_fmt::format_sql;
 pub const DEFAULT_CONFIG_PATH: &str = ".uroborosqlfmtrc.json";
 
 #[derive(Parser, Debug)]
-#[command(name = "uroborosql-fmt", version, about, long_about = None)]
+#[command(
+    name = "uroborosql-fmt",
+    version,
+    about = "SQL formatter",
+    long_about = None
+)]
 pub struct Cli {
     /// Input file. If omitted, read from STDIN.
     pub input: Option<PathBuf>,

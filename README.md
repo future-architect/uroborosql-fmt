@@ -58,6 +58,17 @@ For detailed CLI usage, options, and examples, see the [CLI documentation](crate
 
 You can try uroborosql-fmt in your browser with our [WebAssembly demo](https://future-architect.github.io/uroborosql-fmt/), which requires no installation.
 
+## Tools
+
+This repository contains several tools around `uroborosql-fmt`:
+
+- [`uroborosql-fmt` CLI](crates/uroborosql-fmt-cli/README.md)
+  - CLI formatter for PostgreSQL and 2way-SQL.
+- [`uroborosql-lint` CLI (Beta)](crates/uroborosql-lint-cli/README.md)
+  - CLI for linting SQL files.
+- [`uroborosql-language-server`](crates/uroborosql-language-server/README.md)
+  - Language server for formatting and lint diagnostics in editors.
+
 ### Configuration options
 
 Create `.uroborosqlfmtrc.json` in the directory where you run the command and write the configuration there.
@@ -88,6 +99,7 @@ If there is no configuration file, the default values are used.
 - [Overview of the process flow](docs/structure/overview_of_the_process_flow.md)
   - This tool uses [postgresql-cst-parser](https://github.com/future-architect/postgresql-cst-parser) (upstream: [tanzaku/postgresql-cst-parser](https://github.com/tanzaku/postgresql-cst-parser)). Special thanks to [tanzaku](https://github.com/tanzaku) for the original work.
 - [How to format 2way-sql](docs/structure/how_to_format_2way_sql.md)
+- [Embedded SQL formatting protocol](crates/uroborosql-language-server/README.md)
 
 ## License
 
