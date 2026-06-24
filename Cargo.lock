@@ -1204,7 +1204,7 @@ checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
 
 [[package]]
 name = "uroborosql-fmt"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "annotate-snippets",
  "console",
@@ -1221,7 +1221,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-fmt-cli"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "assert_cmd",
  "assert_fs",
@@ -1232,7 +1232,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-fmt-napi"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "napi",
  "napi-build",
@@ -1244,7 +1244,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-fmt-wasm"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "console_error_panic_hook",
  "uroborosql-fmt",
