@@ -42,6 +42,110 @@ async fn initialize_uses_root_uri_when_workspace_folders_are_missing() {
 }
 
 #[tokio::test]
+async fn did_change_workspace_folders_adds_workspace_and_lints() {
+    let mut server = new_test_server();
+    let project_a = unique_temp_dir("uroborosql-lsp-wsf-add-a");
+    write_file(&project_a.join(".uroborosqllintrc.json"), "{}");
+    let project_b = unique_temp_dir("uroborosql-lsp-wsf-add-b");
+    write_file(&project_b.join(".uroborosqllintrc.json"), "{}");
+    let uri_b = Uri::from_file_path(project_b.join("b.sql")).unwrap();
+
+    initialize_server_with_workspace_folders(
+        &mut server,
+        vec![workspace_folder(
+            Uri::from_file_path(&project_a).unwrap(),
+            "a",
+        )],
+        None,
+    )
+    .await;
+
+    // Document B is outside any known workspace yet: no diagnostics.
+    server
+        .send_request(build_did_open(&uri_b, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let before = server.receive_notification().await;
+    assert_eq!(before.method(), PublishDiagnostics::METHOD);
+    assert!(
+        before.params().unwrap()["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    server
+        .send_request(build_did_change_workspace_folders(
+            vec![workspace_folder(
+                Uri::from_file_path(&project_b).unwrap(),
+                "b",
+            )],
+            vec![],
+        ))
+        .await;
+    let after = server.receive_notification().await;
+    assert_eq!(after.method(), PublishDiagnostics::METHOD);
+    assert_eq!(
+        after.params().unwrap()["uri"].as_str(),
+        Some(uri_b.as_str())
+    );
+    assert!(
+        !after.params().unwrap()["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "after adding project B, its document should be linted"
+    );
+}
+
+#[tokio::test]
+async fn did_change_workspace_folders_removes_workspace() {
+    let mut server = new_test_server();
+    let project_a = unique_temp_dir("uroborosql-lsp-wsf-remove-a");
+    write_file(&project_a.join(".uroborosqllintrc.json"), "{}");
+    let uri = Uri::from_file_path(project_a.join("a.sql")).unwrap();
+
+    initialize_server_with_workspace_folders(
+        &mut server,
+        vec![workspace_folder(
+            Uri::from_file_path(&project_a).unwrap(),
+            "a",
+        )],
+        None,
+    )
+    .await;
+
+    server
+        .send_request(build_did_open(&uri, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let before = server.receive_notification().await;
+    assert!(
+        !before.params().unwrap()["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    server
+        .send_request(build_did_change_workspace_folders(
+            vec![],
+            vec![workspace_folder(
+                Uri::from_file_path(&project_a).unwrap(),
+                "a",
+            )],
+        ))
+        .await;
+    let after = server.receive_notification().await;
+    assert_eq!(after.method(), PublishDiagnostics::METHOD);
+    assert!(
+        after.params().unwrap()["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "removing the workspace should clear diagnostics"
+    );
+}
+
+#[tokio::test]
 async fn did_change_configuration_requests_workspace_configuration_again() {
     let mut server = new_test_server();
     let root_dir =

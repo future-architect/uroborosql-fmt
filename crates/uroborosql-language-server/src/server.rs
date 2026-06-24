@@ -9,28 +9,27 @@ use uroborosql_lint::DEFAULT_CONFIG_FILENAME;
 
 use crate::Backend;
 use crate::document::{rope_char_index_to_position, rope_range_to_char_index_range};
+use crate::paths::{WorkspaceRoot, file_uri_to_path, resolve_workspace_roots};
 
 impl LanguageServer for Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
-        // This server only supports a single workspace folder for now, so it uses the first one.
-        // `InitializeParams::root_uri` is deprecated, but some clients still omit
-        // `workspaceFolders`, so keep `rootUri` as a fallback for compatibility.
+        // Config / lint resolution is scoped per document workspace, so no single
+        // folder is treated as "the" root (see `resolve_workspace_roots`).
         #[allow(deprecated)]
-        let root_uri = params
-            .workspace_folders
-            .as_ref()
-            .and_then(|folders| folders.first().map(|folder| folder.uri.clone()))
-            .or(params.root_uri);
-        *self.root_uri.write().unwrap() = root_uri.clone();
+        let workspace_roots = resolve_workspace_roots(
+            params.workspace_folders.as_deref(),
+            params.root_uri.as_ref(),
+        );
 
-        if root_uri.is_none() {
+        if workspace_roots.is_empty() {
             self.client
                 .log_message(
                     MessageType::INFO,
-                    "no workspace folders or rootUri provided",
+                    "no file workspace folders or rootUri provided",
                 )
                 .await;
         }
+        *self.workspace_roots.write().unwrap() = workspace_roots;
 
         let supports_dynamic_watched_files = params
             .capabilities
@@ -61,6 +60,13 @@ impl LanguageServer for Backend {
                         ..CodeActionOptions::default()
                     },
                 )),
+                workspace: Some(WorkspaceServerCapabilities {
+                    workspace_folders: Some(WorkspaceFoldersServerCapabilities {
+                        supported: Some(true),
+                        change_notifications: Some(OneOf::Left(true)),
+                    }),
+                    ..WorkspaceServerCapabilities::default()
+                }),
                 ..ServerCapabilities::default()
             },
             server_info: Some(ServerInfo {
@@ -75,20 +81,45 @@ impl LanguageServer for Backend {
             .log_message(MessageType::INFO, "uroborosql-language-server initialized")
             .await;
 
-        self.refresh_client_config().await;
-        self.refresh_lint_config_store().await;
+        self.refresh_workspace_configs().await;
         self.sync_watched_files_registration().await;
     }
 
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
-        self.refresh_client_config().await;
-        self.refresh_lint_config_store().await;
+        self.refresh_workspace_configs().await;
         self.sync_watched_files_registration().await;
         self.relint_open_documents().await;
     }
 
     async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
-        self.refresh_lint_config_store().await;
+        // A config file on disk changed: rebuild every workspace's store from the
+        // already-fetched client config rather than re-querying the client.
+        self.rebuild_lint_config_stores().await;
+        self.relint_open_documents().await;
+    }
+
+    async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
+        {
+            let mut roots = self.workspace_roots.write().unwrap();
+
+            for removed in &params.event.removed {
+                if let Some(path) = file_uri_to_path(&removed.uri) {
+                    roots.retain(|root| root.path != path);
+                }
+            }
+
+            for added in &params.event.added {
+                if let Some(root) = WorkspaceRoot::from_uri(&added.uri)
+                    && !roots.iter().any(|existing| existing.path == root.path)
+                {
+                    roots.push(root);
+                }
+            }
+        }
+
+        // Re-fetch per-root config so added roots get their own settings.
+        self.refresh_workspace_configs().await;
+        self.sync_watched_files_registration().await;
         self.relint_open_documents().await;
     }
 

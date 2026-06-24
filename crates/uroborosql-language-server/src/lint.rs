@@ -1,35 +1,16 @@
-use std::path::PathBuf;
-
 use tower_lsp_server::lsp_types::{
     Diagnostic, DiagnosticSeverity, MessageType, NumberOrString, Position, Range, Uri,
 };
 use uroborosql_lint::{
-    DEFAULT_CONFIG_FILENAME, Diagnostic as SqlDiagnostic, LINT_SOURCE, LintError,
-    Severity as SqlSeverity,
+    Diagnostic as SqlDiagnostic, LINT_SOURCE, LintError, Severity as SqlSeverity,
 };
 
 use crate::Backend;
-use crate::configuration::resolve_config_path;
 use crate::document::{rope_byte_to_position, rope_char_index_to_position};
-use crate::paths::file_uri_to_path;
+use crate::paths::{file_uri_to_path, has_parent_dir_component};
 
 impl Backend {
-    pub(crate) fn resolve_lint_config_path(&self) -> Option<PathBuf> {
-        let raw_path = self
-            .client_config
-            .read()
-            .unwrap()
-            .lint_configuration_file_path
-            .clone();
-        let root_dir = self.root_dir();
-        resolve_config_path(root_dir.as_deref(), raw_path, DEFAULT_CONFIG_FILENAME)
-    }
-
     pub(crate) async fn lint_and_publish(&self, uri: &Uri, text: &str, version: Option<i32>) {
-        if self.root_dir().is_none() {
-            return;
-        }
-
         let Some(path) = file_uri_to_path(uri) else {
             self.client
                 .log_message(
@@ -39,14 +20,43 @@ impl Backend {
                 .await;
             return;
         };
-
-        let Some(config_store) = self.lint_config_store.read().unwrap().as_ref().cloned() else {
+        // A `..` would make containment ambiguous; conformant clients never send
+        // one, so surface it loudly rather than guessing the owning workspace.
+        if has_parent_dir_component(&path) {
             self.client
                 .log_message(
-                    MessageType::INFO,
-                    "lint config store is not initialized; clearing diagnostics",
+                    MessageType::WARNING,
+                    format!(
+                        "document path contains '..'; skipping lint: {}",
+                        path.display()
+                    ),
                 )
                 .await;
+            self.client
+                .publish_diagnostics(uri.clone(), vec![], version)
+                .await;
+            return;
+        }
+
+        // Resolve against the workspace that actually owns this document so a
+        // sibling folder that merely appears first is never used by accident.
+        let Some(workspace) = self.workspace_root_for_uri(uri) else {
+            // The document is outside every workspace root. Publish empty rather
+            // than guessing a config from an unrelated workspace.
+            self.client
+                .publish_diagnostics(uri.clone(), vec![], version)
+                .await;
+            return;
+        };
+
+        let config_store = self
+            .lint_config_stores
+            .read()
+            .unwrap()
+            .get(&workspace.path)
+            .cloned()
+            .flatten();
+        let Some(config_store) = config_store else {
             self.client
                 .publish_diagnostics(uri.clone(), vec![], version)
                 .await;

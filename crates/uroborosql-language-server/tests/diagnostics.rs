@@ -3,6 +3,7 @@ mod test_harness;
 use std::str::FromStr;
 use std::time::Duration;
 
+use serde_json::json;
 use tower_lsp_server::UriExt;
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::lsp_types::notification::{Notification, PublishDiagnostics};
@@ -153,6 +154,127 @@ async fn parse_error_diagnostic_points_at_error_location() {
     assert!(
         !(start_line == Some(0) && start_character == Some(0)),
         "parse error must not collapse to 0,0"
+    );
+}
+
+#[tokio::test]
+async fn lint_picks_each_documents_own_workspace_config() {
+    let mut server = new_test_server();
+    let project_a = unique_temp_dir("uroborosql-lsp-multi-a");
+    let project_b = unique_temp_dir("uroborosql-lsp-multi-b");
+    write_file(&project_a.join(".uroborosqllintrc.json"), "{}");
+    write_file(
+        &project_b.join(".uroborosqllintrc.json"),
+        r#"{ "rules": { "no-distinct": "off" } }"#,
+    );
+
+    let uri_a = Uri::from_file_path(project_a.join("a.sql")).unwrap();
+    let uri_b = Uri::from_file_path(project_b.join("b.sql")).unwrap();
+    initialize_server_with_workspace_folders(
+        &mut server,
+        vec![
+            workspace_folder(Uri::from_file_path(&project_a).unwrap(), "a"),
+            workspace_folder(Uri::from_file_path(&project_b).unwrap(), "b"),
+        ],
+        None,
+    )
+    .await;
+
+    server
+        .send_request(build_did_open(&uri_a, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let diag_a = server.receive_notification().await;
+    assert_eq!(
+        diag_a.params().unwrap()["uri"].as_str(),
+        Some(uri_a.as_str())
+    );
+    assert!(
+        !diag_a.params().unwrap()["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "project A should report no-distinct"
+    );
+
+    server
+        .send_request(build_did_open(&uri_b, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let diag_b = server.receive_notification().await;
+    assert_eq!(
+        diag_b.params().unwrap()["uri"].as_str(),
+        Some(uri_b.as_str())
+    );
+    assert!(
+        diag_b.params().unwrap()["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "project B disables no-distinct, so it should report nothing"
+    );
+}
+
+#[tokio::test]
+async fn lint_resolves_per_root_lint_config_path_override() {
+    let mut server = new_test_server();
+    let project_a = unique_temp_dir("uroborosql-lsp-per-root-a");
+    let project_b = unique_temp_dir("uroborosql-lsp-per-root-b");
+
+    // Project A: the default file would report, but its explicit override turns
+    // no-distinct off, so honoring the override means A stays silent.
+    write_file(&project_a.join(".uroborosqllintrc.json"), "{}");
+    write_file(
+        &project_a.join("a-config.json"),
+        r#"{ "rules": { "no-distinct": "off" } }"#,
+    );
+    // Project B keeps no-distinct on, but only under its own override filename.
+    // If B were resolved with A's path ("a-config.json"), B would find nothing.
+    write_file(&project_b.join("b-config.json"), "{}");
+
+    let uri_a = Uri::from_file_path(project_a.join("a.sql")).unwrap();
+    let uri_b = Uri::from_file_path(project_b.join("b.sql")).unwrap();
+    initialize_server_with_workspace_folder_configs(
+        &mut server,
+        vec![
+            workspace_folder(Uri::from_file_path(&project_a).unwrap(), "a"),
+            workspace_folder(Uri::from_file_path(&project_b).unwrap(), "b"),
+        ],
+        vec![
+            json!([{ "lintConfigurationFilePath": "a-config.json" }]),
+            json!([{ "lintConfigurationFilePath": "b-config.json" }]),
+        ],
+    )
+    .await;
+
+    server
+        .send_request(build_did_open(&uri_a, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let diag_a = server.receive_notification().await;
+    assert_eq!(
+        diag_a.params().unwrap()["uri"].as_str(),
+        Some(uri_a.as_str())
+    );
+    assert!(
+        diag_a.params().unwrap()["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "project A's explicit override disables no-distinct, so it must be used over the default file"
+    );
+
+    server
+        .send_request(build_did_open(&uri_b, "SELECT DISTINCT id FROM users;", 1))
+        .await;
+    let diag_b = server.receive_notification().await;
+    assert_eq!(
+        diag_b.params().unwrap()["uri"].as_str(),
+        Some(uri_b.as_str())
+    );
+    assert!(
+        !diag_b.params().unwrap()["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "project B must resolve its own override path, not the first root's"
     );
 }
 

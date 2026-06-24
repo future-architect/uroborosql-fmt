@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tower_lsp_server::lsp_types::request::{Request, WorkspaceConfiguration};
 use tower_lsp_server::lsp_types::{ConfigurationItem, MessageType, Uri};
 use uroborosql_fmt::config::PartialConfig;
-use uroborosql_lint::ConfigStore;
+use uroborosql_lint::{ConfigStore, DEFAULT_CONFIG_FILENAME};
 
 use crate::{Backend, CONFIGURATION_SECTION};
 
@@ -74,33 +75,69 @@ impl Backend {
         }
     }
 
-    pub(crate) async fn refresh_client_config(&self) {
-        let scope_uri = self.root_uri.read().unwrap().clone();
-        if let Some(config) = self.fetch_client_config(scope_uri).await {
-            *self.client_config.write().unwrap() = config;
+    /// Fetches the client config for every workspace root and rebuilds the lint
+    /// stores from the result.
+    ///
+    /// Each root is queried with its own `scopeUri`, so a multi-root client can
+    /// return a different `lintConfigurationFilePath` per folder.
+    pub(crate) async fn refresh_workspace_configs(&self) {
+        let roots = self.workspace_roots.read().unwrap().clone();
+
+        let mut configs: HashMap<PathBuf, ClientConfig> = HashMap::new();
+        for root in &roots {
+            let Some(config) = self.fetch_client_config(Some(root.uri.clone())).await else {
+                continue;
+            };
+            configs.insert(root.path.clone(), config);
         }
+        *self.workspace_configs.write().unwrap() = configs;
+
+        self.rebuild_lint_config_stores().await;
     }
 
-    pub(crate) async fn refresh_lint_config_store(&self) {
-        let Some(root_dir) = self.root_dir() else {
-            return;
-        };
+    pub(crate) fn cached_workspace_config_for_uri(&self, uri: &Uri) -> ClientConfig {
+        self.workspace_dir_for_uri(uri)
+            .and_then(|dir| self.workspace_configs.read().unwrap().get(&dir).cloned())
+            .unwrap_or_default()
+    }
 
-        let resolved_path = self.resolve_lint_config_path();
-        match ConfigStore::try_new(root_dir, resolved_path) {
-            Ok(store) => {
-                *self.lint_config_store.write().unwrap() = store;
-            }
-            Err(err) => {
-                self.client
-                    .log_message(
-                        MessageType::WARNING,
-                        format!("failed to load lint config: {err}"),
-                    )
-                    .await;
-                *self.lint_config_store.write().unwrap() = None;
+    /// Rebuilds the lint config store for every workspace root from the cached
+    /// per-root client config, without issuing new `workspace/configuration`
+    /// requests. Used when only the on-disk config files may have changed.
+    ///
+    /// The `lintConfigurationFilePath` setting (relative or absolute) is
+    /// resolved against each root independently so that nested / sibling
+    /// workspaces each pick up their own `.uroborosqllintrc.json`.
+    pub(crate) async fn rebuild_lint_config_stores(&self) {
+        let roots = self.workspace_roots.read().unwrap().clone();
+        let configs = self.workspace_configs.read().unwrap().clone();
+
+        let mut stores = HashMap::new();
+        for root in roots {
+            let lint_config_path = configs
+                .get(&root.path)
+                .and_then(|config| config.lint_configuration_file_path.clone());
+            let resolved_path =
+                resolve_config_path(Some(&root.path), lint_config_path, DEFAULT_CONFIG_FILENAME);
+            match ConfigStore::try_new(root.path.clone(), resolved_path) {
+                Ok(store) => {
+                    stores.insert(root.path, store);
+                }
+                Err(err) => {
+                    self.client
+                        .log_message(
+                            MessageType::WARNING,
+                            format!(
+                                "failed to load lint config for {}: {err}",
+                                root.path.display()
+                            ),
+                        )
+                        .await;
+                    stores.insert(root.path, None);
+                }
             }
         }
+        *self.lint_config_stores.write().unwrap() = stores;
     }
 }
 
