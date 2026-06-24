@@ -98,7 +98,7 @@ This allows:
 Diagnostics:
 
 - published only when lint configuration is available
-- refreshed on open, save, workspace configuration changes, and watched config changes
+- refreshed on open, save, workspace folder changes, workspace configuration changes, and watched config changes
 - not refreshed on every `didChange`
 
 Code actions:

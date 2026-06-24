@@ -58,6 +58,7 @@ Lint diagnostics are refreshed when:
 
 - a document is opened
 - a document is saved
+- workspace folders change
 - workspace configuration changes
 - watched lint config files change
 
@@ -115,6 +116,7 @@ Supported LSP methods:
 - `textDocument/didChange`
 - `textDocument/didSave`
 - `textDocument/didClose`
+- `workspace/didChangeWorkspaceFolders`
 - `workspace/didChangeConfiguration`
 - `workspace/didChangeWatchedFiles`
 
