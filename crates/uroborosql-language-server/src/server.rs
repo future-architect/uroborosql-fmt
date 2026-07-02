@@ -202,9 +202,9 @@ impl LanguageServer for Backend {
             }
             Err(err) => {
                 self.client
-                    .log_message(MessageType::ERROR, err.to_string())
+                    .log_message(MessageType::INFO, err.to_string())
                     .await;
-                Ok(None)
+                Err(err)
             }
         }
     }
@@ -240,9 +240,9 @@ impl LanguageServer for Backend {
             }])),
             Err(err) => {
                 self.client
-                    .log_message(MessageType::ERROR, err.to_string())
+                    .log_message(MessageType::INFO, err.to_string())
                     .await;
-                Ok(None)
+                Err(err)
             }
         }
     }

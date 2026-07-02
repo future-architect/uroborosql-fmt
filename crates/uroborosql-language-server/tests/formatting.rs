@@ -161,7 +161,7 @@ async fn formatting_resolves_relative_config_against_document_workspace() {
 }
 
 #[tokio::test]
-async fn formatting_returns_null_when_explicit_config_file_is_missing() {
+async fn formatting_returns_error_when_explicit_config_file_is_missing() {
     let mut server = new_test_server();
     let root_dir = unique_temp_dir("uroborosql-lsp-missing-config");
     let root_uri = Uri::from_file_path(&root_dir).unwrap();
@@ -186,10 +186,44 @@ async fn formatting_returns_null_when_explicit_config_file_is_missing() {
 
     server.send_request(build_formatting(&uri, 2)).await;
     let response = server.receive_response().await;
-    assert!(response.is_ok());
+    assert!(response.is_error());
+}
 
-    let value = serde_json::to_value(&response).unwrap();
-    assert!(value["result"].is_null());
+#[tokio::test]
+async fn formatting_returns_error_when_sql_is_invalid() {
+    let mut server = new_test_server();
+    let uri = Uri::from_str("file:///invalid-format.sql").unwrap();
+
+    initialize_server(&mut server).await;
+
+    server.send_request(build_did_open(&uri, "!!!", 1)).await;
+    let _ = server.receive_notification().await;
+
+    server.send_request(build_formatting(&uri, 2)).await;
+    let response = server.receive_response().await;
+    assert!(response.is_error());
+}
+
+#[tokio::test]
+async fn range_formatting_returns_error_when_sql_is_invalid() {
+    let mut server = new_test_server();
+    let uri = Uri::from_str("file:///invalid-range.sql").unwrap();
+
+    initialize_server(&mut server).await;
+
+    let original = "!!!";
+    server.send_request(build_did_open(&uri, original, 1)).await;
+    let _ = server.receive_notification().await;
+
+    let range = Range {
+        start: Position::new(0, 0),
+        end: Position::new(0, original.len() as u32),
+    };
+    server
+        .send_request(build_range_formatting(&uri, range, 2))
+        .await;
+    let response = server.receive_response().await;
+    assert!(response.is_error());
 }
 
 #[tokio::test]
