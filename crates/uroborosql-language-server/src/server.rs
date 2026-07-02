@@ -200,7 +200,12 @@ impl LanguageServer for Backend {
                     new_text: formatted,
                 }]))
             }
-            Err(err) => Err(err),
+            Err(err) => {
+                self.client
+                    .log_message(MessageType::INFO, err.to_string())
+                    .await;
+                Err(err)
+            }
         }
     }
 
@@ -233,7 +238,12 @@ impl LanguageServer for Backend {
                 },
                 new_text: formatted,
             }])),
-            Err(err) => Err(err),
+            Err(err) => {
+                self.client
+                    .log_message(MessageType::INFO, err.to_string())
+                    .await;
+                Err(err)
+            }
         }
     }
 }
