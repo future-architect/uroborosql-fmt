@@ -1,5 +1,7 @@
 # Changelog
 
+## [1.1.1](https://github.com/future-architect/uroborosql-fmt/compare/uroborosql-fmt-napi-v1.1.0...uroborosql-fmt-napi-v1.1.1) (2026-07-02)
+
 ## [1.1.0](https://github.com/future-architect/uroborosql-fmt/compare/uroborosql-fmt-napi-v1.0.2...uroborosql-fmt-napi-v1.1.0) (2026-06-24)
 
 
