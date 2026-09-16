@@ -2,6 +2,9 @@
 //! certify completeness before claiming absence.
 use std::{collections::BTreeMap, future::Future, pin::Pin};
 
+#[cfg(feature = "postgres-catalog")]
+pub mod postgres;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColumnDefinition {
     pub name: String,
