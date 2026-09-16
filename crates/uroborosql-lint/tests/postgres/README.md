@@ -33,3 +33,47 @@ running test process's environment.
 
 Provider code is enabled by `postgres-catalog`. CLI/LSP integration and SQLite
 providers are separate work.
+
+## CI coverage
+
+The reusable `.github/workflows/test.yml`, called by the PR/build workflow,
+runs feature-enabled unit/contract tests on native Linux x64,
+macOS Intel/ARM64 and Windows x64/ARM64 runners, with feature-enabled Clippy
+on Linux. One separate Ubuntu job runs `run.py` sequentially for 14–18,
+including the PG18 TLS/fault suite, sharing one build across all five versions.
+The ignored database tests are explicitly executed by this runner.
+
+Windows runners do not need Docker or a PostgreSQL installation. Instead,
+`tls_windows.ps1` runs `tls_smoke.py` against a loopback PostgreSQL SSLRequest
+peer implemented with Python's standard `ssl` module. It first checks rejection
+of the untrusted fixture CA, temporarily imports only that CA into the
+disposable runner's CurrentUser Root store, and then checks native-root TLS
+success for DNS/IP names, name mismatch rejection, and refusal of non-TLS
+peers. It refuses preexisting fixture trust and removes its certificate in
+`finally`. The script rejects execution outside GitHub-hosted Windows CI.
+No local host trust store should be changed.
+
+On other runners, or locally, run:
+
+    python3 crates/uroborosql-lint/tests/postgres/tls_smoke.py
+    python3 crates/uroborosql-lint/tests/postgres/tls_smoke.py --trust untrusted
+
+The default uses `PGSSLROOTCERT` in child processes; `--cargo-config PATH`
+supports local parser overrides. The peer must observe a decrypted PostgreSQL
+StartupMessage in each successful TLS case. It then closes without authentication,
+so the Provider returns a connection error in both positive and negative cases.
+This proves TLS verification through the production SQLx connection path;
+it does not prove Windows PostgreSQL authentication or catalog acquisition.
+The full PostgreSQL acquisition suite runs separately on Ubuntu.
+
+`tls-smoke/` contains **public test-only** certificates and a server private key,
+generated with OpenSSL RSA-2048/SHA-256, valid from 2026-09-16 to 2036-09-13.
+The CA private key was discarded. The two server certificates use the same key:
+one has SAN `DNS:localhost,IP:127.0.0.1`, the other
+`DNS:other.invalid,IP:127.0.0.2`. Regenerate the CA and both leaf certificates
+together before expiry, using CA basicConstraints/keyCertSign and leaf
+serverAuth/digitalSignature/keyEncipherment extensions. Never use this public
+key or CA for a real service.
+
+Adding these jobs is not evidence that Windows/macOS Intel execution succeeded;
+that claim requires successful workflow results on the relevant runners.
