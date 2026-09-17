@@ -240,3 +240,36 @@ fn unrecoverable_shapes_preserve_parser_errors() {
         assert!(tree_sitter::parse_2way(sql).is_err(), "{sql}");
     }
 }
+
+#[test]
+fn bind_comments_accept_signed_parenthesized_and_nonliteral_samples() {
+    for sample in ["-1", "+1", "(1)", "TRUE", "id", "'text'", " 1"] {
+        let sql =
+            format!("SELECT nmae FROM users WHERE id = /*id*/{sample}; SELECT id FROM users;");
+        let prepared = prepare_sql(&sql);
+        assert!(
+            matches!(prepared.statements[0].input, Err(Exclusion::TwoWaySql)),
+            "{sql}"
+        );
+        assert!(prepared.statements[1].input.is_ok(), "{sql}");
+    }
+    assert!(matches!(
+        prepare_sql("SELECT nmae FROM users /*param*/;").statements[0].input,
+        Err(Exclusion::TwoWaySql)
+    ));
+}
+
+#[test]
+fn ordinary_comment_before_sample_like_expression_is_not_a_bind() {
+    for comment in [
+        "/* ordinary comment */",
+        "/*\tordinary */",
+        "/*+ hint */",
+        "/*123 ordinary */",
+    ] {
+        for sample in ["1", "-1", "(1)"] {
+            let sql = format!("SELECT nmae FROM users WHERE id = {comment}{sample}");
+            assert!(prepare_sql(&sql).statements[0].input.is_ok(), "{sql}");
+        }
+    }
+}

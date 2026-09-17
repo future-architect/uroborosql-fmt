@@ -34,10 +34,14 @@ pub(super) fn influence(root: &Node<'_>) -> Influence {
             continue;
         }
         let text = token.text();
-        let Some(body) = text.strip_prefix("/*").and_then(|s| s.strip_suffix("*/")) else {
+        let Some(raw_body) = text.strip_prefix("/*").and_then(|s| s.strip_suffix("*/")) else {
             continue;
         };
-        let body = body.trim().strip_prefix('%').unwrap_or(body.trim()).trim();
+        let body = raw_body
+            .trim()
+            .strip_prefix('%')
+            .unwrap_or(raw_body.trim())
+            .trim();
         let mut words = body.split_whitespace();
         let keyword = words.next().unwrap_or("").to_ascii_uppercase();
         let has_argument = words.next().is_some();
@@ -65,31 +69,33 @@ pub(super) fn influence(root: &Node<'_>) -> Influence {
             }
             "IF" | "BEGIN" | "END" => result.all = true,
             _ => {
-                let replacement = body.starts_with(['#', '$']);
-                let next = tokens[index + 1..]
-                    .iter()
-                    .find(|n| !matches!(n.kind(), K::C_COMMENT | K::SQL_COMMENT));
-                // A single-line block immediately preceding a sample literal is the
-                // same bind-comment shape accepted by the parser's transformer.
-                let bind = !text.contains('\n')
-                    && !body.starts_with('+')
-                    && next.is_some_and(|n| {
-                        n.range().start_byte == range.end_byte
-                            && matches!(
-                                n.kind(),
-                                K::ICONST
-                                    | K::FCONST
-                                    | K::SCONST
-                                    | K::TRUE_P
-                                    | K::FALSE_P
-                                    | K::NULL_P
-                            )
-                    });
-                if replacement || bind {
-                    let end = next
-                        .filter(|n| n.kind() != K::Semicolon)
-                        .map_or(range.end_byte, |n| n.range().end_byte);
-                    result.intervals.push(range.start_byte..end);
+                // uroborosql's target-comment convention depends on the first
+                // character, not on the sample's token kind. Leading whitespace
+                // marks an ordinary comment; samples may be negative or parenthesized.
+                let bind = raw_body
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphabetic() || matches!(c, '_' | '$' | '#' | '('));
+                if bind {
+                    let next = tokens[index + 1..]
+                        .iter()
+                        .find(|n| !matches!(n.kind(), K::C_COMMENT | K::SQL_COMMENT));
+                    if let Some(next) = next.filter(|n| n.kind() != K::Semicolon) {
+                        result
+                            .intervals
+                            .push(range.start_byte..next.range().end_byte);
+                    } else {
+                        // A trailing directive may live on Root, beyond the last
+                        // statement's range. Associate it with that statement.
+                        let previous = tokens[..index]
+                            .iter()
+                            .rev()
+                            .find(|n| !matches!(n.kind(), K::C_COMMENT | K::SQL_COMMENT));
+                        let start = previous
+                            .filter(|n| n.kind() != K::Semicolon)
+                            .map_or(range.start_byte, |n| n.range().start_byte);
+                        result.intervals.push(start..range.end_byte);
+                    }
                 }
             }
         }

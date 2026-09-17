@@ -24,7 +24,7 @@ pub(crate) struct ColumnRef {
 
 #[derive(Debug, Clone)]
 pub(crate) enum Expr {
-    Column(ColumnRef),
+    Column(Box<ColumnRef>),
     Literal,
     Group(Box<Expr>),
     Unary {
@@ -178,7 +178,7 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
         return Err(Exclusion::TemporarySchema);
     }
     let list = children(&c[1]);
-    if list.is_empty() || list.len() % 2 == 0 {
+    if list.is_empty() || list.len().is_multiple_of(2) {
         return Err(Exclusion::UnsupportedSyntax);
     }
     let mut targets = Vec::new();
@@ -371,11 +371,11 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
                     [q, col] => (Some(q.clone()), col.clone()),
                     _ => return Err(Exclusion::UnsupportedSyntax),
                 };
-                return Ok(Expr::Column(ColumnRef {
+                return Ok(Expr::Column(Box::new(ColumnRef {
                     qualifier,
                     column,
                     range: c[0].range(),
-                }));
+                })));
             }
             if kinds(&c, &[K::LParen, K::a_expr, K::RParen]) {
                 return Ok(Expr::Group(Box::new(expr(&c[1])?)));

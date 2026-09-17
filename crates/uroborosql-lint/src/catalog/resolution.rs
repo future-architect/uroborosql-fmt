@@ -169,7 +169,7 @@ fn resolve_expr(
     match expr {
         Expr::Column(input) => results.push(Reference {
             clause,
-            input: input.clone(),
+            input: input.as_ref().clone(),
             outcome: resolve_reference(input, select, source),
         }),
         Expr::Group(operand) | Expr::Unary { operand, .. } | Expr::IsNull { operand, .. } => {
