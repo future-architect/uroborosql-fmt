@@ -1,8 +1,20 @@
 use crate::{
+    catalog::{input, resolution, AcquisitionError, CatalogSnapshot},
+    RuleEnum,
+};
+use crate::{
     context::LintContext, diagnostic::Diagnostic, directive::suppress_diagnostics,
     tree::collect_preorder, ResolvedLintConfig,
 };
 use postgresql_cst_parser::{tree_sitter, ParserError, ScanReport};
+
+// Internal bridge for T08: no runtime or public acquisition API is introduced here.
+#[allow(dead_code)]
+#[derive(Debug)]
+pub(crate) struct CatalogLintResult {
+    pub diagnostics: Vec<Diagnostic>,
+    pub statements: Vec<resolution::StatementResult>,
+}
 
 #[derive(Debug)]
 pub enum LintError {
@@ -67,11 +79,51 @@ impl Linter {
     ) -> Result<Vec<Diagnostic>, LintError> {
         let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
         let root = tree.root_node();
+        Ok(suppress_diagnostics(
+            &root,
+            self.run_cst(&root, sql, resolved_config),
+        ))
+    }
+
+    #[allow(dead_code)] // T08 will supply the asynchronously acquired snapshot.
+    pub(crate) fn run_with_catalog(
+        &self,
+        sql: &str,
+        resolved_config: &ResolvedLintConfig,
+        acquired: Result<&CatalogSnapshot, &AcquisitionError>,
+    ) -> Result<CatalogLintResult, LintError> {
+        let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
+        let root = tree.root_node();
+        let prepared = input::prepare(&root);
+        let statements = resolution::resolve(&prepared, acquired);
+        let mut diagnostics = self.run_cst(&root, sql, resolved_config);
+        for (rule, severity) in &resolved_config.rules {
+            if let RuleEnum::NoUnknownReference(rule) = rule {
+                diagnostics.extend(rule.diagnose(&statements, *severity));
+            }
+        }
+        diagnostics.sort_by_key(|d| (d.span.start.byte, d.span.end.byte));
+        Ok(CatalogLintResult {
+            diagnostics: suppress_diagnostics(&root, diagnostics),
+            statements,
+        })
+    }
+
+    fn run_cst(
+        &self,
+        root: &tree_sitter::Node<'_>,
+        sql: &str,
+        resolved_config: &ResolvedLintConfig,
+    ) -> Vec<Diagnostic> {
         let nodes = collect_preorder(root.clone());
         let mut ctx = LintContext::new(sql);
 
         for (rule, severity) in &resolved_config.rules {
-            rule.run_once(&root, &mut ctx, *severity);
+            // Catalog rules run only after resolution, not once for every CST node.
+            if matches!(rule, RuleEnum::NoUnknownReference(_)) {
+                continue;
+            }
+            rule.run_once(root, &mut ctx, *severity);
 
             let targets = rule.target_kinds();
             if targets.is_empty() {
@@ -87,7 +139,7 @@ impl Linter {
             }
         }
 
-        Ok(suppress_diagnostics(&root, ctx.into_diagnostics()))
+        ctx.into_diagnostics()
     }
 }
 
@@ -303,3 +355,7 @@ SELECT DISTINCT id FROM users;"#;
         assert_eq!(span.end_byte, 12);
     }
 }
+
+#[cfg(test)]
+#[path = "linter/catalog_tests.rs"]
+mod catalog_tests;

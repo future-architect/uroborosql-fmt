@@ -3,6 +3,7 @@ mod no_distinct;
 mod no_function_on_column_in_join_or_where;
 mod no_not_in;
 mod no_union_distinct;
+mod no_unknown_reference;
 mod no_wildcard_projection;
 mod too_large_in_list;
 
@@ -15,12 +16,14 @@ pub use no_distinct::NoDistinct;
 pub use no_function_on_column_in_join_or_where::NoFunctionOnColumnInJoinOrWhere;
 pub use no_not_in::NoNotIn;
 pub use no_union_distinct::NoUnionDistinct;
+pub use no_unknown_reference::NoUnknownReference;
 pub use no_wildcard_projection::NoWildcardProjection;
 pub use too_large_in_list::TooLargeInList;
 
 pub fn all_rules() -> impl Iterator<Item = RuleEnum> {
     [
         RuleEnum::NoDistinct(NoDistinct),
+        RuleEnum::NoUnknownReference(NoUnknownReference),
         RuleEnum::NoNotIn(NoNotIn),
         RuleEnum::NoUnionDistinct(NoUnionDistinct),
         RuleEnum::NoWildcardProjection(NoWildcardProjection),
@@ -42,6 +45,7 @@ pub fn default_rules() -> Vec<(RuleEnum, Severity)> {
 
 #[derive(Debug, Clone)]
 pub enum RuleEnum {
+    NoUnknownReference(NoUnknownReference),
     NoDistinct(NoDistinct),
     NoNotIn(NoNotIn),
     NoUnionDistinct(NoUnionDistinct),
@@ -84,6 +88,7 @@ impl RuleEnum {
     fn as_rule(&self) -> &dyn Rule {
         match self {
             Self::NoDistinct(rule) => rule,
+            Self::NoUnknownReference(rule) => rule,
             Self::NoNotIn(rule) => rule,
             Self::NoUnionDistinct(rule) => rule,
             Self::NoWildcardProjection(rule) => rule,
