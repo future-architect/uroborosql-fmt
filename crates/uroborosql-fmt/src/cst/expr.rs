@@ -206,14 +206,14 @@ impl Expr {
             Expr::TableFuncAlias(_) => {
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "add_comment_to_child(): unimplemented for table_func_alias\nexpr: {:?}",
-                    &self
+                    self
                 )));
             }
             _ => {
                 // todo
                 return Err(UroboroSQLFmtError::Unimplemented(format!(
                     "add_comment_to_child(): unimplemented expr\nexpr: {:?}",
-                    &self
+                    self
                 )));
             }
         }
