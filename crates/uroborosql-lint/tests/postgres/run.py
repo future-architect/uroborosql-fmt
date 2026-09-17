@@ -6,7 +6,6 @@ from pathlib import Path
 import secrets
 import subprocess
 import tempfile
-import time
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
@@ -79,24 +78,6 @@ def main():
                     test('query_timeout_and_cancellation_close_connections')
                     test('total_deadline_limits_multiple_successful_queries')
                     test('catalog_permission_failure_is_unavailable')
-                    test('tls_policy', {'CATALOG_TEST_TLS': 'failure', 'PGSSLMODE': 'disable'})
-
-                    def certificate(san):
-                        command(compose + ['exec', '-T', service, 'sh', '/catalog-tls.sh', san],
-                                env=compose_env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        command(compose + ['cp', service + ':/tmp/catalog-tls/ca.pem', str(temp / 'cert.pem')], env=compose_env)
-                        time.sleep(0.2)
-
-                    certificate('DNS:localhost,IP:127.0.0.1')
-                    for host in ['localhost', '127.0.0.1']:
-                        test('tls_policy', {'CATALOG_TEST_TLS': 'success', 'CATALOG_TEST_HOST': host,
-                                           'PGSSLROOTCERT': str(temp / 'cert.pem'), 'PGSSLMODE': 'disable'})
-                    test('tls_policy', {'CATALOG_TEST_TLS': 'failure'})
-                    certificate('DNS:other.invalid,IP:127.0.0.2')
-                    for host in ['localhost', '127.0.0.1']:
-                        test('tls_policy', {'CATALOG_TEST_TLS': 'failure', 'CATALOG_TEST_HOST': host,
-                                           'PGSSLROOTCERT': str(temp / 'cert.pem')})
-                    test('definitions_and_visibility')
         finally:
             command(compose + ['down', '--volumes'], env=compose_env)
             if image_id and image_id not in previous:

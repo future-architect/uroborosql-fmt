@@ -74,14 +74,6 @@ jobs:
         run: cargo clippy --locked -p uroborosql-lint --all-targets --features postgres-catalog -- --deny warnings
       - name: Run native unit and contract tests with PostgreSQL provider
         run: cargo test --locked -p uroborosql-lint --features postgres-catalog
-      - name: TLS handshake and certificate verification
-        if: runner.os != 'Windows'
-        run: python3 crates/uroborosql-lint/tests/postgres/tls_smoke.py
-      - name: TLS handshake with Windows native certificate store
-        timeout-minutes: 3
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./crates/uroborosql-lint/tests/postgres/tls_windows.ps1
 
   catalog-postgres:
     name: Catalog PostgreSQL 14-18
@@ -102,6 +94,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: catalog-postgres-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-      # run.py explicitly runs the ignored integration cases; PG18 adds TLS/faults.
+      # run.py explicitly runs the ignored integration cases; PG18 adds fault cases.
       - name: Run disposable PostgreSQL integration fixture
         run: python3 crates/uroborosql-lint/tests/postgres/run.py

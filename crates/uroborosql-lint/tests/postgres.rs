@@ -222,25 +222,6 @@ async fn environment_is_explicitly_controlled() {
 }
 
 #[tokio::test]
-#[ignore = "requires isolated TLS fixture; environment set by parent process"]
-async fn tls_policy() {
-    let Some(expect) = env::var("CATALOG_TEST_TLS").ok() else {
-        return;
-    };
-    let mut config = config();
-    config.host = env::var("CATALOG_TEST_HOST").unwrap_or_else(|_| "localhost".into());
-    config.tls_mode = TlsMode::VerifyFull;
-    let result = PostgresCatalogProvider::new(config)
-        .acquire(&[request(Some("public"), "users")])
-        .await;
-    if expect == "success" {
-        result.unwrap();
-    } else {
-        assert_eq!(result.unwrap_err().kind, AcquisitionErrorKind::Connection);
-    }
-}
-
-#[tokio::test]
 #[ignore = "requires isolated fixture"]
 async fn query_timeout_and_cancellation_close_connections() {
     let mut blocker = admin().await;

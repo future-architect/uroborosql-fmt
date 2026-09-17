@@ -11,8 +11,6 @@ x-postgres: &postgres
     interval: 1s
     timeout: 3s
     retries: 45
-  volumes:
-    - ./tls.sh:/catalog-tls.sh:ro
 
 services:
   pg14:
