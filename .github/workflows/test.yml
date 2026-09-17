@@ -78,6 +78,7 @@ jobs:
         if: runner.os != 'Windows'
         run: python3 crates/uroborosql-lint/tests/postgres/tls_smoke.py
       - name: TLS handshake with Windows native certificate store
+        timeout-minutes: 3
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./crates/uroborosql-lint/tests/postgres/tls_windows.ps1
