@@ -1,5 +1,9 @@
 //! Callers normalize lookup names; providers preserve catalog spelling and
 //! certify completeness before claiming absence.
+// Crate-private preparation/resolution will be called by the T08 async entry.
+#[allow(dead_code)]
+pub(crate) mod input;
+
 use std::{collections::BTreeMap, future::Future, pin::Pin};
 
 #[cfg(feature = "postgres-catalog")]
