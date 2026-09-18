@@ -43,6 +43,7 @@ fn failure() -> AcquisitionError {
     AcquisitionError {
         phase: AcquisitionPhase::Schema,
         kind: AcquisitionErrorKind::PermissionDenied,
+        detail: None,
     }
 }
 
@@ -143,7 +144,8 @@ fn invalid_definitions_never_become_absence() {
             CatalogSnapshot::new(vec![], entries).unwrap_err(),
             AcquisitionError {
                 phase: AcquisitionPhase::Validate,
-                kind: AcquisitionErrorKind::InvalidData
+                kind: AcquisitionErrorKind::InvalidData,
+                detail: None,
             }
         );
     }

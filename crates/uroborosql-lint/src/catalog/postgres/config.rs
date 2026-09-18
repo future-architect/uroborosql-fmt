@@ -4,6 +4,7 @@ use sqlx::{
 };
 
 use super::{error, AcquisitionError, AcquisitionErrorKind, AcquisitionPhase};
+use crate::catalog::{AcquisitionDetail, ConfigurationField};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TlsMode {
@@ -45,19 +46,25 @@ impl PostgresConfig {
     }
 
     pub(super) fn options(&self) -> Result<PgConnectOptions, AcquisitionError> {
-        if self.host.is_empty()
+        let invalid_field = if self.host.is_empty()
             || self.host.starts_with('/')
             || self.host.contains(['\0', ',', '\\'])
-            || self.port == 0
-            || self.user.is_empty()
-            || self.dbname.is_empty()
-            || self.user.contains('\0')
-            || self.dbname.contains('\0')
         {
-            return Err(error(
-                AcquisitionPhase::Connect,
-                AcquisitionErrorKind::InvalidData,
-            ));
+            Some(ConfigurationField::Host)
+        } else if self.port == 0 {
+            Some(ConfigurationField::Port)
+        } else if self.user.is_empty() || self.user.contains('\0') {
+            Some(ConfigurationField::User)
+        } else if self.dbname.is_empty() || self.dbname.contains('\0') {
+            Some(ConfigurationField::Database)
+        } else {
+            None
+        };
+        if let Some(field) = invalid_field {
+            return Err(
+                error(AcquisitionPhase::Connect, AcquisitionErrorKind::InvalidData)
+                    .with_detail(AcquisitionDetail::InvalidConfiguration(field)),
+            );
         }
         let mut options = PgConnectOptions::new_without_pgpass()
             .host(&self.host)
@@ -100,5 +107,32 @@ mod tests {
                 AcquisitionErrorKind::InvalidData
             );
         }
+    }
+
+    #[test]
+    fn invalid_configuration_identifies_the_field_without_its_value() {
+        let mut config = PostgresConfig::new("private-host,other", "user", "database");
+        let error = config.options().unwrap_err();
+        assert!(error.to_string().contains("single nonempty DNS name or IP"));
+        assert!(!format!("{error} {error:?}").contains("private-host"));
+        config.host = "localhost".into();
+        config.port = 0;
+        assert!(config
+            .options()
+            .unwrap_err()
+            .to_string()
+            .contains("port between 1 and 65535"));
+        config.port = 5432;
+        config.user = "private-user\0".into();
+        let error = config.options().unwrap_err();
+        assert!(error.to_string().contains("nonempty user"));
+        assert!(!format!("{error} {error:?}").contains("private-user"));
+        config.user = "user".into();
+        config.dbname.clear();
+        assert!(config
+            .options()
+            .unwrap_err()
+            .to_string()
+            .contains("nonempty database name"));
     }
 }

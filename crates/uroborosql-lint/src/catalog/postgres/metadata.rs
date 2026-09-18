@@ -3,7 +3,8 @@ use std::collections::BTreeSet;
 use sqlx::{PgConnection, Row};
 
 use super::super::{
-    AbsenceKind, CatalogEntry, ColumnDefinition, Lookup, TableDefinition, UnknownReason,
+    AbsenceKind, AcquisitionDetail, CatalogEntry, ColumnDefinition, Lookup, TableDefinition,
+    UnknownReason,
 };
 use super::{
     error, query, AcquisitionError, AcquisitionErrorKind, AcquisitionPhase, CatalogSnapshot,
@@ -31,18 +32,7 @@ pub(super) async fn read_snapshot(
         .fetch_one(&mut *connection),
     )
     .await?;
-    let major = version.parse::<u32>().map_err(|_| {
-        error(
-            AcquisitionPhase::Validate,
-            AcquisitionErrorKind::InvalidData,
-        )
-    })? / 10_000;
-    if !(14..=18).contains(&major) {
-        return Err(error(
-            AcquisitionPhase::Validate,
-            AcquisitionErrorKind::InvalidData,
-        ));
-    }
+    validate_server_version(&version)?;
     let mut names = BTreeSet::new();
     for request in requests {
         match &request.schema {
@@ -79,6 +69,23 @@ pub(super) async fn read_snapshot(
     )
     .await?;
     Ok(snapshot)
+}
+
+fn validate_server_version(version: &str) -> Result<(), AcquisitionError> {
+    let major = version.parse::<u32>().map_err(|_| {
+        error(
+            AcquisitionPhase::Validate,
+            AcquisitionErrorKind::InvalidData,
+        )
+    })? / 10_000;
+    if !(14..=18).contains(&major) {
+        return Err(error(
+            AcquisitionPhase::Validate,
+            AcquisitionErrorKind::InvalidData,
+        )
+        .with_detail(AcquisitionDetail::UnsupportedServerVersion));
+    }
+    Ok(())
 }
 
 async fn read_table(
@@ -222,6 +229,23 @@ mod tests {
             name: name.into(),
             dropped,
         }
+    }
+
+    #[test]
+    fn unsupported_versions_explain_the_supported_range() {
+        for version in ["130023", "190000"] {
+            let error = validate_server_version(version).unwrap_err();
+            assert_eq!(
+                error.detail,
+                Some(AcquisitionDetail::UnsupportedServerVersion)
+            );
+            assert!(error.to_string().contains("PostgreSQL 14 through 18"));
+        }
+        assert!(validate_server_version("140000").is_ok());
+        assert!(validate_server_version("180006").is_ok());
+        let malformed = validate_server_version("private-invalid-value").unwrap_err();
+        assert_eq!(malformed.detail, None);
+        assert!(!format!("{malformed} {malformed:?}").contains("private-invalid-value"));
     }
 
     #[test]

@@ -4,8 +4,8 @@ use sqlx::{postgres::PgConnectOptions, Connection, PgConnection};
 use std::{env, time::Duration};
 use uroborosql_lint::catalog::{
     postgres::{PostgresCatalogProvider, PostgresConfig, TlsMode},
-    AbsenceKind, AcquisitionErrorKind, CatalogProvider, Lookup, TableDefinition, TableRequest,
-    UnknownReason,
+    AbsenceKind, AcquisitionDetail, AcquisitionErrorKind, CatalogProvider, Lookup, TableDefinition,
+    TableRequest, TimeoutScope, UnknownReason,
 };
 
 fn config() -> PostgresConfig {
@@ -114,7 +114,7 @@ async fn definitions_and_visibility() {
         Lookup::Absent(AbsenceKind::Schema)
     );
     assert!(
-        matches!(snapshot.lookup(&requests[10]), Lookup::Unavailable(e) if e.kind == AcquisitionErrorKind::PermissionDenied)
+        matches!(snapshot.lookup(&requests[10]), Lookup::Unavailable(e) if e.kind == AcquisitionErrorKind::PermissionDenied && e.to_string().contains("USAGE privilege"))
     );
     assert_eq!(
         snapshot.lookup(&requests[11]),
@@ -186,7 +186,19 @@ async fn failures_are_not_absence() {
         .await
         .unwrap_err();
     assert_eq!(err.kind, AcquisitionErrorKind::Connection);
+    assert_eq!(err.detail, Some(AcquisitionDetail::Authentication));
+    assert!(err
+        .to_string()
+        .contains("user/password and server authentication settings"));
     assert!(!format!("{err:?} {err}").contains("wrong-secret"));
+    let mut config = self::config();
+    config.dbname = "catalog_database_that_does_not_exist".into();
+    let err = PostgresCatalogProvider::new(config)
+        .acquire(&[])
+        .await
+        .unwrap_err();
+    assert_eq!(err.detail, Some(AcquisitionDetail::DatabaseNotFound));
+    assert!(err.to_string().contains("Check dbname"));
     let mut config = self::config();
     config.host = "/tmp".into();
     assert_eq!(
@@ -246,6 +258,14 @@ async fn query_timeout_and_cancellation_close_connections() {
     let start = tokio::time::Instant::now();
     let err = provider.acquire(&request).await.unwrap_err();
     assert_eq!(err.kind, AcquisitionErrorKind::Timeout);
+    assert_eq!(
+        err.detail,
+        Some(AcquisitionDetail::Timeout {
+            scope: TimeoutScope::Query,
+            limit: Duration::from_secs(5),
+        })
+    );
+    assert!(err.to_string().contains("database operation timed out"));
     assert_eq!(
         err.phase,
         uroborosql_lint::catalog::AcquisitionPhase::Relation
@@ -324,6 +344,14 @@ async fn unresponsive_connection_times_out_and_closes_socket() {
         .unwrap_err();
     assert_eq!(error.kind, AcquisitionErrorKind::Timeout);
     assert_eq!(
+        error.detail,
+        Some(AcquisitionDetail::Timeout {
+            scope: TimeoutScope::Connect,
+            limit: Duration::from_secs(5),
+        })
+    );
+    assert!(error.to_string().contains("connection timed out"));
+    assert_eq!(
         error.phase,
         uroborosql_lint::catalog::AcquisitionPhase::Connect
     );
@@ -357,7 +385,16 @@ async fn total_deadline_limits_multiple_successful_queries() {
         .unwrap();
     sqlx::query("ALTER FUNCTION pg_catalog.catalog_test_original_privilege(oid,text) RENAME TO has_schema_privilege")
         .execute(&mut admin).await.unwrap();
-    assert_eq!(result.unwrap_err().kind, AcquisitionErrorKind::Timeout);
+    let error = result.unwrap_err();
+    assert_eq!(error.kind, AcquisitionErrorKind::Timeout);
+    assert_eq!(
+        error.detail,
+        Some(AcquisitionDetail::Timeout {
+            scope: TimeoutScope::Acquisition,
+            limit: Duration::from_secs(10),
+        })
+    );
+    assert!(error.to_string().contains("overall acquisition timed out"));
     assert!(start.elapsed() >= Duration::from_secs(10));
     assert!(start.elapsed() < Duration::from_secs(14));
     admin.close().await.unwrap();
@@ -380,10 +417,9 @@ async fn catalog_permission_failure_is_unavailable() {
         .execute(&mut admin)
         .await
         .unwrap();
-    assert_eq!(
-        result.unwrap_err().kind,
-        AcquisitionErrorKind::PermissionDenied
-    );
+    let error = result.unwrap_err();
+    assert_eq!(error.kind, AcquisitionErrorKind::PermissionDenied);
+    assert!(error.to_string().contains("catalog read privileges"));
     admin.close().await.unwrap();
 }
 

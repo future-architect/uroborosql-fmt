@@ -5,6 +5,12 @@ use std::{collections::BTreeMap, future::Future, pin::Pin};
 #[cfg(feature = "postgres-catalog")]
 pub mod postgres;
 
+mod error;
+pub use error::{
+    AcquisitionDetail, AcquisitionError, AcquisitionErrorKind, AcquisitionPhase,
+    ConfigurationField, TimeoutScope,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColumnDefinition {
     pub name: String,
@@ -48,33 +54,6 @@ pub enum UnknownReason {
     UnsupportedRelation,
     IncompleteCoverage,
     UnsupportedSyntax,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AcquisitionPhase {
-    Connect,
-    SearchPath,
-    Schema,
-    Relation,
-    Columns,
-    Validate,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AcquisitionErrorKind {
-    Connection,
-    Timeout,
-    PermissionDenied,
-    InvalidData,
-    Read,
-}
-
-/// Raw driver messages are excluded to avoid leaking connection secrets.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("catalog acquisition failed ({phase:?}: {kind:?})")]
-pub struct AcquisitionError {
-    pub phase: AcquisitionPhase,
-    pub kind: AcquisitionErrorKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,9 +117,11 @@ impl CatalogSnapshot {
         effective_search_path: Vec<String>,
         entries: impl IntoIterator<Item = CatalogEntry>,
     ) -> Result<Self, AcquisitionError> {
-        let invalid = || AcquisitionError {
-            phase: AcquisitionPhase::Validate,
-            kind: AcquisitionErrorKind::InvalidData,
+        let invalid = || {
+            AcquisitionError::new(
+                AcquisitionPhase::Validate,
+                AcquisitionErrorKind::InvalidData,
+            )
         };
         let mut tables = BTreeMap::new();
         for entry in entries {
