@@ -2,7 +2,7 @@
 use postgresql_cst_parser::tree_sitter::Range;
 
 use super::{
-    input::{ColumnRef, Exclusion, Expr, Prepared, Select},
+    input::{ColumnRef, Exclusion, Expr, Prepared, Select, SourceName},
     AcquisitionError, AnalysisStatus, CatalogSnapshot, Lookup, Resolution, ResolutionUnknown,
     TableDefinition, UnknownReason,
 };
@@ -85,11 +85,15 @@ pub(crate) fn resolve(
                     resolved: None,
                 };
             };
-            let source = match acquired {
-                Ok(snapshot) => snapshot.lookup(&select.source.request()),
-                Err(error) => Lookup::Unavailable(error.clone()),
+            let source = match select.source.request() {
+                None => Lookup::Unknown(UnknownReason::RecoveredSource),
+                Some(request) => match acquired {
+                    Ok(snapshot) => snapshot.lookup(&request),
+                    Err(error) => Lookup::Unavailable(error.clone()),
+                },
             };
             let status = match &source {
+                Lookup::Unknown(UnknownReason::RecoveredSource) => AnalysisStatus::Complete,
                 Lookup::Unknown(reason) => AnalysisStatus::Excluded(*reason),
                 Lookup::Unavailable(error) => AnalysisStatus::Failed(error.clone()),
                 _ => AnalysisStatus::Complete,
@@ -132,10 +136,13 @@ pub(crate) fn resolve(
                     &mut predicate_references,
                 );
             }
-            let source_spelling = select.source.schema.as_ref().map_or_else(
-                || select.source.table.spelling.clone(),
-                |schema| format!("{}.{}", schema.spelling, select.source.table.spelling),
-            );
+            let source_spelling = match &select.source.name {
+                SourceName::Table { schema, table } => schema.as_ref().map_or_else(
+                    || table.spelling.clone(),
+                    |schema| format!("{}.{}", schema.spelling, table.spelling),
+                ),
+                SourceName::Recovered => String::new(),
+            };
             StatementResult {
                 range: statement.range.clone(),
                 status,
@@ -191,7 +198,7 @@ fn resolve_reference(
     let resolution = match source {
         Lookup::Found(table) => {
             if let Some(qualifier) = &input.qualifier {
-                if qualifier.name != select.source.visible_name() {
+                if Some(qualifier.name.as_str()) != select.source.visible_name() {
                     return ReferenceOutcome::QualifierMismatch {
                         range: qualifier.range.clone(),
                     };
@@ -204,7 +211,7 @@ fn resolve_reference(
                 }),
                 Lookup::Absent(_)
                     if input.qualifier.is_none()
-                        && input.column.name == select.source.visible_name() =>
+                        && Some(input.column.name.as_str()) == select.source.visible_name() =>
                 {
                     Resolution::Resolved(ResolvedValue::WholeRow(identity(table)))
                 }
@@ -243,7 +250,7 @@ fn output_name(expr: &Expr, select: &Select, references: &[Reference]) -> Option
             ReferenceOutcome::Lookup {
                 resolution: Resolution::Resolved(ResolvedValue::WholeRow(_)),
                 ..
-            } => Some(select.source.visible_name().into()),
+            } => select.source.visible_name().map(str::to_owned),
             _ => None,
         },
         _ => None,

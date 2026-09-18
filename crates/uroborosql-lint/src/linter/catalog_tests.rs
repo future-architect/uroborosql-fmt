@@ -70,6 +70,8 @@ async fn accepted_sql_runs_from_prepared_requests_through_memory_provider() {
         "SELECT (age + 1) AS next_age FROM users WHERE NOT (age < 18 OR name IS NULL);",
         "SELECT u, u AS row_value FROM users AS u WHERE u IS NOT NULL;",
         "SELECT ctid FROM users;",
+        "SELECT , id FROM , users WHERE AND id = /*param*/ ;",
+        "/*IF false*/ SELECT /*param*/ AS result, id FROM users; /*END*/",
     ] {
         let tree = tree_sitter::parse_2way(sql).unwrap();
         let prepared = input::prepare(&tree.root_node());
@@ -91,6 +93,7 @@ fn acceptance_examples_diagnose_only_the_original_reference() {
         ("SELECT nmae FROM users;", vec!["nmae"]),
         ("SELECT id FROM users WHERE agge > 18;", vec!["agge"]),
         ("SELECT id FROM usres;", vec!["usres"]),
+        ("SELECT id FROM /*$table*/ usres;", vec!["usres"]),
         ("SELECT x.id FROM users AS u;", vec!["x"]),
         (
             "SELECT id AS user_id FROM users WHERE user_id = 1;",
@@ -209,7 +212,7 @@ fn suppression_preserves_other_rules_lines_and_internal_resolution() {
     let mut cfg = config();
     cfg.rules
         .push((RuleEnum::NoDistinct(NoDistinct), Severity::Warning));
-    let sql = "-- uroborosql-lint-disable-next-line no-unknown-reference\nSELECT nmae FROM users;\nSELECT nmae FROM users; SELECT DISTINCT id FROM users;";
+    let sql = "-- uroborosql-lint-disable-next-line no-unknown-reference\nSELECT , nmae FROM users;\nSELECT nmae FROM users; SELECT DISTINCT id FROM users;";
     let r = Linter::new()
         .run_with_catalog(sql, &cfg, Ok(&snapshot()))
         .unwrap();
@@ -219,7 +222,7 @@ fn suppression_preserves_other_rules_lines_and_internal_resolution() {
     );
     assert_eq!(r.diagnostics[0].span.start.line, 2);
     assert!(r.statements[0].resolved.is_some());
-    let sql = "-- uroborosql-lint-disable no-unknown-reference\nSELECT nmae FROM users; SELECT DISTINCT id FROM users;";
+    let sql = "-- uroborosql-lint-disable no-unknown-reference\nSELECT , nmae FROM users; SELECT DISTINCT id FROM users;";
     let r = Linter::new()
         .run_with_catalog(sql, &cfg, Ok(&snapshot()))
         .unwrap();
@@ -245,7 +248,7 @@ fn invalid_directive_is_reported_once_with_cst_and_catalog_diagnostics() {
     let mut cfg = config();
     cfg.rules
         .push((RuleEnum::NoDistinct(NoDistinct), Severity::Warning));
-    let r = Linter::new().run_with_catalog("-- uroborosql-lint-disable invalid-rule\nSELECT nmae FROM users; SELECT DISTINCT id FROM users;",&cfg,Ok(&snapshot())).unwrap();
+    let r = Linter::new().run_with_catalog("-- uroborosql-lint-disable invalid-rule\nSELECT , nmae FROM users; SELECT DISTINCT id FROM users;",&cfg,Ok(&snapshot())).unwrap();
     assert_eq!(
         r.diagnostics.iter().map(|d| d.code).collect::<Vec<_>>(),
         [
@@ -285,7 +288,7 @@ fn configuration_severity_off_and_file_overrides_apply_to_registered_rule() {
     ] {
         let cfg = store.resolve(&dir.path().join(file));
         let r = Linter::new()
-            .run_with_catalog("SELECT nmae FROM users", &cfg, Ok(&snapshot()))
+            .run_with_catalog("SELECT , nmae FROM users", &cfg, Ok(&snapshot()))
             .unwrap();
         assert_eq!(
             r.diagnostics
@@ -312,16 +315,135 @@ fn existing_sync_entry_stays_cst_only_and_parse_errors_remain_errors() {
 }
 
 #[test]
-fn two_way_samples_exclude_catalog_diagnostics_while_ordinary_comments_do_not() {
+fn two_way_samples_and_ordinary_comments_keep_catalog_diagnostics() {
     for sample in ["-1", "(1)"] {
         let sql = format!("SELECT nmae FROM users WHERE id = /*id*/{sample}");
         let result = run(&sql);
-        assert!(result.diagnostics.is_empty());
-        assert!(matches!(
-            result.statements[0].status,
-            AnalysisStatus::Excluded(_)
-        ));
+        assert_eq!(slices(&sql, &result.diagnostics), ["nmae"]);
+        assert_eq!(result.statements[0].status, AnalysisStatus::Complete);
     }
     let sql = "SELECT nmae FROM users WHERE id = /* ordinary comment */1";
     assert_eq!(slices(sql, &run(sql).diagnostics), ["nmae"]);
+}
+
+#[test]
+fn successful_recovery_and_two_way_comments_resolve_static_references() {
+    for (sql, expected) in [
+        ("/*IF false*/ SELECT nmae FROM users; /*END*/", vec!["nmae"]),
+        (
+            "/*IF false*/ SELECT nmae FROM users; SELECT agge FROM users;",
+            vec!["nmae", "agge"],
+        ),
+        ("/*END*/ SELECT nmae FROM users;", vec!["nmae"]),
+        ("SELECT id FROM users WHERE id = /*param*/ 1;", vec![]),
+        ("SELECT /*param*/ AS result, nmae FROM users;", vec!["nmae"]),
+        (
+            "SELECT id FROM users WHERE nmae = /*param*/ ;",
+            vec!["nmae"],
+        ),
+        ("SELECT , nmae FROM users;", vec!["nmae"]),
+        ("SELECT nmae FROM , users;", vec!["nmae"]),
+        ("SELECT id FROM users WHERE AND agge = 1;", vec!["agge"]),
+        ("SELECT id FROM users WHERE OR agge = 1;", vec!["agge"]),
+        (
+            "SELECT , , nmae FROM , , users WHERE AND OR agge = 1;",
+            vec!["nmae", "agge"],
+        ),
+        (
+            "SELECT , /*param*/ AS result, nmae FROM , users WHERE AND agge = /*param*/ ;",
+            vec!["nmae", "agge"],
+        ),
+        (
+            "SELECT '', /* ordinary comment */ nmae FROM users;",
+            vec!["nmae"],
+        ),
+        ("SELECT id FROM usres;", vec!["usres"]),
+        ("SELECT id FROM /*$table*/ usres;", vec!["usres"]),
+        ("SELECT , x.id, nmae FROM users;", vec!["x", "nmae"]),
+    ] {
+        let result = run(sql);
+        assert_eq!(
+            slices(sql, &result.diagnostics),
+            expected,
+            "{sql}: {result:?}"
+        );
+        assert!(
+            result
+                .statements
+                .iter()
+                .all(|s| s.status == AnalysisStatus::Complete),
+            "{sql}"
+        );
+    }
+    let result = run("SELECT /*param*/ AS result, id AS result, /*other*/ AS result FROM users;");
+    let outputs = &result.statements[0].resolved.as_ref().unwrap().outputs;
+    assert_eq!(
+        outputs
+            .iter()
+            .map(|o| o.name.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("result"); 3]
+    );
+    assert_eq!(
+        outputs
+            .iter()
+            .map(|o| o.references.len())
+            .collect::<Vec<_>>(),
+        [0, 1, 0]
+    );
+}
+
+#[test]
+fn recovered_sources_preserve_partial_results_without_absence_or_acquisition_failure() {
+    for sql in [
+        "SELECT x.id AS result, x AS result, wrong.nmae FROM /*#table*/ AS x WHERE x.id = 1;",
+        "SELECT x.id AS result, x AS result, wrong.nmae FROM /*$table*/ AS x WHERE x.id = 1;",
+        "SELECT , /*param*/ AS result, x AS result, wrong.nmae FROM , /*#table*/ AS x WHERE AND x.id = /*param*/ ;",
+    ] {
+        let tree = tree_sitter::parse_2way(sql).unwrap();
+        assert!(input::prepare(&tree.root_node()).requests.is_empty());
+        let error = AcquisitionError::new(AcquisitionPhase::Connect, AcquisitionErrorKind::Connection);
+        for acquired in [Ok(&snapshot()), Err(&error)] {
+            let result = Linter::new().run_with_catalog(sql, &config(), acquired).unwrap();
+            assert!(result.diagnostics.is_empty(), "{sql}: {result:?}");
+            let statement = &result.statements[0];
+            assert_eq!(statement.status, AnalysisStatus::Complete);
+            assert!(statement.exclusion.is_none());
+            let resolved = statement.resolved.as_ref().unwrap();
+            assert!(matches!(resolved.source, Resolution::Unknown(ResolutionUnknown::Reason(UnknownReason::RecoveredSource))));
+            assert_eq!(resolved.outputs.iter().map(|o| o.name.as_deref()).collect::<Vec<_>>(), [Some("result"), Some("result"), None]);
+            for reference in resolved.outputs.iter().flat_map(|o| &o.references).chain(&resolved.predicate_references) {
+                assert!(matches!(reference.outcome, crate::catalog::resolution::ReferenceOutcome::Lookup { resolution: Resolution::Unknown(ResolutionUnknown::Reason(UnknownReason::RecoveredSource)), .. }));
+                assert_eq!(&sql[reference.input.column.range.start_byte..reference.input.column.range.end_byte], reference.input.column.spelling);
+            }
+        }
+        let sql = format!("{sql} SELECT nmae FROM users;");
+        let result = run(&sql);
+        assert_eq!(slices(&sql, &result.diagnostics), ["nmae"]);
+    }
+}
+
+#[test]
+fn recovery_keeps_utf8_crlf_repeated_and_quoted_reference_ranges() {
+    let sql = "/*IF false*/\r\nSELECT , , \"名前\", nmae, nmae FROM , users WHERE AND OR \"a\"\"b\" = /*param*/ ; /*END*/";
+    let result = run(sql);
+    assert_eq!(
+        slices(sql, &result.diagnostics),
+        ["\"名前\"", "nmae", "nmae", "\"a\"\"b\""]
+    );
+    for diagnostic in &result.diagnostics {
+        assert_eq!(diagnostic.span.start.line, 1);
+        assert_eq!(
+            diagnostic.span.start.column,
+            sql[..diagnostic.span.start.byte]
+                .rsplit('\n')
+                .next()
+                .unwrap()
+                .len()
+        );
+    }
+    assert!(result
+        .diagnostics
+        .windows(2)
+        .all(|pair| pair[0].span.start.byte < pair[1].span.start.byte));
 }

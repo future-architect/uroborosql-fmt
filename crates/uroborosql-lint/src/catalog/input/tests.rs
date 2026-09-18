@@ -76,7 +76,7 @@ fn accepts_each_operator_and_identifier_keyword() {
 }
 
 #[test]
-fn rejects_unlisted_syntax_and_recovered_shapes_before_collecting_requests() {
+fn rejects_unlisted_syntax_before_collecting_requests() {
     for sql in [
         "SELECT * FROM users",
         "SELECT u.* FROM users u",
@@ -113,8 +113,6 @@ fn rejects_unlisted_syntax_and_recovered_shapes_before_collecting_requests() {
         "SELECT id % 2 FROM users",
         "SELECT id IS TRUE FROM users",
         "SELECT id COLLATE \"C\" FROM users",
-        "SELECT , id FROM users",
-        "SELECT id FROM users WHERE AND id = 1",
         "SELECT id FROM users TABLESAMPLE SYSTEM(1)",
     ] {
         let input = prepare_sql(sql);
@@ -172,10 +170,10 @@ fn ordinary_comments_strings_and_mixed_statements_do_not_hide_eligible_sql() {
 }
 
 #[test]
-fn directive_blocks_cross_statements_and_end_before_following_statement() {
+fn two_way_blocks_do_not_hide_static_statements() {
     for sql in ["/*IF cond*/ SELECT id FROM users; SELECT name FROM users; /*END*/ SELECT id FROM users;", "/*BEGIN*/ /*IF cond*/ SELECT id FROM users; /*ELSE*/ SELECT name FROM users; /*END*/ /*END*/ SELECT id FROM users;", "/*%if cond*/ SELECT id FROM users; /*%elseif other*/ SELECT name FROM users; /*%end*/ SELECT id FROM users;"] {
         let input = prepare_sql(sql);
-        assert_eq!(input.statements.iter().map(|s| s.input.is_ok()).collect::<Vec<_>>(), [false,false,true], "{sql}");
+        assert_eq!(input.statements.iter().map(|s| s.input.is_ok()).collect::<Vec<_>>(), [true,true,true], "{sql}");
     }
     let input =
         prepare_sql("SELECT id FROM users WHERE /*IF cond*/ id=1 /*END*/; SELECT id FROM users;");
@@ -185,15 +183,61 @@ fn directive_blocks_cross_statements_and_end_before_following_statement() {
             .iter()
             .map(|s| s.input.is_ok())
             .collect::<Vec<_>>(),
-        [false, true]
+        [true, true]
     );
 }
 
 #[test]
-fn malformed_directives_and_dynamic_sql_are_conservative() {
-    for sql in ["/*IF cond*/ SELECT id FROM users; SELECT id FROM users;", "SELECT id FROM users; /*END*/ SELECT id FROM users", "/*BEGIN*/ SELECT id FROM users; /*ELSE*/ SELECT id FROM users; /*END*/", "/*IF cond*/ SELECT id FROM users; /*ELSE*/ SELECT id FROM users; /*ELIF other*/ SELECT id FROM users; /*END*/", "SELECT /*id*/1 FROM users", "SELECT id FROM /*#table*/users", "SELECT /*$column*/id FROM users", "SELECT /*id*/ ;", "SELECT id FROM /*#table*/ ;"] {
+fn unmatched_directives_and_sample_comments_do_not_change_eligibility() {
+    for sql in ["/*IF cond*/ SELECT id FROM users; SELECT id FROM users;", "SELECT id FROM users; /*END*/ SELECT id FROM users", "/*BEGIN*/ SELECT id FROM users; /*ELSE*/ SELECT id FROM users; /*END*/", "/*IF cond*/ SELECT id FROM users; /*ELSE*/ SELECT id FROM users; /*ELIF other*/ SELECT id FROM users; /*END*/", "SELECT /*id*/1 FROM users", "SELECT id FROM /*#table*/users", "SELECT /*$column*/id FROM users"] {
         let input = prepare_sql(sql);
-        assert!(input.requests.is_empty(), "{sql}: {input:?}");
+        assert_eq!(input.requests.len(), 1, "{sql}: {input:?}");
+        assert!(input.statements.iter().all(|s| s.input.is_ok()), "{sql}");
+    }
+}
+
+#[test]
+fn recovered_source_retains_alias_and_range_without_request() {
+    for sql in [
+        "SELECT x.id FROM /*#table*/ AS x;",
+        "SELECT x.id FROM /*$table*/ AS x;",
+        "SELECT id FROM /*#table*/ ;",
+    ] {
+        let input = prepare_sql(sql);
+        assert!(input.requests.is_empty(), "{sql}");
+        let source = &input.statements[0].input.as_ref().unwrap().source;
+        assert!(matches!(source.name, SourceName::Recovered));
+        assert_eq!(source.range.start_byte, source.range.end_byte);
+        assert_eq!(source.range.start_byte, sql.find("*/").unwrap() + 2);
+        if let Some(alias) = &source.alias {
+            assert_eq!(alias.name, "x");
+            assert_eq!(&sql[alias.range.start_byte..alias.range.end_byte], "x");
+            assert_eq!(source.visible_name(), Some("x"));
+        } else {
+            assert_eq!(source.visible_name(), None);
+        }
+    }
+}
+
+#[test]
+fn recovery_does_not_expand_supported_syntax() {
+    for sql in [
+        "SELECT ALL , id FROM users",
+        "SELECT DISTINCT , id FROM users",
+        "SELECT DISTINCT ON (id) , id FROM users",
+        "SELECT id FROM users ORDER BY , id",
+        "SELECT id FROM users GROUP BY , id",
+        "SELECT id FROM users u, /*#table*/ ;",
+        "SELECT /*param*/ FROM users JOIN others ON TRUE",
+        "SELECT id FROM (SELECT /*param*/ FROM users) s",
+        "WITH t AS (SELECT /*param*/ FROM users) SELECT id FROM t",
+    ] {
+        let input = prepare_sql(sql);
+        assert!(input.requests.is_empty(), "{sql}");
+        assert!(
+            matches!(input.statements[0].input, Err(Exclusion::UnsupportedSyntax)),
+            "{sql}: {input:?}"
+        );
     }
 }
 
@@ -247,16 +291,14 @@ fn bind_comments_accept_signed_parenthesized_and_nonliteral_samples() {
         let sql =
             format!("SELECT nmae FROM users WHERE id = /*id*/{sample}; SELECT id FROM users;");
         let prepared = prepare_sql(&sql);
-        assert!(
-            matches!(prepared.statements[0].input, Err(Exclusion::TwoWaySql)),
-            "{sql}"
-        );
+        assert!(prepared.statements[0].input.is_ok(), "{sql}");
         assert!(prepared.statements[1].input.is_ok(), "{sql}");
     }
-    assert!(matches!(
-        prepare_sql("SELECT nmae FROM users /*param*/;").statements[0].input,
-        Err(Exclusion::TwoWaySql)
-    ));
+    assert!(
+        prepare_sql("SELECT nmae FROM users /*param*/ ;").statements[0]
+            .input
+            .is_ok()
+    );
 }
 
 #[test]
@@ -271,5 +313,23 @@ fn ordinary_comment_before_sample_like_expression_is_not_a_bind() {
             let sql = format!("SELECT nmae FROM users WHERE id = {comment}{sample}");
             assert!(prepare_sql(&sql).statements[0].input.is_ok(), "{sql}");
         }
+    }
+}
+
+#[test]
+fn replacement_comment_followed_by_identifier_is_a_real_table_sample() {
+    for sql in [
+        "SELECT x.id FROM /*$table*/ x WHERE x.id=1;",
+        "SELECT id FROM /*#table*/ users;",
+    ] {
+        let input = prepare_sql(sql);
+        let source = &input.statements[0].input.as_ref().unwrap().source;
+        assert!(matches!(source.name, SourceName::Table { .. }));
+        assert!(source.alias.is_none());
+        assert_eq!(input.requests.len(), 1);
+        assert_eq!(
+            input.requests[0].name,
+            if sql.contains("x.id") { "x" } else { "users" }
+        );
     }
 }

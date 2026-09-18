@@ -56,6 +56,7 @@ pub enum AbsenceKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnknownReason {
+    RecoveredSource,
     UnsupportedRelation,
     IncompleteCoverage,
     UnsupportedSyntax,

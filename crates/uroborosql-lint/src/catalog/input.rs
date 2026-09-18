@@ -1,5 +1,4 @@
 //! Owned, conservative input for catalog resolution. No parser nodes cross this boundary.
-mod directives;
 
 use super::TableRequest;
 use postgresql_cst_parser::{
@@ -39,22 +38,39 @@ pub(crate) struct Target {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) enum SourceName {
+    Table {
+        schema: Option<Identifier>,
+        table: Box<Identifier>,
+    },
+    Recovered,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct Source {
-    pub schema: Option<Identifier>,
-    pub table: Identifier,
+    pub name: SourceName,
     pub alias: Option<Identifier>,
     pub range: Range,
 }
 
 impl Source {
-    pub fn request(&self) -> TableRequest {
-        TableRequest {
-            schema: self.schema.as_ref().map(|s| s.name.clone()),
-            name: self.table.name.clone(),
+    pub fn request(&self) -> Option<TableRequest> {
+        match &self.name {
+            SourceName::Table { schema, table } => Some(TableRequest {
+                schema: schema.as_ref().map(|s| s.name.clone()),
+                name: table.name.clone(),
+            }),
+            SourceName::Recovered => None,
         }
     }
-    pub fn visible_name(&self) -> &str {
-        &self.alias.as_ref().unwrap_or(&self.table).name
+    pub fn visible_name(&self) -> Option<&str> {
+        self.alias
+            .as_ref()
+            .map(|alias| alias.name.as_str())
+            .or(match &self.name {
+                SourceName::Table { table, .. } => Some(table.name.as_str()),
+                SourceName::Recovered => None,
+            })
     }
 }
 
@@ -68,9 +84,7 @@ pub(crate) struct Select {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Exclusion {
     SessionChange,
-    TwoWaySql,
     UnsupportedSyntax,
-    RecoveredSyntax,
     UnsupportedIdentifier,
     TemporarySchema,
 }
@@ -94,7 +108,6 @@ pub(crate) fn prepare(root: &Node<'_>) -> Prepared {
             K::VariableSetStmt | K::VariableResetStmt | K::DiscardStmt
         )
     });
-    let directives = directives::influence(root);
     let mut statements = Vec::new();
     let mut requests = Vec::new();
     for node in root
@@ -105,18 +118,14 @@ pub(crate) fn prepare(root: &Node<'_>) -> Prepared {
         let range = node.range();
         let input = if session_change {
             Err(Exclusion::SessionChange)
-        } else if directives.affects(&range) {
-            Err(Exclusion::TwoWaySql)
-        } else if node
-            .descendants()
-            .any(|n| n.node_or_token.as_token().is_some() && n.text().is_empty())
-        {
-            Err(Exclusion::RecoveredSyntax)
         } else {
             select(&node)
         };
-        if let Ok(select) = &input {
-            let request = select.source.request();
+        if let Some(request) = input
+            .as_ref()
+            .ok()
+            .and_then(|select| select.source.request())
+        {
             if !requests.contains(&request) {
                 requests.push(request);
             }
@@ -135,7 +144,13 @@ fn comment(node: &Node<'_>) -> bool {
 fn children<'a>(node: &Node<'a>) -> Vec<Node<'a>> {
     node.children()
         .into_iter()
-        .filter(|n| !comment(n))
+        .filter(|n| {
+            !comment(n)
+                // Recovery extras are direct children outside the grammatical lists/expressions.
+                && !matches!((node.kind(), n.kind()),
+                    (K::select_no_parens | K::from_clause, K::Comma)
+                    | (K::where_clause, K::AND | K::OR))
+        })
         .collect()
 }
 fn only<'a>(node: &Node<'a>, expected: K) -> Result<Node<'a>, Exclusion> {
@@ -164,7 +179,8 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
         return Err(Exclusion::UnsupportedSyntax);
     }
     let source = source(&c[2])?;
-    if source.schema.as_ref().is_some_and(|s| s.name == "pg_temp") {
+    if matches!(&source.name, SourceName::Table { schema: Some(schema), .. } if schema.name == "pg_temp")
+    {
         return Err(Exclusion::TemporarySchema);
     }
     let list = children(&c[1]);
@@ -222,11 +238,26 @@ fn source(node: &Node<'_>) -> Result<Source, Exclusion> {
         return Err(Exclusion::UnsupportedSyntax);
     }
     let relation = only(&t[0], K::qualified_name)?;
-    let names = names(&relation)?;
-    let (schema, table) = match names.as_slice() {
-        [table] => (None, table.clone()),
-        [schema, table] => (Some(schema.clone()), table.clone()),
-        _ => return Err(Exclusion::UnsupportedSyntax),
+    let parts = children(&relation);
+    let recovered = parts.len() == 1
+        && parts[0].kind() == K::ColId
+        && only(&parts[0], K::IDENT).is_ok_and(|token| {
+            token.text().is_empty() && token.range().start_byte == token.range().end_byte
+        });
+    let name = if recovered {
+        SourceName::Recovered
+    } else {
+        match names(&relation)?.as_slice() {
+            [table] => SourceName::Table {
+                schema: None,
+                table: Box::new(table.clone()),
+            },
+            [schema, table] => SourceName::Table {
+                schema: Some(schema.clone()),
+                table: Box::new(table.clone()),
+            },
+            _ => return Err(Exclusion::UnsupportedSyntax),
+        }
     };
     let alias = if let Some(a) = t.get(1) {
         let a = only(a, K::alias_clause)?;
@@ -242,8 +273,7 @@ fn source(node: &Node<'_>) -> Result<Source, Exclusion> {
         None
     };
     Ok(Source {
-        schema,
-        table,
+        name,
         alias,
         range: relation.range(),
     })
