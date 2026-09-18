@@ -45,7 +45,7 @@ impl Default for CatalogTimeouts {
 }
 
 impl CatalogTimeouts {
-    pub(super) fn validate(self) -> Result<(), AcquisitionError> {
+    pub(crate) fn validate(self) -> Result<(), AcquisitionError> {
         let now = Instant::now();
         for (limit, field) in [
             (self.connect, ConfigurationField::ConnectTimeout),
@@ -91,7 +91,7 @@ impl PostgresConfig {
         }
     }
 
-    pub(super) fn options(&self) -> Result<PgConnectOptions, AcquisitionError> {
+    pub(crate) fn options(&self) -> Result<PgConnectOptions, AcquisitionError> {
         let invalid_field = if self.host.is_empty()
             || self.host.starts_with('/')
             || self.host.contains(['\0', ',', '\\'])

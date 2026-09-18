@@ -10,6 +10,9 @@ use std::{collections::BTreeMap, future::Future, pin::Pin};
 #[cfg(feature = "postgres-catalog")]
 pub mod postgres;
 
+#[cfg(feature = "sqlite-catalog")]
+pub mod sqlite;
+
 mod error;
 pub use error::{
     AcquisitionDetail, AcquisitionError, AcquisitionErrorKind, AcquisitionPhase,

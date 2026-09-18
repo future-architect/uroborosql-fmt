@@ -70,7 +70,7 @@ impl CatalogProvider for PostgresCatalogProvider {
     }
 }
 
-async fn query<T>(
+pub(crate) async fn query<T>(
     phase: &mut AcquisitionPhase,
     next: AcquisitionPhase,
     limit: Duration,
@@ -87,7 +87,7 @@ fn error(phase: AcquisitionPhase, kind: AcquisitionErrorKind) -> AcquisitionErro
     AcquisitionError::new(phase, kind)
 }
 
-fn timeout_error(
+pub(crate) fn timeout_error(
     phase: AcquisitionPhase,
     scope: TimeoutScope,
     limit: Duration,
@@ -96,7 +96,7 @@ fn timeout_error(
         .with_detail(AcquisitionDetail::Timeout { scope, limit })
 }
 
-fn read_error(phase: AcquisitionPhase, err: sqlx::Error) -> AcquisitionError {
+pub(crate) fn read_error(phase: AcquisitionPhase, err: sqlx::Error) -> AcquisitionError {
     let kind = match &err {
         sqlx::Error::Database(db) if db.code().as_deref() == Some("42501") => {
             AcquisitionErrorKind::PermissionDenied
