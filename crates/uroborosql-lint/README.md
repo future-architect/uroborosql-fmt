@@ -4,20 +4,6 @@ Beta lint engine and rule/configuration crate for `uroborosql-lint`.
 
 For CLI usage, see the [`uroborosql-lint-cli` README](../uroborosql-lint-cli/README.md).
 
-## Catalog name resolution (internal)
-
-`no-unknown-reference` is registered with default severity `error`. Its internal
-pipeline accepts an acquired catalog snapshot and resolves a single-table SELECT
-with optional WHERE, aliases, quoted identifiers and the supported scalar expressions.
-It reports confirmed missing tables/columns and unknown qualifiers at their original
-source ranges; unsupported syntax or unavailable definitions never imply absence.
-Configuration overrides and existing diagnostic suppression apply to these results.
-
-The public synchronous `Linter::run` remains CST-only. Catalog acquisition, the async
-entry, CLI/LSP wiring and SQLite snapshots are subsequent work; setting this rule
-or `db` alone does not enable catalog diagnostics through the public entry yet.
-JOIN, subqueries, CTEs, types, wildcard expansion and fixes are outside this step.
-
 ## Configuration
 
 The config file supports rule levels, file ignores, per-file overrides, and future schema-aware settings.

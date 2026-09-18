@@ -8,7 +8,6 @@ use crate::{
 };
 use postgresql_cst_parser::{tree_sitter, ParserError, ScanReport};
 
-// Internal bridge for T08: no runtime or public acquisition API is introduced here.
 #[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct CatalogLintResult {
@@ -85,7 +84,7 @@ impl Linter {
         ))
     }
 
-    #[allow(dead_code)] // T08 will supply the asynchronously acquired snapshot.
+    #[allow(dead_code)]
     pub(crate) fn run_with_catalog(
         &self,
         sql: &str,
