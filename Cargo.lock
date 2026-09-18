@@ -2103,7 +2103,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-fmt"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "annotate-snippets",
  "console",
@@ -2120,7 +2120,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-fmt-cli"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "assert_cmd",
  "assert_fs",
@@ -2131,7 +2131,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-fmt-napi"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "napi",
  "napi-build",
@@ -2143,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-fmt-wasm"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "console_error_panic_hook",
  "uroborosql-fmt",
@@ -2152,7 +2152,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-language-server"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "clap",
  "ropey",
@@ -2166,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-lint"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "globset",
  "postgresql-cst-parser",
@@ -2180,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "uroborosql-lint-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_cmd",
  "assert_fs",
