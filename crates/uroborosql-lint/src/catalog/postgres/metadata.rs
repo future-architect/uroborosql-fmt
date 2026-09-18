@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, time::Duration};
 
 use sqlx::{PgConnection, Row};
 
@@ -15,10 +15,12 @@ pub(super) async fn read_snapshot(
     connection: &mut PgConnection,
     requests: &[TableRequest],
     phase: &mut AcquisitionPhase,
+    query_timeout: Duration,
 ) -> Result<CatalogSnapshot, AcquisitionError> {
     query(
         phase,
         AcquisitionPhase::SearchPath,
+        query_timeout,
         sqlx::query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             .execute(&mut *connection),
     )
@@ -26,6 +28,7 @@ pub(super) async fn read_snapshot(
     let (version, search_path): (String, Vec<String>) = query(
         phase,
         AcquisitionPhase::SearchPath,
+        query_timeout,
         sqlx::query_as(
             "SELECT pg_catalog.current_setting('server_version_num'), pg_catalog.current_schemas(true)::text[]",
         )
@@ -53,7 +56,7 @@ pub(super) async fn read_snapshot(
         let outcome = if schema == "pg_temp" {
             Lookup::Unknown(UnknownReason::UnsupportedSyntax)
         } else {
-            read_table(connection, &schema, &table, phase).await?
+            read_table(connection, &schema, &table, phase, query_timeout).await?
         };
         entries.push(CatalogEntry {
             schema,
@@ -65,6 +68,7 @@ pub(super) async fn read_snapshot(
     query(
         phase,
         AcquisitionPhase::Validate,
+        query_timeout,
         sqlx::query("COMMIT").execute(&mut *connection),
     )
     .await?;
@@ -93,10 +97,12 @@ async fn read_table(
     schema: &str,
     table: &str,
     phase: &mut AcquisitionPhase,
+    query_timeout: Duration,
 ) -> Result<Lookup<TableDefinition>, AcquisitionError> {
     let row = query(
         phase,
         AcquisitionPhase::Relation,
+        query_timeout,
         sqlx::query(
             "SELECT pg_catalog.has_schema_privilege(n.oid, 'USAGE') AS usable,
                     c.oid, c.relkind::text AS kind, c.relnatts
@@ -132,6 +138,7 @@ async fn read_table(
     let rows = query(
         phase,
         AcquisitionPhase::Columns,
+        query_timeout,
         sqlx::query(
             "SELECT c.relnatts, a.attnum, a.attname::text AS name, a.attisdropped
              FROM pg_catalog.pg_class c

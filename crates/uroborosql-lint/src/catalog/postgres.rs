@@ -10,12 +10,8 @@ use super::{
 mod config;
 mod metadata;
 
-pub use config::{PostgresConfig, TlsMode};
+pub use config::{CatalogTimeouts, PostgresConfig, TlsMode};
 use metadata::read_snapshot;
-
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
-const ACQUISITION_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct PostgresCatalogProvider {
     config: PostgresConfig,
@@ -32,15 +28,22 @@ impl PostgresCatalogProvider {
         phase: &mut AcquisitionPhase,
     ) -> Result<CatalogSnapshot, AcquisitionError> {
         let options = self.config.options()?;
+        let timeouts = self.config.timeouts;
         let mut connection =
-            tokio::time::timeout(CONNECT_TIMEOUT, PgConnection::connect_with(&options))
+            tokio::time::timeout(timeouts.connect, PgConnection::connect_with(&options))
                 .await
-                .map_err(|_| timeout_error(*phase, TimeoutScope::Connect, CONNECT_TIMEOUT))?
+                .map_err(|_| timeout_error(*phase, TimeoutScope::Connect, timeouts.connect))?
                 .map_err(|err| read_error(*phase, err))?;
-        let result = read_snapshot(&mut connection, requests, phase).await;
+        let result = read_snapshot(&mut connection, requests, phase, timeouts.query).await;
         // A cancelled future owns and drops the socket; no pool can return it to another analysis.
         if result.is_ok() {
-            query(phase, AcquisitionPhase::Validate, connection.close()).await?;
+            query(
+                phase,
+                AcquisitionPhase::Validate,
+                timeouts.query,
+                connection.close(),
+            )
+            .await?;
         }
         result
     }
@@ -49,13 +52,20 @@ impl PostgresCatalogProvider {
 impl CatalogProvider for PostgresCatalogProvider {
     fn acquire<'a>(&'a self, requests: &'a [TableRequest]) -> AcquisitionFuture<'a> {
         Box::pin(async move {
+            self.config.timeouts.validate()?;
             let mut phase = AcquisitionPhase::Connect;
             tokio::time::timeout(
-                ACQUISITION_TIMEOUT,
+                self.config.timeouts.acquisition,
                 self.acquire_snapshot(requests, &mut phase),
             )
             .await
-            .map_err(|_| timeout_error(phase, TimeoutScope::Acquisition, ACQUISITION_TIMEOUT))?
+            .map_err(|_| {
+                timeout_error(
+                    phase,
+                    TimeoutScope::Acquisition,
+                    self.config.timeouts.acquisition,
+                )
+            })?
         })
     }
 }
@@ -63,12 +73,13 @@ impl CatalogProvider for PostgresCatalogProvider {
 async fn query<T>(
     phase: &mut AcquisitionPhase,
     next: AcquisitionPhase,
+    limit: Duration,
     future: impl Future<Output = Result<T, sqlx::Error>>,
 ) -> Result<T, AcquisitionError> {
     *phase = next;
-    tokio::time::timeout(QUERY_TIMEOUT, future)
+    tokio::time::timeout(limit, future)
         .await
-        .map_err(|_| timeout_error(next, TimeoutScope::Query, QUERY_TIMEOUT))?
+        .map_err(|_| timeout_error(next, TimeoutScope::Query, limit))?
         .map_err(|err| read_error(next, err))
 }
 

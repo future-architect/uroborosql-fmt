@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use sqlx::{
     postgres::{PgConnectOptions, PgSslMode},
     ConnectOptions,
@@ -19,6 +21,48 @@ pub enum TlsMode {
     Disable,
 }
 
+/// Positive time limits for one acquisition. The overall limit includes
+/// connection setup and every database operation; it does not reset per table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CatalogTimeouts {
+    /// DNS, TCP, TLS and authentication together. Defaults to 5 seconds.
+    pub connect: Duration,
+    /// Each database operation, including transaction completion and closing.
+    /// Defaults to 5 seconds.
+    pub query: Duration,
+    /// Connection setup through completed acquisition. Defaults to 10 seconds.
+    pub acquisition: Duration,
+}
+
+impl Default for CatalogTimeouts {
+    fn default() -> Self {
+        Self {
+            connect: Duration::from_secs(5),
+            query: Duration::from_secs(5),
+            acquisition: Duration::from_secs(10),
+        }
+    }
+}
+
+impl CatalogTimeouts {
+    pub(super) fn validate(self) -> Result<(), AcquisitionError> {
+        let now = Instant::now();
+        for (limit, field) in [
+            (self.connect, ConfigurationField::ConnectTimeout),
+            (self.query, ConfigurationField::QueryTimeout),
+            (self.acquisition, ConfigurationField::AcquisitionTimeout),
+        ] {
+            if limit.is_zero() || now.checked_add(limit).is_none() {
+                return Err(
+                    error(AcquisitionPhase::Connect, AcquisitionErrorKind::InvalidData)
+                        .with_detail(AcquisitionDetail::InvalidConfiguration(field)),
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct PostgresConfig {
     pub host: String,
@@ -27,6 +71,7 @@ pub struct PostgresConfig {
     pub dbname: String,
     pub password: Option<String>,
     pub tls_mode: TlsMode,
+    pub timeouts: CatalogTimeouts,
 }
 
 impl PostgresConfig {
@@ -42,6 +87,7 @@ impl PostgresConfig {
             dbname: dbname.into(),
             password: None,
             tls_mode: TlsMode::default(),
+            timeouts: CatalogTimeouts::default(),
         }
     }
 
@@ -94,6 +140,9 @@ mod tests {
     fn defaults_verify_tls_and_reject_non_tcp_hosts() {
         let config = PostgresConfig::new("localhost", "user", "database");
         assert_eq!(config.tls_mode, TlsMode::VerifyFull);
+        assert_eq!(config.timeouts.connect, Duration::from_secs(5));
+        assert_eq!(config.timeouts.query, Duration::from_secs(5));
+        assert_eq!(config.timeouts.acquisition, Duration::from_secs(10));
         assert!(matches!(
             config.options().unwrap().get_ssl_mode(),
             PgSslMode::VerifyFull

@@ -25,6 +25,9 @@ pub enum ConfigurationField {
     Port,
     User,
     Database,
+    ConnectTimeout,
+    QueryTimeout,
+    AcquisitionTimeout,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,6 +84,9 @@ impl fmt::Display for AcquisitionError {
                 ConfigurationField::Port => "Invalid catalog port. Use a port between 1 and 65535.",
                 ConfigurationField::User => "Invalid catalog user. Provide a nonempty user without NUL characters.",
                 ConfigurationField::Database => "Invalid catalog dbname. Provide a nonempty database name without NUL characters.",
+                ConfigurationField::ConnectTimeout => "Invalid catalog connection timeout. Use a positive duration within the system clock's supported range.",
+                ConfigurationField::QueryTimeout => "Invalid catalog query timeout. Use a positive duration within the system clock's supported range.",
+                ConfigurationField::AcquisitionTimeout => "Invalid catalog acquisition timeout. Use a positive duration within the system clock's supported range.",
             },
             Some(AcquisitionDetail::Authentication) => "Catalog authentication failed. Check the database user/password and server authentication settings.",
             Some(AcquisitionDetail::DatabaseNotFound) => "Catalog database was not found. Check dbname and the selected database server.",

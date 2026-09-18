@@ -3,9 +3,9 @@
 use sqlx::{postgres::PgConnectOptions, Connection, PgConnection};
 use std::{env, time::Duration};
 use uroborosql_lint::catalog::{
-    postgres::{PostgresCatalogProvider, PostgresConfig, TlsMode},
-    AbsenceKind, AcquisitionDetail, AcquisitionErrorKind, CatalogProvider, Lookup, TableDefinition,
-    TableRequest, TimeoutScope, UnknownReason,
+    postgres::{CatalogTimeouts, PostgresCatalogProvider, PostgresConfig, TlsMode},
+    AbsenceKind, AcquisitionDetail, AcquisitionErrorKind, CatalogProvider, ConfigurationField,
+    Lookup, TableDefinition, TableRequest, TimeoutScope, UnknownReason,
 };
 
 fn config() -> PostgresConfig {
@@ -253,7 +253,9 @@ async fn query_timeout_and_cancellation_close_connections() {
         .execute(&mut blocker)
         .await
         .unwrap();
-    let provider = PostgresCatalogProvider::new(config());
+    let mut config = config();
+    config.timeouts.query = Duration::from_secs(1);
+    let provider = PostgresCatalogProvider::new(config);
     let request = [request(Some("public"), "users")];
     let start = tokio::time::Instant::now();
     let err = provider.acquire(&request).await.unwrap_err();
@@ -262,7 +264,7 @@ async fn query_timeout_and_cancellation_close_connections() {
         err.detail,
         Some(AcquisitionDetail::Timeout {
             scope: TimeoutScope::Query,
-            limit: Duration::from_secs(5),
+            limit: Duration::from_secs(1),
         })
     );
     assert!(err.to_string().contains("database operation timed out"));
@@ -270,12 +272,13 @@ async fn query_timeout_and_cancellation_close_connections() {
         err.phase,
         uroborosql_lint::catalog::AcquisitionPhase::Relation
     );
-    assert!(start.elapsed() >= Duration::from_secs(5));
-    assert!(start.elapsed() < Duration::from_secs(8));
+    assert!(start.elapsed() >= Duration::from_secs(1));
+    assert!(start.elapsed() < Duration::from_secs(4));
     let mut pending = sqlx::query_as::<_, (i32,)>(WAITING_CATALOG_QUERIES)
         .fetch_all(&mut monitor)
         .await
         .unwrap();
+    let provider = PostgresCatalogProvider::new(self::config());
     let acquisition = tokio::spawn(async move { provider.acquire(&request).await });
     let cancelled_pid = tokio::time::timeout(Duration::from_secs(3), async {
         loop {
@@ -325,40 +328,99 @@ async fn query_timeout_and_cancellation_close_connections() {
 }
 
 #[tokio::test]
+async fn zero_timeouts_are_rejected_before_connecting() {
+    for (timeouts, field) in [
+        (
+            CatalogTimeouts {
+                connect: Duration::ZERO,
+                ..CatalogTimeouts::default()
+            },
+            ConfigurationField::ConnectTimeout,
+        ),
+        (
+            CatalogTimeouts {
+                query: Duration::ZERO,
+                ..CatalogTimeouts::default()
+            },
+            ConfigurationField::QueryTimeout,
+        ),
+        (
+            CatalogTimeouts {
+                acquisition: Duration::ZERO,
+                ..CatalogTimeouts::default()
+            },
+            ConfigurationField::AcquisitionTimeout,
+        ),
+    ] {
+        let mut config = PostgresConfig::new("localhost", "unused", "unused");
+        config.timeouts = timeouts;
+        let error = PostgresCatalogProvider::new(config)
+            .acquire(&[])
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, AcquisitionErrorKind::InvalidData);
+        assert_eq!(
+            error.detail,
+            Some(AcquisitionDetail::InvalidConfiguration(field))
+        );
+        assert!(error.to_string().contains("positive duration"));
+    }
+}
+
+#[tokio::test]
 async fn unresponsive_connection_times_out_and_closes_socket() {
     use tokio::io::AsyncReadExt;
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let peer = tokio::spawn(async move {
-        let (mut socket, _) = listener.accept().await.unwrap();
-        let mut bytes = Vec::new();
-        socket.read_to_end(&mut bytes).await.unwrap();
-        assert!(!bytes.is_empty());
-    });
-    let mut config = PostgresConfig::new("127.0.0.1", "unused", "unused");
-    config.port = port;
-    config.tls_mode = TlsMode::Disable;
-    let error = PostgresCatalogProvider::new(config)
-        .acquire(&[])
-        .await
-        .unwrap_err();
-    assert_eq!(error.kind, AcquisitionErrorKind::Timeout);
-    assert_eq!(
-        error.detail,
-        Some(AcquisitionDetail::Timeout {
-            scope: TimeoutScope::Connect,
-            limit: Duration::from_secs(5),
-        })
-    );
-    assert!(error.to_string().contains("connection timed out"));
-    assert_eq!(
-        error.phase,
-        uroborosql_lint::catalog::AcquisitionPhase::Connect
-    );
-    tokio::time::timeout(Duration::from_secs(1), peer)
-        .await
-        .unwrap()
-        .unwrap();
+    // Both the connection limit and the outer acquisition limit must stop
+    // an unresponsive peer, and the socket must close in either case.
+    for (connect, acquisition, scope) in [
+        (
+            Duration::from_millis(250),
+            Duration::from_secs(5),
+            TimeoutScope::Connect,
+        ),
+        (
+            Duration::from_secs(5),
+            Duration::from_millis(250),
+            TimeoutScope::Acquisition,
+        ),
+    ] {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let peer = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut bytes = Vec::new();
+            socket.read_to_end(&mut bytes).await.unwrap();
+            assert!(!bytes.is_empty());
+        });
+        let mut config = PostgresConfig::new("127.0.0.1", "unused", "unused");
+        config.port = port;
+        config.tls_mode = TlsMode::Disable;
+        config.timeouts.connect = connect;
+        config.timeouts.acquisition = acquisition;
+        let start = tokio::time::Instant::now();
+        let error = PostgresCatalogProvider::new(config)
+            .acquire(&[])
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, AcquisitionErrorKind::Timeout);
+        assert_eq!(
+            error.detail,
+            Some(AcquisitionDetail::Timeout {
+                scope,
+                limit: Duration::from_millis(250),
+            })
+        );
+        assert!(start.elapsed() >= Duration::from_millis(250));
+        assert!(start.elapsed() < Duration::from_secs(3));
+        assert_eq!(
+            error.phase,
+            uroborosql_lint::catalog::AcquisitionPhase::Connect
+        );
+        tokio::time::timeout(Duration::from_secs(1), peer)
+            .await
+            .unwrap()
+            .unwrap();
+    }
 }
 
 #[tokio::test]
@@ -370,14 +432,19 @@ async fn total_deadline_limits_multiple_successful_queries() {
         .execute(&mut admin).await.unwrap();
     sqlx::query("CREATE FUNCTION pg_catalog.has_schema_privilege(oid,text) RETURNS boolean LANGUAGE sql AS 'SELECT true FROM pg_catalog.pg_sleep(4)'")
         .execute(&mut admin).await.unwrap();
+    let requests = [
+        request(Some("public"), "users"),
+        request(Some("public"), "dropped"),
+        request(Some("public"), "zero_columns"),
+    ];
     let provider = PostgresCatalogProvider::new(config());
     let start = tokio::time::Instant::now();
-    let result = provider
-        .acquire(&[
-            request(Some("public"), "users"),
-            request(Some("public"), "dropped"),
-            request(Some("public"), "zero_columns"),
-        ])
+    let result = provider.acquire(&requests).await;
+    let elapsed = start.elapsed();
+    let mut extended = config();
+    extended.timeouts.acquisition = Duration::from_secs(30);
+    let extended_result = PostgresCatalogProvider::new(extended)
+        .acquire(&requests)
         .await;
     sqlx::query("DROP FUNCTION pg_catalog.has_schema_privilege(oid,text)")
         .execute(&mut admin)
@@ -395,8 +462,12 @@ async fn total_deadline_limits_multiple_successful_queries() {
         })
     );
     assert!(error.to_string().contains("overall acquisition timed out"));
-    assert!(start.elapsed() >= Duration::from_secs(10));
-    assert!(start.elapsed() < Duration::from_secs(14));
+    assert!(elapsed >= Duration::from_secs(10));
+    assert!(elapsed < Duration::from_secs(14));
+    let snapshot = extended_result.unwrap();
+    for request in &requests {
+        assert!(matches!(snapshot.lookup(request), Lookup::Found(_)));
+    }
     admin.close().await.unwrap();
 }
 
