@@ -7,8 +7,14 @@ use super::{error, AcquisitionError, AcquisitionErrorKind, AcquisitionPhase};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TlsMode {
+    /// Require TLS and verify the server certificate and host name.
     #[default]
     VerifyFull,
+    /// Require TLS and verify the server certificate, without checking the host name.
+    VerifyCa,
+    /// Require TLS without verifying the server certificate or host name.
+    Require,
+    /// Connect without TLS.
     Disable,
 }
 
@@ -61,6 +67,8 @@ impl PostgresConfig {
             // PGSSLMODE must not weaken the product's default verification.
             .ssl_mode(match self.tls_mode {
                 TlsMode::VerifyFull => PgSslMode::VerifyFull,
+                TlsMode::VerifyCa => PgSslMode::VerifyCa,
+                TlsMode::Require => PgSslMode::Require,
                 TlsMode::Disable => PgSslMode::Disable,
             })
             .disable_statement_logging();
