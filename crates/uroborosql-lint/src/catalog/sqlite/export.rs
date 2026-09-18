@@ -506,11 +506,12 @@ mod tests {
             .execute(&mut writer)
             .await
             .unwrap();
+        let unlock_started = std::sync::atomic::AtomicBool::new(false);
         let unlock = async {
             tokio::time::sleep(Duration::from_millis(40)).await;
+            unlock_started.store(true, Ordering::SeqCst);
             sqlx::query("ROLLBACK").execute(&mut writer).await.unwrap();
         };
-        let started = std::time::Instant::now();
         let validation = async {
             let result = validate_and_close(
                 reader,
@@ -518,8 +519,8 @@ mod tests {
                 default_timeouts(),
             )
             .await;
-            // A dropped connection would return at 10 ms while its worker still waits on the lock.
-            assert!(started.elapsed() >= Duration::from_millis(30));
+            // Dropping would return at the deadline before lock release even starts.
+            assert!(unlock_started.load(Ordering::SeqCst));
             result
         };
         let (result, ()) = tokio::join!(validation, unlock);
