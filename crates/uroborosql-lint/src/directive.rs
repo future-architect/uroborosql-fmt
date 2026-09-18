@@ -73,11 +73,30 @@ pub fn suppress_diagnostics<'tree>(
     root: &Node<'tree>,
     diagnostics: Vec<Diagnostic>,
 ) -> Vec<Diagnostic> {
-    let (directives, mut directive_diagnostics) = extract_directives(root);
-    let mut diagnostics = apply_directives(diagnostics, &directives);
-    diagnostics.append(&mut directive_diagnostics);
-    diagnostics.sort_by_key(|diag| (diag.span.start.byte, diag.span.end.byte, diag.code));
-    diagnostics
+    PreparedSuppression::new(root).apply(diagnostics)
+}
+
+/// Owned suppression state can outlive the parser tree during catalog acquisition.
+pub(crate) struct PreparedSuppression {
+    directives: Vec<LintDirective>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl PreparedSuppression {
+    pub(crate) fn new(root: &Node<'_>) -> Self {
+        let (directives, diagnostics) = extract_directives(root);
+        Self {
+            directives,
+            diagnostics,
+        }
+    }
+
+    pub(crate) fn apply(mut self, diagnostics: Vec<Diagnostic>) -> Vec<Diagnostic> {
+        let mut diagnostics = apply_directives(diagnostics, &self.directives);
+        diagnostics.append(&mut self.diagnostics);
+        diagnostics.sort_by_key(|diag| (diag.span.start.byte, diag.span.end.byte, diag.code));
+        diagnostics
+    }
 }
 
 fn extract_directives<'tree>(root: &Node<'tree>) -> (Vec<LintDirective>, Vec<Diagnostic>) {

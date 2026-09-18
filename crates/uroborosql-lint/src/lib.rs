@@ -17,5 +17,8 @@ pub use directive::{
     ParsedLineComment, ParsedLintDirectiveKind, UnknownRuleRemovalRange, DISABLE_DIRECTIVE_KEYWORD,
     DISABLE_NEXT_LINE_DIRECTIVE_KEYWORD, INVALID_LINT_DIRECTIVE_CODE, LINT_SOURCE,
 };
-pub use linter::{LintError, Linter, ParseErrorByteSpan};
+pub use linter::{
+    CatalogExclusion, CatalogReport, CatalogSkipReason, CatalogStatementReport, LintError,
+    LintResult, Linter, ParseErrorByteSpan,
+};
 pub use rules::RuleEnum;

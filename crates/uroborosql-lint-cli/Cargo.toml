@@ -12,7 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true }
-uroborosql-lint = { path = "../uroborosql-lint" }
+uroborosql-lint = { path = "../uroborosql-lint", features = ["postgres-catalog"] }
+tokio = { version = "1", features = ["macros", "rt"] }
 
 [dev-dependencies]
 assert_cmd = "2"
