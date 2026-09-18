@@ -1,5 +1,5 @@
 use crate::{
-    catalog::{AcquisitionError, CatalogProvider, CatalogSnapshot},
+    catalog::{CatalogProvider, CatalogSnapshot},
     resolution::{self, query},
     RuleEnum,
 };
@@ -12,12 +12,15 @@ use crate::{
 };
 use postgresql_cst_parser::{tree_sitter, ParserError, ScanReport};
 
+#[cfg(test)]
+use crate::catalog::AcquisitionError;
+
 mod report;
 pub use report::{
     CatalogExclusion, CatalogReport, CatalogSkipReason, CatalogStatementReport, LintResult,
 };
 
-#[allow(dead_code)]
+#[cfg(test)]
 #[derive(Debug)]
 pub(crate) struct CatalogLintResult {
     pub diagnostics: Vec<Diagnostic>,
@@ -164,7 +167,7 @@ impl Linter {
         }
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn run_with_catalog(
         &self,
         sql: &str,
