@@ -83,6 +83,11 @@ async fn resolves_saved_path_spelling_privileges_and_column_order_read_only() {
     assert!(
         matches!(snapshot.lookup(&requests[3]),Lookup::Unavailable(e) if e.kind == AcquisitionErrorKind::PermissionDenied)
     );
+    let Lookup::Unavailable(error) = snapshot.lookup(&requests[3]) else {
+        panic!("missing denial");
+    };
+    assert!(error.to_string().contains("saved access decision"));
+    assert!(error.to_string().contains("export a new snapshot"));
     assert_eq!(
         snapshot.lookup(&requests[4]),
         Lookup::Absent(AbsenceKind::Schema)

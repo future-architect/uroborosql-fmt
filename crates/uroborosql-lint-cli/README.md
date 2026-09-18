@@ -111,7 +111,7 @@ POSIX shell, or `$env:PGOPTIONS = '-c search_path=app,public'` in PowerShell.
 It contains object names, database and user names, and acquisition metadata, but
 no application data rows, host name, password, or connection string.
 
-Copy the snapshot and this config to the offline environment:
+Save this as `offline-lint.json` beside the snapshot, then copy both to the offline environment:
 
 ```json
 {

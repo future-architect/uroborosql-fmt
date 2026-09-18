@@ -114,7 +114,7 @@ impl fmt::Display for AcquisitionError {
                 AcquisitionErrorKind::UnsupportedProvider => "The configured catalog provider is unavailable in this build.",
                 AcquisitionErrorKind::Connection => "Catalog connection failed. Check host, port, database credentials, network access, and TLS settings (server support, trusted CA and host name).",
                 AcquisitionErrorKind::Timeout => "Catalog acquisition timed out. Check network delays, database load or locks, and the timeout limit.",
-                AcquisitionErrorKind::PermissionDenied if self.phase == AcquisitionPhase::Schema => "Catalog schema access was denied. Check the connection role's USAGE privilege on the requested schema.",
+                AcquisitionErrorKind::PermissionDenied if self.phase == AcquisitionPhase::Schema => "Catalog schema access was denied. Check the source role's USAGE privilege on the requested schema. For a snapshot, this is the saved access decision; export a new snapshot with a role that has USAGE.",
                 AcquisitionErrorKind::PermissionDenied => "Catalog access was denied. Check the connection role's catalog read privileges.",
                 AcquisitionErrorKind::InvalidData => "Catalog data was invalid or incomplete. Check catalog visibility and that the database environment is supported.",
                 AcquisitionErrorKind::Read => "Catalog read failed. Check the database connection, server state, and catalog visibility.",
