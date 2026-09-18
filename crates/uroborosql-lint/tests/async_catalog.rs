@@ -251,7 +251,13 @@ async fn configured_unavailable_provider_is_lazy_and_keeps_diagnostics() {
     let AnalysisStatus::Failed(error) = &statements[1].status else {
         panic!()
     };
-    assert!(error.to_string().contains("File catalog is unavailable"));
+    assert!(error
+        .to_string()
+        .contains(if cfg!(feature = "sqlite-catalog") {
+            "Catalog snapshot could not be opened"
+        } else {
+            "File catalog is unavailable"
+        }));
 }
 
 #[cfg(feature = "postgres-catalog")]

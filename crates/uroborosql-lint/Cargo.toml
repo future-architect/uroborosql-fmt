@@ -9,7 +9,8 @@ rust-version = "1.94"
 
 [features]
 default = []
-postgres-catalog = ["dep:sqlx", "dep:tokio"]
+postgres-catalog = ["dep:sqlx", "dep:tokio", "sqlx/postgres", "sqlx/tls-rustls-ring-native-roots"]
+sqlite-catalog = ["dep:sqlx", "dep:tokio", "sqlx/sqlite-bundled"]
 
 [dependencies]
 postgresql-cst-parser = { workspace = true }
@@ -17,7 +18,7 @@ globset = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
-sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "tls-rustls-ring-native-roots"], optional = true }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio"], optional = true }
 tokio = { version = "1", features = ["rt", "time"], optional = true }
 
 [dev-dependencies]

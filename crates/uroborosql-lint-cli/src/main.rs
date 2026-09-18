@@ -4,13 +4,17 @@ use clap::Parser;
 
 mod app;
 mod args;
+mod export;
 
 use app::run;
 use args::Cli;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> process::ExitCode {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+    if let Some(args::Command::ExportCatalog(args)) = cli.command.take() {
+        return process::ExitCode::from(export::run(args).await);
+    }
 
     match run(cli).await {
         Ok(()) => process::ExitCode::SUCCESS,
