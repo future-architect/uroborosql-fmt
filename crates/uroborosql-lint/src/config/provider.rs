@@ -1,8 +1,11 @@
 use super::{config_store::ResolvedDbConfig, ResolvedLintConfig};
+#[cfg(any(not(feature = "postgres-catalog"), not(feature = "sqlite-catalog")))]
 use crate::catalog::{
-    AcquisitionDetail, AcquisitionError, AcquisitionErrorKind, AcquisitionPhase, CatalogProvider,
+    AcquisitionDetail, AcquisitionError, AcquisitionErrorKind, AcquisitionPhase,
     InMemoryCatalogProvider,
 };
+
+use crate::catalog::CatalogProvider;
 
 impl ResolvedLintConfig {
     /// Selects a catalog source without opening connections or files.
@@ -14,13 +17,12 @@ impl ResolvedLintConfig {
         let db = self.db.as_ref()?;
         Some(match db {
             ResolvedDbConfig::Server { .. } => server_provider(db),
-            ResolvedDbConfig::File { .. } => {
-                unavailable(AcquisitionDetail::FileProviderUnavailable)
-            }
+            ResolvedDbConfig::File { path } => file_provider(path),
         })
     }
 }
 
+#[cfg(any(not(feature = "postgres-catalog"), not(feature = "sqlite-catalog")))]
 fn unavailable(detail: AcquisitionDetail) -> Box<dyn CatalogProvider> {
     Box::new(InMemoryCatalogProvider::failing(
         AcquisitionError::new(
@@ -72,4 +74,14 @@ fn server_provider(db: &ResolvedDbConfig) -> Box<dyn CatalogProvider> {
         config.timeouts.acquisition = Duration::from_millis(ms);
     }
     Box::new(PostgresCatalogProvider::new(config))
+}
+
+#[cfg(feature = "sqlite-catalog")]
+fn file_provider(path: &std::path::Path) -> Box<dyn CatalogProvider> {
+    Box::new(crate::catalog::sqlite::SqliteCatalogProvider::new(path))
+}
+
+#[cfg(not(feature = "sqlite-catalog"))]
+fn file_provider(_: &std::path::Path) -> Box<dyn CatalogProvider> {
+    unavailable(AcquisitionDetail::FileProviderUnavailable)
 }

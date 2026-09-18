@@ -23,6 +23,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--major', type=int, choices=range(14, 19), action='append')
     parser.add_argument('--cargo-config')
+    parser.add_argument('--sqlite', action='store_true', help='also test SQLite export, provider parity and offline product CLI')
     parser.add_argument('--cli', action='store_true', help='also test the product CLI and public async API')
     parser.add_argument('--review-sql', type=Path, help='inspect a SQL file against the disposable fixture')
     args = parser.parse_args()
@@ -36,6 +37,14 @@ def main():
         cli_cargo += ['--config', str(Path(args.cargo_config).resolve())]
     if args.cli:
         command(cli_cargo + ['--no-run'], cwd=ROOT)
+    sqlite_cargo = ['cargo', 'test', '-p', 'uroborosql-lint', '--features', 'postgres-catalog,sqlite-catalog', '--test', 'sqlite_postgres']
+    export_cargo = ['cargo', 'test', '-p', 'uroborosql-lint-cli', '--test', 'export']
+    if args.cargo_config:
+        for invocation in [sqlite_cargo, export_cargo]:
+            invocation += ['--config', str(Path(args.cargo_config).resolve())]
+    if args.sqlite:
+        for invocation in [sqlite_cargo, export_cargo]:
+            command(invocation + ['--no-run'], cwd=ROOT)
     for major in args.major or ([18] if args.review_sql else range(14, 19)):
         service = 'pg' + str(major)
         password = secrets.token_hex(24)
@@ -75,6 +84,10 @@ def main():
                         'CATALOG_REVIEW_SQL': str(args.review_sql.resolve()),
                     })
                     continue
+
+                if args.sqlite:
+                    for invocation in [sqlite_cargo, export_cargo]:
+                        command(invocation + ['--', '--ignored', '--nocapture'], cwd=ROOT, env=environment)
 
                 if args.cli:
                     command(cli_cargo + ['--', '--ignored', '--nocapture'], cwd=ROOT, env=environment)

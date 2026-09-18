@@ -10,9 +10,14 @@ repository.workspace = true
 name = "uroborosql-lint"
 path = "src/main.rs"
 
+[features]
+default = ["postgres-catalog", "sqlite-catalog"]
+postgres-catalog = ["uroborosql-lint/postgres-catalog"]
+sqlite-catalog = ["uroborosql-lint/sqlite-catalog"]
+
 [dependencies]
 clap = { workspace = true }
-uroborosql-lint = { path = "../uroborosql-lint", features = ["postgres-catalog"] }
+uroborosql-lint = { path = "../uroborosql-lint", default-features = false }
 tokio = { version = "1", features = ["macros", "rt"] }
 
 [dev-dependencies]

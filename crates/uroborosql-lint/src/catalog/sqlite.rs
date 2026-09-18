@@ -33,7 +33,10 @@ impl SqliteCatalogProvider {
             .disable_statement_logging();
         let mut connection = SqliteConnection::connect_with(&options)
             .await
-            .map_err(read_error)?;
+            .map_err(|_| {
+                AcquisitionError::new(AcquisitionPhase::Connect, AcquisitionErrorKind::Read)
+                    .with_detail(super::AcquisitionDetail::SnapshotFileUnavailable)
+            })?;
         let mut transaction = connection.begin().await.map_err(read_error)?;
         let data = data::read_validated(&mut transaction).await?;
         let snapshot = data.resolve(requests)?;
@@ -136,6 +139,7 @@ fn invalid() -> AcquisitionError {
         AcquisitionPhase::Validate,
         AcquisitionErrorKind::InvalidData,
     )
+    .with_detail(super::AcquisitionDetail::InvalidSnapshot)
 }
 fn read_error(_: sqlx::Error) -> AcquisitionError {
     invalid()
