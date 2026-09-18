@@ -12,6 +12,7 @@ pub enum AcquisitionPhase {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AcquisitionErrorKind {
+    UnsupportedProvider,
     Connection,
     Timeout,
     PermissionDenied,
@@ -40,6 +41,8 @@ pub enum TimeoutScope {
 /// Only classified causes are retained, never driver messages or connection values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AcquisitionDetail {
+    FileProviderUnavailable,
+    PostgresProviderUnavailable,
     InvalidConfiguration(ConfigurationField),
     Authentication,
     DatabaseNotFound,
@@ -79,6 +82,8 @@ impl std::error::Error for AcquisitionError {}
 impl fmt::Display for AcquisitionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let action = match self.detail {
+            Some(AcquisitionDetail::FileProviderUnavailable) => "File catalog is unavailable in this build. Use a build with SQLite catalog support.",
+            Some(AcquisitionDetail::PostgresProviderUnavailable) => "PostgreSQL catalog is unavailable in this build. Enable the postgres-catalog feature.",
             Some(AcquisitionDetail::InvalidConfiguration(field)) => match field {
                 ConfigurationField::Host => "Invalid catalog host. Use a single nonempty DNS name or IP address; Unix sockets and multiple hosts are not supported.",
                 ConfigurationField::Port => "Invalid catalog port. Use a port between 1 and 65535.",
@@ -102,6 +107,7 @@ impl fmt::Display for AcquisitionError {
                 return write!(f, "Catalog {scope} timed out after reaching its {limit:?} limit ({:?}). Check network delays, database load or locks, and the timeout limit.", self.phase);
             }
             None => match self.kind {
+                AcquisitionErrorKind::UnsupportedProvider => "The configured catalog provider is unavailable in this build.",
                 AcquisitionErrorKind::Connection => "Catalog connection failed. Check host, port, database credentials, network access, and TLS settings (server support, trusted CA and host name).",
                 AcquisitionErrorKind::Timeout => "Catalog acquisition timed out. Check network delays, database load or locks, and the timeout limit.",
                 AcquisitionErrorKind::PermissionDenied if self.phase == AcquisitionPhase::Schema => "Catalog schema access was denied. Check the connection role's USAGE privilege on the requested schema.",
