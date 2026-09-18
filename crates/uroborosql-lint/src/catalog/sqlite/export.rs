@@ -60,10 +60,21 @@ fn timestamp_filename(seconds: u64) -> String {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExportError {
-    #[error("{0}")]
+    #[error("{}", acquisition_message(.0))]
     Acquisition(#[from] AcquisitionError),
     #[error("Catalog export filesystem operation failed ({0}). Check the output path and filesystem permissions.")]
     File(&'static str),
+}
+
+fn acquisition_message(error: &AcquisitionError) -> String {
+    if let Some(crate::catalog::AcquisitionDetail::Timeout {
+        scope: TimeoutScope::Acquisition,
+        limit,
+    }) = error.detail
+    {
+        return format!("Catalog export timed out after reaching its {limit:?} overall limit. The deadline includes database reads and local file writing/validation. Check database or disk delays and --acquisition-timeout-ms.");
+    }
+    error.to_string()
 }
 
 /// The supplied output path is relative to the caller's working directory.
@@ -384,6 +395,18 @@ mod tests {
             timestamp_filename(1709251200),
             "catalog-20240301T000000Z.sqlite"
         );
+    }
+    #[test]
+    fn export_deadline_explains_local_work_and_its_setting() {
+        let error = overall_timeout(default_timeouts()).to_string();
+        for guidance in [
+            "120s",
+            "file writing/validation",
+            "database or disk",
+            "--acquisition-timeout-ms",
+        ] {
+            assert!(error.contains(guidance), "{error}");
+        }
     }
     fn data(name: &str) -> SnapshotData {
         SnapshotData {
