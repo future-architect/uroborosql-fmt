@@ -104,19 +104,42 @@ async fn publish_snapshot(
     let closed = connection.close().await.map_err(read_error);
     result?;
     closed?;
-    // Read the committed file through the same read-only transaction as ordinary lint.
-    tokio::time::timeout_at(
-        deadline,
-        super::SqliteCatalogProvider::new(&temporary.path).read(&[]),
+    // Own the read connection outside the deadline so cancellation still awaits close.
+    let reader = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(&temporary.path)
+            .read_only(true)
+            .disable_statement_logging(),
     )
     .await
-    .map_err(|_| overall_timeout(timeouts))??;
+    .map_err(read_error)?;
+    validate_and_close(reader, deadline, timeouts).await?;
     if tokio::time::Instant::now() >= deadline {
         return Err(overall_timeout(timeouts));
     }
     check_destination(output)?;
     // No timeout may race publication: once rename starts its result is authoritative.
     publish_file(&temporary.path, output)
+}
+
+async fn validate_and_close(
+    mut connection: SqliteConnection,
+    deadline: tokio::time::Instant,
+    timeouts: CatalogTimeouts,
+) -> Result<(), ExportError> {
+    let result = tokio::time::timeout_at(deadline, async {
+        let mut transaction = connection.begin().await.map_err(read_error)?;
+        data::read_validated(&mut transaction).await?;
+        transaction.commit().await.map_err(read_error)
+    })
+    .await
+    .map_err(|_| overall_timeout(timeouts))
+    .and_then(|r| r.map_err(ExportError::from));
+    // SQLx close waits for its worker; dropping a timed-out read future alone does not.
+    let closed = connection.close().await.map_err(read_error);
+    result?;
+    closed?;
+    Ok(())
 }
 
 fn publish_file(source: &Path, output: &Path) -> Result<(), ExportError> {
@@ -461,6 +484,55 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(20)).await;
         assert_eq!(fs::read(output).unwrap(), b"previous");
         assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn readonly_validation_timeout_and_failure_close_before_cleanup() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("temporary.sqlite");
+        let options = SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true);
+        let mut writer = SqliteConnection::connect_with(&options).await.unwrap();
+        write_and_validate(&mut writer, &data("new")).await.unwrap();
+        let reader = SqliteConnection::connect_with(&options.clone().read_only(true))
+            .await
+            .unwrap();
+        sqlx::query("BEGIN EXCLUSIVE")
+            .execute(&mut writer)
+            .await
+            .unwrap();
+        let unlock = async {
+            tokio::time::sleep(Duration::from_millis(40)).await;
+            sqlx::query("ROLLBACK").execute(&mut writer).await.unwrap();
+        };
+        let validation = validate_and_close(
+            reader,
+            tokio::time::Instant::now() + Duration::from_millis(10),
+            default_timeouts(),
+        );
+        let (result, ()) = tokio::join!(validation, unlock);
+        assert!(
+            matches!(result, Err(ExportError::Acquisition(e)) if e.kind == crate::catalog::AcquisitionErrorKind::Timeout)
+        );
+        sqlx::query("DELETE FROM snapshot_meta")
+            .execute(&mut writer)
+            .await
+            .unwrap();
+        writer.close().await.unwrap();
+        let reader = SqliteConnection::connect_with(&options.read_only(true))
+            .await
+            .unwrap();
+        assert!(validate_and_close(
+            reader,
+            tokio::time::Instant::now() + Duration::from_secs(5),
+            default_timeouts()
+        )
+        .await
+        .is_err());
+        // Windows also requires every SQLite handle to be closed before deletion.
+        fs::remove_file(&path).unwrap();
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
     }
 
     #[tokio::test]
