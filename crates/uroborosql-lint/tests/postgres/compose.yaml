@@ -1,0 +1,30 @@
+x-postgres: &postgres
+  environment:
+    POSTGRES_PASSWORD: ${CATALOG_TEST_PASSWORD:?set by run.py}
+  ports:
+    - "127.0.0.1::5432"
+  cpus: 2
+  mem_limit: 512m
+  command: [postgres, -c, allow_system_table_mods=on]
+  healthcheck:
+    test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres]
+    interval: 1s
+    timeout: 3s
+    retries: 45
+
+services:
+  pg14:
+    <<: *postgres
+    image: postgres:14.24-bookworm@sha256:185c7c7a36448bcb7e0d3d6aef97ac973ddfae0cc4fa29581ce4e789988a74b1
+  pg15:
+    <<: *postgres
+    image: postgres:15.19-bookworm@sha256:5d1d70e254e3c5d7d76847a9deebb18478cd518df37abf6b278d4bdb1fe5d96c
+  pg16:
+    <<: *postgres
+    image: postgres:16.15-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+  pg17:
+    <<: *postgres
+    image: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+  pg18:
+    <<: *postgres
+    image: postgres:18.6-bookworm@sha256:1c59e2c3c818eaa0f0628f695b36e7c9e362d6b219b36a54a32df645cbd7e1af

@@ -4,6 +4,8 @@ env:
 on:
   workflow_call: null
   workflow_dispatch: null
+permissions:
+  contents: read
 jobs:
   test-and-check:
     runs-on: ubuntu-latest
@@ -39,3 +41,59 @@ jobs:
         uses: ./.github/actions/slack-failure-notify
         with:
           webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  catalog-native:
+    name: Catalog native - ${{ matrix.host }}
+    runs-on: ${{ matrix.host }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest, windows-11-arm]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Enable long paths for parser dependency
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy
+      - name: Cache cargo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: catalog-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+      - name: Clippy with PostgreSQL provider
+        if: runner.os == 'Linux'
+        run: cargo clippy --locked -p uroborosql-lint --all-targets --features postgres-catalog -- --deny warnings
+      - name: Run native unit and contract tests with PostgreSQL provider
+        run: cargo test --locked -p uroborosql-lint --features postgres-catalog
+
+  catalog-postgres:
+    name: Catalog PostgreSQL 14-18
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Cache cargo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: catalog-postgres-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+      # run.py explicitly runs the ignored integration cases; PG18 adds fault cases.
+      - name: Run disposable PostgreSQL integration fixture
+        run: python3 crates/uroborosql-lint/tests/postgres/run.py
