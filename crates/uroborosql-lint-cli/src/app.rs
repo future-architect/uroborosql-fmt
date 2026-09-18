@@ -1,10 +1,12 @@
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, io::Write, path::PathBuf};
 
 use uroborosql_lint::{
     ConfigStore, Diagnostic, LintError, Linter, OneBasedPosition, ParseErrorByteSpan, Severity,
 };
 
 use crate::args::Cli;
+
+mod catalog;
 
 const DEFAULT_CONFIG_CONTENTS: &str = "{}\n";
 
@@ -47,15 +49,15 @@ impl CliError {
     }
 }
 
-pub fn run(cli: Cli) -> Result<(), CliError> {
+pub async fn run(cli: Cli) -> Result<(), CliError> {
     if cli.init {
         return run_init();
     }
 
-    run_lint(cli)
+    run_lint(cli).await
 }
 
-fn run_lint(args: Cli) -> Result<(), CliError> {
+async fn run_lint(args: Cli) -> Result<(), CliError> {
     let linter = Linter::new();
     let cwd = env::current_dir()
         .map_err(|err| CliError::execution(format!("Failed to get cwd: {err}")))?;
@@ -83,14 +85,30 @@ fn run_lint(args: Cli) -> Result<(), CliError> {
 
     let resolved_config = config_store.resolve(&path);
 
-    match linter.run(&sql, &resolved_config) {
-        Ok(diagnostics) => {
+    let provider = resolved_config.catalog_provider();
+    match linter
+        .run_async(&sql, &resolved_config, provider.as_deref())
+        .await
+    {
+        Ok(result) => {
+            let diagnostics = result.diagnostics;
             let should_fail = diagnostics
                 .iter()
                 .any(|diagnostic| args.fail_level.matches(diagnostic.severity));
 
             for diagnostic in &diagnostics {
                 print_diagnostic(&display, diagnostic);
+            }
+
+            std::io::stdout().flush().map_err(|err| {
+                CliError::execution(format!("Failed to flush diagnostics: {err}"))
+            })?;
+            eprintln!("{}", catalog::summary(&display, &result.catalog));
+            if result.catalog.has_failures() {
+                return Err(CliError {
+                    code: ExitCode::ExecutionError,
+                    message: None,
+                });
             }
 
             if should_fail {

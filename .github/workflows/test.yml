@@ -96,4 +96,4 @@ jobs:
           key: catalog-postgres-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
       # run.py explicitly runs the ignored integration cases; PG18 adds fault cases.
       - name: Run disposable PostgreSQL integration fixture
-        run: python3 crates/uroborosql-lint/tests/postgres/run.py
+        run: python3 crates/uroborosql-lint/tests/postgres/run.py --cli

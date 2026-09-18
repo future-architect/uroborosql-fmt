@@ -23,6 +23,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--major', type=int, choices=range(14, 19), action='append')
     parser.add_argument('--cargo-config')
+    parser.add_argument('--cli', action='store_true', help='also test the product CLI and public async API')
     parser.add_argument('--review-sql', type=Path, help='inspect a SQL file against the disposable fixture')
     args = parser.parse_args()
     cargo = ['cargo', 'test', '-p', 'uroborosql-lint', '--features', 'postgres-catalog',
@@ -30,6 +31,11 @@ def main():
     if args.cargo_config:
         cargo += ['--config', str(Path(args.cargo_config).resolve())]
     command(cargo + ['--no-run'], cwd=ROOT)
+    cli_cargo = ['cargo', 'test', '-p', 'uroborosql-lint-cli', '--test', 'postgres']
+    if args.cargo_config:
+        cli_cargo += ['--config', str(Path(args.cargo_config).resolve())]
+    if args.cli:
+        command(cli_cargo + ['--no-run'], cwd=ROOT)
     for major in args.major or ([18] if args.review_sql else range(14, 19)):
         service = 'pg' + str(major)
         password = secrets.token_hex(24)
@@ -69,6 +75,9 @@ def main():
                         'CATALOG_REVIEW_SQL': str(args.review_sql.resolve()),
                     })
                     continue
+
+                if args.cli:
+                    command(cli_cargo + ['--', '--ignored', '--nocapture'], cwd=ROOT, env=environment)
 
                 for test_name in ['definitions_and_visibility', 'refreshes_each_acquisition', 'failures_are_not_absence', 'concurrent_ddl_keeps_one_snapshot']:
                     test(test_name)

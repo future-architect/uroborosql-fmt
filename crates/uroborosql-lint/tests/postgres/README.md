@@ -5,6 +5,9 @@ Docker engine with Docker Compose and Linux container support:
 
     python3 crates/uroborosql-lint/tests/postgres/run.py
 
+Add `--cli` to run product CLI configuration/output/exit tests and public async
+API parity against the same disposable database.
+
 Use `--major 18` for the fault suite or `--cargo-config PATH` for a local
 parser override. The script runs one version at a time, binds a random
 loopback port, generates isolated credentials, and removes its containers,
@@ -29,8 +32,8 @@ is disposable even when a test fails.
 Environment precedence and pgpass tests use child-process environments,
 without mutating the running test process's environment.
 
-Provider code is enabled by `postgres-catalog`. CLI/LSP integration and SQLite
-providers are separate work.
+Provider code is enabled by `postgres-catalog`. The CLI enables it by default.
+LSP integration and SQLite providers are separate work.
 
 ## CI coverage
 
