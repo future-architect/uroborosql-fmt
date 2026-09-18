@@ -346,6 +346,11 @@ fn invalid_connection_keeps_cst_and_reports_safe_classified_failure_once() {
         .contains("no-distinct"));
     let status = String::from_utf8(output.stderr).unwrap();
     assert!(status.contains("failed=2"));
-    assert_eq!(status.matches("Invalid catalog host").count(), 1);
+    let reason = if cfg!(feature = "postgres-catalog") {
+        "Invalid catalog host"
+    } else {
+        "PostgreSQL catalog is unavailable"
+    };
+    assert_eq!(status.matches(reason).count(), 1);
     assert!(!status.contains("private-"));
 }

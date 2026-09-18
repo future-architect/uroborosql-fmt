@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run catalog tests against disposable Docker Compose services."""
 import argparse
+import json
 import os
 from pathlib import Path
 import secrets
@@ -107,6 +108,28 @@ def main():
                     test('query_timeout_and_cancellation_close_connections')
                     test('total_deadline_limits_multiple_successful_queries')
                     test('catalog_permission_failure_is_unavailable')
+
+                if args.sqlite and major == 18:
+                    metadata = ['cargo', 'metadata', '--format-version', '1', '--no-deps']
+                    if args.cargo_config:
+                        metadata += ['--config', str(Path(args.cargo_config).resolve())]
+                    target = Path(json.loads(output(metadata, cwd=ROOT))['target_directory'])
+                    binary = target / 'debug' / ('uroborosql-lint.exe' if os.name == 'nt' else 'uroborosql-lint')
+                    snapshot = temp / 'offline.sqlite'
+                    command([str(binary), 'export-catalog', '--host', '127.0.0.1', '--port', port,
+                             '--user', 'catalog_reader', '--dbname', 'postgres', '--tls-mode', 'disable',
+                             '--output', str(snapshot)], env=dict(environment, PGPASSWORD=password))
+                    (temp / 'query.sql').write_text('SELECT missing FROM public.users;')
+                    (temp / 'lint.json').write_text('{"db":{"schemaProvider":"file","path":"offline.sqlite"}}')
+                    command(compose + ['stop', service], env=compose_env)
+                    offline_env = {key: value for key, value in environment.items()
+                                   if not key.startswith(('PG', 'CATALOG_TEST_'))}
+                    offline = subprocess.run([str(binary), 'query.sql', '--config', 'lint.json'],
+                                             cwd=temp, env=offline_env, capture_output=True, text=True)
+                    assert offline.returncode == 1, offline.stderr
+                    assert 'query.sql:1:8: error: no-unknown-reference' in offline.stdout, offline.stdout
+                    assert 'complete=1 excluded=0 failed=0' in offline.stderr, offline.stderr
+                    print('offline CLI after PostgreSQL stop: ok', flush=True)
         finally:
             command(compose + ['down', '--volumes'], env=compose_env)
             if image_id and image_id not in previous:
