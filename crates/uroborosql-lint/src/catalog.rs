@@ -1,5 +1,10 @@
 //! Callers normalize lookup names; providers preserve catalog spelling and
 //! certify completeness before claiming absence.
+#[allow(dead_code)]
+pub(crate) mod input;
+#[allow(dead_code)]
+pub(crate) mod resolution;
+
 use std::{collections::BTreeMap, future::Future, pin::Pin};
 
 #[cfg(feature = "postgres-catalog")]
@@ -51,6 +56,7 @@ pub enum AbsenceKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnknownReason {
+    RecoveredSource,
     UnsupportedRelation,
     IncompleteCoverage,
     UnsupportedSyntax,

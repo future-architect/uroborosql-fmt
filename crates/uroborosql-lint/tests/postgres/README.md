@@ -45,3 +45,21 @@ Windows and macOS runners execute feature-enabled unit/contract tests.
 PostgreSQL acquisition and fault cases run separately on Ubuntu.
 TLS uses SQLx's standard implementation; dedicated TLS fixtures and
 certificate-store manipulation are outside this test suite's scope.
+
+## Inspect a SQL file
+
+    python3 crates/uroborosql-lint/tests/postgres/run.py --review-sql /path/to/query.sql
+
+This runs one ignored library test against the disposable fixture (PostgreSQL
+18 by default; `--major` selects another supported version). The SQL file is
+parsed and linted, never executed. Its table references are resolved against
+`fixture.sql`, including `public.users(id, name, age)`, as the fixture's
+`postgres` user. Only `no-unknown-reference` is enabled.
+
+The test calls the existing input preparation, PostgreSQL provider and internal
+catalog linter, then prints statement status and diagnostics with source
+positions. This is a manual inspection helper, not the product CLI or a public
+async API. Cargo test success means the helper ran; inspect the printed status
+and diagnostics to assess the SQL. Acquisition failure is printed separately
+and does not fail the test. Existing fixture lifecycle and cleanup also apply
+in this mode.
