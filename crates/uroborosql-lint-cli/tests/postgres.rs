@@ -1,3 +1,4 @@
+#![cfg(feature = "postgres-catalog")]
 //! Executed by the existing disposable PostgreSQL fixture runner, never a user database.
 use assert_cmd::Command;
 use std::{env, fs};

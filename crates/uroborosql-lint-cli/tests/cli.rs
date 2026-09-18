@@ -291,9 +291,13 @@ fn unavailable_file_catalog_retains_diagnostics_and_overrides_fail_none() {
         .assert()
         .code(2)
         .stdout(contains("no-distinct"))
-        .stderr(
-            contains("complete=0 excluded=1 failed=1").and(contains("File catalog is unavailable")),
-        );
+        .stderr(contains("complete=0 excluded=1 failed=1").and(contains(
+            if cfg!(feature = "sqlite-catalog") {
+                "Catalog snapshot could not be opened"
+            } else {
+                "File catalog is unavailable"
+            },
+        )));
     assert!(!temp.path().join("absent.sqlite").exists());
 }
 

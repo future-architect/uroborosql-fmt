@@ -63,6 +63,26 @@ async fn official_export_matches_live_provider() {
         .await
         .unwrap();
     assert_eq!(live, offline);
+    let memory = uroborosql_lint::catalog::InMemoryCatalogProvider::new(live);
+    let server = PostgresCatalogProvider::new(config.clone());
+    let file = SqliteCatalogProvider::new(&path);
+    let linter = uroborosql_lint::Linter::new();
+    let cfg = uroborosql_lint::ResolvedLintConfig::default();
+    for sql in [
+        "SELECT id, missing FROM public.users WHERE agge=1;",
+        "SELECT ctid, first_col, removed, last_col FROM public.dropped;",
+        "SELECT id FROM users; SELECT missing FROM public.user_view;",
+        "SELECT missing FROM hidden.users; SELECT id FROM public.partitioned;",
+        "SELECT x.id FROM /*#table*/ AS x; SELECT missing FROM public.users;",
+        "SELECT missing FROM shadowed_view; SELECT \"Id\" FROM public.\"Users\";",
+    ] {
+        let expected = linter.run_async(sql, &cfg, Some(&server)).await.unwrap();
+        for provider in [&memory as &dyn CatalogProvider, &file] {
+            let actual = linter.run_async(sql, &cfg, Some(provider)).await.unwrap();
+            assert_eq!(actual.diagnostics, expected.diagnostics, "{sql}");
+            assert_eq!(actual.catalog, expected.catalog, "{sql}");
+        }
+    }
     // The portable artifact needs no journal or connection settings.
     assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
     let bytes = std::fs::read(&path).unwrap();

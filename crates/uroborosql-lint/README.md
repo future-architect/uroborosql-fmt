@@ -97,9 +97,14 @@ Timeouts are positive integer milliseconds. Omitted fields keep the defaults
 shown above. The overall acquisition limit includes connection setup and all
 queries, rather than resetting for each table.
 
-`schemaProvider: file` with a `path` is recognized but SQLite acquisition is not
-available in this version. An eligible catalog check reports an acquisition
-failure; it never creates a file or falls back to a server.
+`schemaProvider: file` reads a validated SQLite snapshot at `path`, relative to
+the config directory. Enable `sqlite-catalog` to use `SqliteCatalogProvider` without
+PostgreSQL or TLS dependencies. The reader opens an existing file read-only,
+validates the complete format-v1 catalog in one transaction, and uses its stored
+search path and schema USAGE decisions. Missing or invalid files fail acquisition;
+they never create a file or fall back to a server. Only PostgreSQL 14–18 snapshots
+are supported. See the [CLI export workflow](../uroborosql-lint-cli/README.md#export-and-offline-catalog-checks)
+for creating and refreshing snapshots.
 
 ## Library API
 
@@ -120,7 +125,8 @@ let result = Linter::new()
 ```
 
 The library does not create a runtime. Enable `postgres-catalog` when constructing
-a configured PostgreSQL provider; the CLI enables it. The default library build
+a configured PostgreSQL provider; enable `sqlite-catalog` for file snapshots. The CLI
+enables both by default. The default library build
 still supports in-memory/custom providers without SQLx. Passing a provider
 explicitly selects it regardless of `resolved_config.db`; passing `None` skips
 catalog analysis. Provider construction performs no I/O.

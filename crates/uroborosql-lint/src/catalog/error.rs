@@ -42,6 +42,8 @@ pub enum TimeoutScope {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AcquisitionDetail {
     FileProviderUnavailable,
+    SnapshotFileUnavailable,
+    InvalidSnapshot,
     PostgresProviderUnavailable,
     InvalidConfiguration(ConfigurationField),
     Authentication,
@@ -82,6 +84,8 @@ impl std::error::Error for AcquisitionError {}
 impl fmt::Display for AcquisitionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let action = match self.detail {
+            Some(AcquisitionDetail::SnapshotFileUnavailable) => "Catalog snapshot could not be opened. Check that the file exists and is readable.",
+            Some(AcquisitionDetail::InvalidSnapshot) => "Catalog snapshot is invalid, incomplete or unsupported. Export a complete snapshot with a supported format version.",
             Some(AcquisitionDetail::FileProviderUnavailable) => "File catalog is unavailable in this build. Use a build with SQLite catalog support.",
             Some(AcquisitionDetail::PostgresProviderUnavailable) => "PostgreSQL catalog is unavailable in this build. Enable the postgres-catalog feature.",
             Some(AcquisitionDetail::InvalidConfiguration(field)) => match field {
