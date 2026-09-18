@@ -447,3 +447,54 @@ fn recovery_keeps_utf8_crlf_repeated_and_quoted_reference_ranges() {
         .windows(2)
         .all(|pair| pair[0].span.start.byte < pair[1].span.start.byte));
 }
+
+/// Manual SQL inspection against the disposable PostgreSQL fixture.
+#[cfg(feature = "postgres-catalog")]
+#[tokio::test]
+#[ignore = "use tests/postgres/run.py --review-sql PATH"]
+async fn inspect_postgres_sql() {
+    use crate::catalog::postgres::{PostgresCatalogProvider, PostgresConfig, TlsMode};
+    use crate::diagnostic::OneBasedPosition;
+    use std::{env, fs};
+
+    let path = env::var("CATALOG_REVIEW_SQL").expect("set CATALOG_REVIEW_SQL to a SQL file");
+    let sql = fs::read_to_string(&path).expect("read SQL file");
+    let tree = tree_sitter::parse_2way(&sql).expect("parse SQL file");
+    let prepared = input::prepare(&tree.root_node());
+    let mut connection = PostgresConfig::new("127.0.0.1", "postgres", "postgres");
+    connection.port = env::var("CATALOG_TEST_PORT")
+        .expect("run tests/postgres/run.py")
+        .parse()
+        .expect("numeric fixture port");
+    connection.password = Some(env::var("CATALOG_TEST_PASSWORD").expect("fixture password"));
+    connection.tls_mode = TlsMode::Disable;
+    let acquired = PostgresCatalogProvider::new(connection)
+        .acquire(&prepared.requests)
+        .await;
+    if let Err(error) = &acquired {
+        println!("catalog acquisition: {error}");
+    }
+    let result = Linter::new()
+        .run_with_catalog(&sql, &config(), acquired.as_ref())
+        .expect("lint SQL file");
+    for (index, statement) in result.statements.iter().enumerate() {
+        println!(
+            "statement {}: {:?}; exclusion={:?}",
+            index + 1,
+            statement.status,
+            statement.exclusion
+        );
+    }
+    println!("diagnostics: {}", result.diagnostics.len());
+    for diagnostic in result.diagnostics {
+        println!(
+            "{}:{}: {:?} {}: {} (source={:?})",
+            path,
+            OneBasedPosition::from_byte_offset(&sql, diagnostic.span.start.byte),
+            diagnostic.severity,
+            diagnostic.code,
+            diagnostic.message,
+            &sql[diagnostic.span.start.byte..diagnostic.span.end.byte]
+        );
+    }
+}
