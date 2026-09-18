@@ -111,7 +111,7 @@ async fn publish_snapshot(
         connection.close().await.map_err(read_error)?;
         return Err(overall_timeout(timeouts));
     }
-    let result = tokio::time::timeout_at(deadline, write_and_validate(&mut connection, data))
+    let result = tokio::time::timeout_at(deadline, write_snapshot(&mut connection, data))
         .await
         .map_err(|_| overall_timeout(timeouts))
         .and_then(|r| r.map_err(ExportError::from));
@@ -258,7 +258,7 @@ fn pg_oid(row: &sqlx::postgres::PgRow, name: &str) -> Result<u32, AcquisitionErr
     oid.try_into().map_err(|_| invalid())
 }
 
-async fn write_and_validate(
+async fn write_snapshot(
     connection: &mut SqliteConnection,
     data: &SnapshotData,
 ) -> Result<(), AcquisitionError> {
@@ -326,7 +326,6 @@ async fn write_and_validate(
         .execute(&mut *tx)
         .await
         .map_err(read_error)?;
-    data::read_validated(&mut tx).await?;
     tx.commit().await.map_err(read_error)?;
     Ok(())
 }
@@ -521,7 +520,7 @@ mod tests {
             .filename(&path)
             .create_if_missing(true);
         let mut writer = SqliteConnection::connect_with(&options).await.unwrap();
-        write_and_validate(&mut writer, &data("new")).await.unwrap();
+        write_snapshot(&mut writer, &data("new")).await.unwrap();
         let reader = SqliteConnection::connect_with(&options.clone().read_only(true))
             .await
             .unwrap();
@@ -591,14 +590,43 @@ mod tests {
         assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
     }
     #[tokio::test]
-    async fn invalid_data_and_expired_deadlines_preserve_the_previous_file() {
+    async fn committed_invalid_data_and_expired_deadlines_preserve_the_previous_file() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("catalog.sqlite");
         fs::write(&path, b"old bytes").unwrap();
         let mut incomplete = data("new");
         incomplete.meta.counts[2] = 2;
+        // Writing commits the file; only the subsequent read-only validation certifies it.
+        let staged = temp.path().join("unpublished.sqlite");
+        let options = SqliteConnectOptions::new()
+            .filename(&staged)
+            .create_if_missing(true);
+        let mut writer = SqliteConnection::connect_with(&options).await.unwrap();
+        write_snapshot(&mut writer, &incomplete).await.unwrap();
+        writer.close().await.unwrap();
+        let mut reader = SqliteConnection::connect_with(&options.read_only(true))
+            .await
+            .unwrap();
+        let (stored_count,): (i64,) = sqlx::query_as("SELECT attribute_count FROM snapshot_meta")
+            .fetch_one(&mut reader)
+            .await
+            .unwrap();
+        assert_eq!(stored_count, 2);
+        let error = validate_and_close(
+            reader,
+            tokio::time::Instant::now() + Duration::from_secs(5),
+            default_timeouts(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(error, ExportError::Acquisition(e) if e.kind == crate::catalog::AcquisitionErrorKind::InvalidData)
+        );
+        // Validation closes its worker even when the already committed file is invalid.
+        fs::remove_file(&staged).unwrap();
         assert!(publish(&incomplete, &path).await.is_err());
         assert_eq!(fs::read(&path).unwrap(), b"old bytes");
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
         let deadline = tokio::time::Instant::now() - Duration::from_secs(1);
         assert!(
             publish_snapshot(&data("new"), &path, deadline, default_timeouts())
