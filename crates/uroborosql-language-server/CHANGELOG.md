@@ -1,5 +1,7 @@
 # Changelog
 
+## [1.0.2](https://github.com/future-architect/uroborosql-fmt/compare/uroborosql-language-server-v1.0.1...uroborosql-language-server-v1.0.2) (2026-09-18)
+
 ## [1.0.1](https://github.com/future-architect/uroborosql-fmt/compare/uroborosql-language-server-v1.0.0...uroborosql-language-server-v1.0.1) (2026-07-02)
 
 

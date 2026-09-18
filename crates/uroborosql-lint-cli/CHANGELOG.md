@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.1.1](https://github.com/future-architect/uroborosql-fmt/compare/uroborosql-lint-cli-v0.1.0...uroborosql-lint-cli-v0.1.1) (2026-09-18)
+
 ## 0.1.0 (2026-06-24)
 
 

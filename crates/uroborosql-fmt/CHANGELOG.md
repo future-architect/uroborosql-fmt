@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/future-architect/uroborosql-fmt/compare/uroborosql-fmt-v1.1.0...uroborosql-fmt-v1.2.0) (2026-09-18)
+
+
+### Features
+
+* **lint:** add catalog providers ([#267](https://github.com/future-architect/uroborosql-fmt/issues/267)) ([d48fed2](https://github.com/future-architect/uroborosql-fmt/commit/d48fed2819a69850636952ad25b188e2ede81298))
+
+
+### Bug Fixes
+
+* address clippy::useless_borrows_in_formatting warning ([#268](https://github.com/future-architect/uroborosql-fmt/issues/268)) ([af1d580](https://github.com/future-architect/uroborosql-fmt/commit/af1d58048f24a6461f921770711db8a607077604))
+
 ## [1.1.0](https://github.com/future-architect/uroborosql-fmt/compare/uroborosql-fmt-v1.0.2...uroborosql-fmt-v1.1.0) (2026-06-24)
 
 
