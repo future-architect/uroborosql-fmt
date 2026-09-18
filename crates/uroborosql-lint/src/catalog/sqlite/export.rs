@@ -91,11 +91,15 @@ async fn publish_snapshot(
         .journal_mode(SqliteJournalMode::Delete)
         .foreign_keys(true)
         .disable_statement_logging();
-    let mut connection =
-        tokio::time::timeout_at(deadline, SqliteConnection::connect_with(&options))
-            .await
-            .map_err(|_| overall_timeout(timeouts))?
-            .map_err(read_error)?;
+    // Recover ownership even when file opening crosses the deadline, then close before cleanup.
+    // Local OS file operations and worker shutdown are not a strict wall-clock guarantee.
+    let mut connection = SqliteConnection::connect_with(&options)
+        .await
+        .map_err(read_error)?;
+    if tokio::time::Instant::now() >= deadline {
+        connection.close().await.map_err(read_error)?;
+        return Err(overall_timeout(timeouts));
+    }
     let result = tokio::time::timeout_at(deadline, write_and_validate(&mut connection, data))
         .await
         .map_err(|_| overall_timeout(timeouts))
@@ -506,11 +510,18 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(40)).await;
             sqlx::query("ROLLBACK").execute(&mut writer).await.unwrap();
         };
-        let validation = validate_and_close(
-            reader,
-            tokio::time::Instant::now() + Duration::from_millis(10),
-            default_timeouts(),
-        );
+        let started = std::time::Instant::now();
+        let validation = async {
+            let result = validate_and_close(
+                reader,
+                tokio::time::Instant::now() + Duration::from_millis(10),
+                default_timeouts(),
+            )
+            .await;
+            // A dropped connection would return at 10 ms while its worker still waits on the lock.
+            assert!(started.elapsed() >= Duration::from_millis(30));
+            result
+        };
         let (result, ()) = tokio::join!(validation, unlock);
         assert!(
             matches!(result, Err(ExportError::Acquisition(e)) if e.kind == crate::catalog::AcquisitionErrorKind::Timeout)
