@@ -61,7 +61,7 @@ directory. If the file already exists, the command fails without overwriting it.
 
 - `0`: lint succeeded and no diagnostics at or above `--fail-level` were found
 - `1`: lint succeeded and at least one diagnostic at or above `--fail-level` was found
-- `2`: lint could not complete because of a usage or execution failure such as missing config, invalid CLI arguments, invalid config, I/O failure, or SQL parse failure
+- `2`: lint could not complete because of a usage or execution failure such as missing config, invalid CLI arguments, invalid config, I/O failure, SQL parse failure, or catalog acquisition failure
 
 ### Fail Level
 
@@ -70,7 +70,25 @@ Use `--fail-level <none|info|warning|error>` to control which diagnostics cause 
 - Default: `error`
 - `info` currently behaves the same as `warning` because the implemented diagnostics are `warning` or `error` today; it exists so the CLI can stay aligned if `info` diagnostics are added later
 - `warning` is useful for CI when warnings, including lint directive warnings, should fail the run
-- `none` keeps diagnostics visible without failing the process
+- `none` keeps diagnostics visible without diagnostic-threshold failure; execution failures still return 2
+
+## PostgreSQL catalog checks
+
+Configure `db.schemaProvider: server` as described in the lint engine README,
+then run the same lint command. Supported single-table SELECT references are
+checked against PostgreSQL; the SQL being linted is never executed.
+
+SQL diagnostics retain the existing stdout format. A separate stderr summary
+reports completed, excluded, and failed statements, including why statements
+were excluded. Unconfigured or disabled catalog checks print a short skip reason.
+Unsupported SQL alone is not an execution error. Recovered sources whose
+existence cannot be checked are reported as deferred.
+
+If catalog acquisition fails, available CST diagnostics are still printed and
+the exit code is 2, even with `--fail-level none`. There is no database access
+when catalog checking is unconfigured, disabled by config, or has no table
+requests. SQLite file acquisition is not available yet and fails explicitly
+when an eligible check requests it.
 
 ## Limitations
 
