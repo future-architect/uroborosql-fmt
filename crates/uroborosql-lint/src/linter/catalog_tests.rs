@@ -161,10 +161,10 @@ fn quoted_case_and_real_column_whole_row_precedence() {
 
 #[test]
 fn failures_and_unknown_sources_never_become_absence() {
-    let error = AcquisitionError {
-        phase: AcquisitionPhase::Schema,
-        kind: AcquisitionErrorKind::PermissionDenied,
-    };
+    let error = AcquisitionError::new(
+        AcquisitionPhase::Schema,
+        AcquisitionErrorKind::PermissionDenied,
+    );
     for outcome in [
         Lookup::Unknown(UnknownReason::UnsupportedRelation),
         Lookup::Unknown(UnknownReason::IncompleteCoverage),
@@ -229,10 +229,7 @@ fn suppression_preserves_other_rules_lines_and_internal_resolution() {
         r.statements[1].status,
         AnalysisStatus::Excluded(_)
     ));
-    let error = AcquisitionError {
-        phase: AcquisitionPhase::Connect,
-        kind: AcquisitionErrorKind::Connection,
-    };
+    let error = AcquisitionError::new(AcquisitionPhase::Connect, AcquisitionErrorKind::Connection);
     let r = Linter::new()
         .run_with_catalog(sql, &cfg, Err(&error))
         .unwrap();

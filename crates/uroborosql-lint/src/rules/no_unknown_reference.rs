@@ -53,7 +53,6 @@ impl NoUnknownReference {
                 Resolution::Ambiguous | Resolution::Unknown(_) => {}
             }
         }
-        diagnostics.sort_by_key(|d| (d.span.start.byte, d.span.end.byte));
         diagnostics
     }
 

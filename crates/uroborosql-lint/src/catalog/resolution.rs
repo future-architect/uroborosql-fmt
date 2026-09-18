@@ -118,7 +118,7 @@ pub(crate) fn resolve(
                         .alias
                         .as_ref()
                         .map(|alias| alias.name.clone())
-                        .or_else(|| output_name(&target.expr, select, &source));
+                        .or_else(|| output_name(&target.expr, select, &references));
                     OutputColumn { name, references }
                 })
                 .collect();
@@ -172,10 +172,10 @@ fn resolve_expr(
             input: input.as_ref().clone(),
             outcome: resolve_reference(input, select, source),
         }),
-        Expr::Group(operand) | Expr::Unary { operand, .. } | Expr::IsNull { operand, .. } => {
+        Expr::Group(operand) | Expr::Unary { operand } | Expr::IsNull { operand } => {
             resolve_expr(operand, clause, select, source, results)
         }
-        Expr::Binary { left, right, .. } => {
+        Expr::Binary { left, right } => {
             resolve_expr(left, clause, select, source, results);
             resolve_expr(right, clause, select, source, results);
         }
@@ -232,20 +232,20 @@ fn resolve_reference(
     }
 }
 
-fn output_name(expr: &Expr, select: &Select, source: &Lookup<&TableDefinition>) -> Option<String> {
+fn output_name(expr: &Expr, select: &Select, references: &[Reference]) -> Option<String> {
     match expr {
-        Expr::Column(input) => match resolve_reference(input, select, source) {
+        Expr::Group(operand) => output_name(operand, select, references),
+        Expr::Column(_) => match &references.first()?.outcome {
             ReferenceOutcome::Lookup {
                 resolution: Resolution::Resolved(ResolvedValue::Column { name, .. }),
                 ..
-            } => Some(name),
+            } => Some(name.clone()),
             ReferenceOutcome::Lookup {
                 resolution: Resolution::Resolved(ResolvedValue::WholeRow(_)),
                 ..
             } => Some(select.source.visible_name().into()),
             _ => None,
         },
-        Expr::Group(operand) => output_name(operand, select, source),
         _ => None,
     }
 }

@@ -27,19 +27,9 @@ pub(crate) enum Expr {
     Column(Box<ColumnRef>),
     Literal,
     Group(Box<Expr>),
-    Unary {
-        operator: K,
-        operand: Box<Expr>,
-    },
-    Binary {
-        operator: K,
-        left: Box<Expr>,
-        right: Box<Expr>,
-    },
-    IsNull {
-        negated: bool,
-        operand: Box<Expr>,
-    },
+    Unary { operand: Box<Expr> },
+    Binary { left: Box<Expr>, right: Box<Expr> },
+    IsNull { operand: Box<Expr> },
 }
 
 #[derive(Debug, Clone)]
@@ -325,7 +315,6 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
                 && c[1].kind() == K::a_expr
             {
                 return Ok(Expr::Unary {
-                    operator: c[0].kind(),
                     operand: Box::new(expr(&c[1])?),
                 });
             }
@@ -349,7 +338,6 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
                 )
             {
                 return Ok(Expr::Binary {
-                    operator: c[1].kind(),
                     left: Box::new(expr(&c[0])?),
                     right: Box::new(expr(&c[2])?),
                 });
@@ -358,7 +346,6 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
                 || kinds(&c, &[K::a_expr, K::IS, K::NOT, K::NULL_P])
             {
                 return Ok(Expr::IsNull {
-                    negated: c.len() == 4,
                     operand: Box::new(expr(&c[0])?),
                 });
             }

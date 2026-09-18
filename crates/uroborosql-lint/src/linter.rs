@@ -102,7 +102,6 @@ impl Linter {
                 diagnostics.extend(rule.diagnose(&statements, *severity));
             }
         }
-        diagnostics.sort_by_key(|d| (d.span.start.byte, d.span.end.byte));
         Ok(CatalogLintResult {
             diagnostics: suppress_diagnostics(&root, diagnostics),
             statements,

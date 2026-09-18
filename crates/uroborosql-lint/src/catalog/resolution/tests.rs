@@ -216,10 +216,10 @@ fn source_search_does_not_fill_columns_from_later_tables() {
 
 #[test]
 fn absent_unknown_and_unavailable_sources_propagate_without_qualifier_errors() {
-    let error = AcquisitionError {
-        phase: AcquisitionPhase::Schema,
-        kind: AcquisitionErrorKind::PermissionDenied,
-    };
+    let error = AcquisitionError::new(
+        AcquisitionPhase::Schema,
+        AcquisitionErrorKind::PermissionDenied,
+    );
     for outcome in [
         Lookup::Absent(AbsenceKind::Schema),
         Lookup::Absent(AbsenceKind::Table),
@@ -301,4 +301,20 @@ fn quoted_spelling_and_zero_column_tables_are_preserved() {
             .collect::<Vec<_>>(),
         [Some("empty"), Some("ctid"), None, None, None]
     );
+}
+
+#[test]
+fn implicit_output_names_require_a_direct_reference_through_groups() {
+    let r = run(
+        "SELECT ((id)), +id, id + 1, id IS NULL, (u), (+id) AS named FROM users u",
+        &snapshot(),
+    );
+    assert_eq!(
+        r.outputs
+            .iter()
+            .map(|o| o.name.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("id"), None, None, None, Some("u"), Some("named")]
+    );
+    assert!(r.outputs.iter().all(|o| o.references.len() == 1));
 }
