@@ -190,8 +190,11 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
     {
         return Err(Exclusion::UnsupportedSyntax);
     }
-    let source = source(&c[2])?;
-    let list = children(&c[1]);
+    let target_list = &c[1];
+    let from_clause = &c[2];
+    let where_clause = c.get(3);
+    let source = source(from_clause)?;
+    let list = children(target_list);
     if list.is_empty() || list.len().is_multiple_of(2) {
         return Err(Exclusion::UnsupportedSyntax);
     }
@@ -207,24 +210,27 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
             }
             let t = children(node);
             let alias = if kinds(&t, &[K::a_expr, K::AS, K::ColLabel]) {
-                Some(identifier(&t[2])?)
+                let output_alias = &t[2];
+                Some(identifier(output_alias)?)
             } else if kinds(&t, &[K::a_expr]) {
                 None
             } else {
                 return Err(Exclusion::UnsupportedSyntax);
             };
+            let target_expr = &t[0];
             targets.push(Target {
-                expr: expr(&t[0])?,
+                expr: expr(target_expr)?,
                 alias,
             });
         }
     }
-    let predicate = if let Some(w) = c.get(3) {
-        let w = children(w);
-        if !kinds(&w, &[K::WHERE, K::a_expr]) {
+    let predicate = if let Some(where_clause) = where_clause {
+        let where_children = children(where_clause);
+        if !kinds(&where_children, &[K::WHERE, K::a_expr]) {
             return Err(Exclusion::UnsupportedSyntax);
         }
-        Some(expr(&w[1])?)
+        let predicate_expr = &where_children[1];
+        Some(expr(predicate_expr)?)
     } else {
         None
     };
@@ -236,22 +242,25 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
 }
 
 fn source(node: &Node<'_>) -> Result<Source, Exclusion> {
-    let c = children(node);
-    if !kinds(&c, &[K::FROM, K::from_list]) {
+    let from_children = children(node);
+    if !kinds(&from_children, &[K::FROM, K::from_list]) {
         return Err(Exclusion::UnsupportedSyntax);
     }
-    let table = only(&c[1], K::table_ref)?;
-    let t = children(&table);
-    if !kinds(&t, &[K::relation_expr]) && !kinds(&t, &[K::relation_expr, K::opt_alias_clause]) {
+    let from_list = &from_children[1];
+    let table = only(from_list, K::table_ref)?;
+    let table_children = children(&table);
+    if !kinds(&table_children, &[K::relation_expr])
+        && !kinds(&table_children, &[K::relation_expr, K::opt_alias_clause])
+    {
         return Err(Exclusion::UnsupportedSyntax);
     }
-    let relation = only(&t[0], K::qualified_name)?;
+    let relation_expr = &table_children[0];
+    let relation = only(relation_expr, K::qualified_name)?;
     let parts = children(&relation);
-    let recovered = parts.len() == 1
-        && parts[0].kind() == K::ColId
-        && only(&parts[0], K::IDENT).is_ok_and(|token| {
-            token.text().is_empty() && token.range().start_byte == token.range().end_byte
-        });
+    let recovered = matches!(parts.as_slice(), [col_id] if col_id.kind() == K::ColId
+    && only(col_id, K::IDENT).is_ok_and(|token| {
+        token.text().is_empty() && token.range().start_byte == token.range().end_byte
+    }));
     let name = if recovered {
         SourceName::Recovered
     } else {
@@ -267,13 +276,15 @@ fn source(node: &Node<'_>) -> Result<Source, Exclusion> {
             _ => return Err(Exclusion::UnsupportedSyntax),
         }
     };
-    let alias = if let Some(a) = t.get(1) {
-        let a = only(a, K::alias_clause)?;
-        let a = children(&a);
-        if kinds(&a, &[K::AS, K::ColId]) {
-            Some(identifier(&a[1])?)
-        } else if kinds(&a, &[K::ColId]) {
-            Some(identifier(&a[0])?)
+    let alias = if let Some(opt_alias_clause) = table_children.get(1) {
+        let alias_clause = only(opt_alias_clause, K::alias_clause)?;
+        let alias_children = children(&alias_clause);
+        if kinds(&alias_children, &[K::AS, K::ColId]) {
+            let alias_name = &alias_children[1];
+            Some(identifier(alias_name)?)
+        } else if kinds(&alias_children, &[K::ColId]) {
+            let alias_name = &alias_children[0];
+            Some(identifier(alias_name)?)
         } else {
             return Err(Exclusion::UnsupportedSyntax);
         }
@@ -291,18 +302,20 @@ fn source(node: &Node<'_>) -> Result<Source, Exclusion> {
 }
 
 fn names(node: &Node<'_>) -> Result<Vec<Identifier>, Exclusion> {
-    let c = children(node);
-    if !kinds(&c, &[K::ColId]) && !kinds(&c, &[K::ColId, K::indirection]) {
+    let name_children = children(node);
+    if !kinds(&name_children, &[K::ColId]) && !kinds(&name_children, &[K::ColId, K::indirection]) {
         return Err(Exclusion::UnsupportedSyntax);
     }
-    let mut result = vec![identifier(&c[0])?];
-    if let Some(indirection) = c.get(1) {
+    let first_name = &name_children[0];
+    let mut result = vec![identifier(first_name)?];
+    if let Some(indirection) = name_children.get(1) {
         let element = only(indirection, K::indirection_el)?;
-        let e = children(&element);
-        if !kinds(&e, &[K::Dot, K::attr_name]) {
+        let element_children = children(&element);
+        if !kinds(&element_children, &[K::Dot, K::attr_name]) {
             return Err(Exclusion::UnsupportedSyntax);
         }
-        result.push(identifier(&only(&e[1], K::ColLabel)?)?);
+        let attribute_name = &element_children[1];
+        result.push(identifier(&only(attribute_name, K::ColLabel)?)?);
     }
     Ok(result)
 }
@@ -349,51 +362,56 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
     match node.kind() {
         K::a_expr => {
             if kinds(&c, &[K::c_expr]) {
-                return expr(&c[0]);
+                let primary_expr = &c[0];
+                return expr(primary_expr);
             }
-            if c.len() == 2
-                && matches!(c[0].kind(), K::Plus | K::Minus | K::NOT)
-                && c[1].kind() == K::a_expr
-            {
-                return Ok(Expr::Unary {
-                    operand: Box::new(expr(&c[1])?),
-                });
+            if let [operator, operand] = c.as_slice() {
+                if matches!(operator.kind(), K::Plus | K::Minus | K::NOT)
+                    && operand.kind() == K::a_expr
+                {
+                    return Ok(Expr::Unary {
+                        operand: Box::new(expr(operand)?),
+                    });
+                }
             }
-            if c.len() == 3
-                && c[0].kind() == K::a_expr
-                && c[2].kind() == K::a_expr
-                && matches!(
-                    c[1].kind(),
-                    K::Plus
-                        | K::Minus
-                        | K::Star
-                        | K::Slash
-                        | K::Equals
-                        | K::NOT_EQUALS
-                        | K::Less
-                        | K::Greater
-                        | K::LESS_EQUALS
-                        | K::GREATER_EQUALS
-                        | K::AND
-                        | K::OR
-                )
-            {
-                return Ok(Expr::Binary {
-                    left: Box::new(expr(&c[0])?),
-                    right: Box::new(expr(&c[2])?),
-                });
+            if let [left, operator, right] = c.as_slice() {
+                if left.kind() == K::a_expr
+                    && right.kind() == K::a_expr
+                    && matches!(
+                        operator.kind(),
+                        K::Plus
+                            | K::Minus
+                            | K::Star
+                            | K::Slash
+                            | K::Equals
+                            | K::NOT_EQUALS
+                            | K::Less
+                            | K::Greater
+                            | K::LESS_EQUALS
+                            | K::GREATER_EQUALS
+                            | K::AND
+                            | K::OR
+                    )
+                {
+                    return Ok(Expr::Binary {
+                        left: Box::new(expr(left)?),
+                        right: Box::new(expr(right)?),
+                    });
+                }
             }
             if kinds(&c, &[K::a_expr, K::IS, K::NULL_P])
                 || kinds(&c, &[K::a_expr, K::IS, K::NOT, K::NULL_P])
             {
+                let operand = &c[0];
                 return Ok(Expr::IsNull {
-                    operand: Box::new(expr(&c[0])?),
+                    operand: Box::new(expr(operand)?),
                 });
             }
         }
         K::c_expr => {
             if kinds(&c, &[K::columnref]) {
-                let names = names(&c[0])?;
+                let column_ref = &c[0];
+                let names = names(column_ref)?;
                 let (qualifier, column) = match names.as_slice() {
                     [col] => (None, col.clone()),
                     [q, col] => (Some(q.clone()), col.clone()),
@@ -402,14 +420,16 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
                 return Ok(Expr::Column(Box::new(ColumnRef {
                     qualifier,
                     column,
-                    range: c[0].range(),
+                    range: column_ref.range(),
                 })));
             }
             if kinds(&c, &[K::LParen, K::a_expr, K::RParen]) {
-                return Ok(Expr::Group(Box::new(expr(&c[1])?)));
+                let grouped_expr = &c[1];
+                return Ok(Expr::Group(Box::new(expr(grouped_expr)?)));
             }
             if kinds(&c, &[K::AexprConst]) {
-                let literal = children(&c[0]);
+                let constant = &c[0];
+                let literal = children(constant);
                 if literal.len() == 1 {
                     let atom = &literal[0];
                     let valid = match atom.kind() {
