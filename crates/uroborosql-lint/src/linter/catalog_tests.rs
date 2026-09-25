@@ -131,12 +131,46 @@ fn bounded_clauses_keep_reference_ranges_and_implicit_aliases() {
             "SELECT nmae FROM users OFFSET 2 ROWS FETCH NEXT 1 ROW ONLY",
             vec!["nmae"],
         ),
+        (
+            "SELECT nmae FROM users WHERE agge > 0 LIMIT ALL",
+            vec!["nmae", "agge"],
+        ),
+        (
+            "SELECT nmae FROM users WHERE agge > 0 FETCH FIRST ROW ONLY",
+            vec!["nmae", "agge"],
+        ),
+        (
+            "SELECT nmae FROM users WHERE agge > 0 FETCH FIRST ROWS ONLY",
+            vec!["nmae", "agge"],
+        ),
+        (
+            "SELECT nmae FROM users WHERE agge > 0 FETCH NEXT ROW ONLY",
+            vec!["nmae", "agge"],
+        ),
+        (
+            "SELECT nmae FROM users WHERE agge > 0 FETCH NEXT ROWS ONLY",
+            vec!["nmae", "agge"],
+        ),
         ("SELECT DISTINCT nmae FROM users", vec!["nmae"]),
         ("SELECT id alias FROM users WHERE alias = 1", vec!["alias"]),
         ("SELECT u.nmae FROM users u FOR UPDATE OF u", vec!["nmae"]),
     ] {
         let result = run(sql);
         assert_eq!(slices(sql, &result.diagnostics), expected, "{sql}");
+        if sql.contains(" LIMIT ALL")
+            || sql.contains(" FETCH FIRST ROW")
+            || sql.contains(" FETCH NEXT ROW")
+        {
+            assert_eq!(
+                result
+                    .diagnostics
+                    .iter()
+                    .map(|d| d.span.start.byte)
+                    .collect::<Vec<_>>(),
+                [sql.find("nmae").unwrap(), sql.find("agge").unwrap()],
+                "{sql}"
+            );
+        }
         assert_eq!(result.statements[0].status, AnalysisStatus::Complete);
     }
     let result = run("SELECT id alias, id + 1 \"Alias\" FROM users");
@@ -157,6 +191,34 @@ fn bounded_clauses_keep_reference_ranges_and_implicit_aliases() {
         ),
         ["missing"]
     );
+}
+
+#[test]
+fn valueless_limit_forms_keep_adjacent_statement_boundaries() {
+    for clause in [
+        "LIMIT ALL",
+        "FETCH FIRST ROW ONLY",
+        "FETCH FIRST ROWS ONLY",
+        "FETCH NEXT ROW ONLY",
+        "FETCH NEXT ROWS ONLY",
+    ] {
+        let sql = format!(
+            "SELECT nmae FROM users {clause}; SELECT id FROM users LIMIT missing; SELECT agge FROM users"
+        );
+        let result = run(&sql);
+        assert_eq!(slices(&sql, &result.diagnostics), ["nmae", "agge"], "{sql}");
+        assert_eq!(
+            result.diagnostics[0].span.start.byte,
+            sql.find("nmae").unwrap()
+        );
+        assert_eq!(
+            result.diagnostics[1].span.start.byte,
+            sql.find("agge").unwrap()
+        );
+        assert_eq!(result.statements[0].status, AnalysisStatus::Complete);
+        assert!(result.statements[1].resolved.is_none(), "{sql}");
+        assert_eq!(result.statements[2].status, AnalysisStatus::Complete);
+    }
 }
 
 #[test]
@@ -186,7 +248,7 @@ fn unsupported_clauses_exclude_without_losing_adjacent_query_diagnostics() {
     for unsupported in [
         "SELECT DISTINCT ON (missing) id FROM users",
         "SELECT id FROM users LIMIT missing",
-        "SELECT id FROM users FETCH FIRST ROW ONLY",
+        "SELECT id FROM users FETCH FIRST ROW WITH TIES",
         "SELECT id FROM users FOR UPDATE OF other",
         "SELECT id FROM users u FOR UPDATE OF users",
         "SELECT id FROM users FOR UPDATE SKIP LOCKED",

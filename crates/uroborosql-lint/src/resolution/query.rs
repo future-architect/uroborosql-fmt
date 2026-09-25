@@ -364,7 +364,11 @@ fn limit(node: &Node<'_>) -> Result<(), Exclusion> {
     let parts = children(node);
     match parts.as_slice() {
         [keyword, value] if keyword.kind() == K::LIMIT && value.kind() == K::select_limit_value => {
-            integer_literal(value, K::a_expr)
+            if kinds(&children(value), &[K::ALL]) {
+                Ok(())
+            } else {
+                integer_literal(value, K::a_expr)
+            }
         }
         [keyword, first_or_next, value, rows, only]
             if keyword.kind() == K::FETCH
@@ -379,6 +383,19 @@ fn limit(node: &Node<'_>) -> Result<(), Exclusion> {
                 return Err(Exclusion::UnsupportedSyntax);
             }
             integer_literal(value, K::c_expr)?;
+            row_or_rows(rows, false)
+        }
+        [keyword, first_or_next, rows, only]
+            if keyword.kind() == K::FETCH
+                && first_or_next.kind() == K::first_or_next
+                && rows.kind() == K::row_or_rows
+                && only.kind() == K::ONLY =>
+        {
+            let first_or_next = children(first_or_next);
+            if !matches!(first_or_next.as_slice(), [token] if matches!(token.kind(), K::FIRST_P | K::NEXT))
+            {
+                return Err(Exclusion::UnsupportedSyntax);
+            }
             row_or_rows(rows, false)
         }
         _ => Err(Exclusion::UnsupportedSyntax),
