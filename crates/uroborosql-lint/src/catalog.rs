@@ -1,11 +1,9 @@
 //! Callers normalize lookup names; providers preserve catalog spelling and
 //! certify completeness before claiming absence.
-#[allow(dead_code)]
-pub(crate) mod input;
-#[allow(dead_code)]
-pub(crate) mod resolution;
-
 use std::{collections::BTreeMap, future::Future, pin::Pin};
+
+// Preserve the existing public type paths while SQL-local results live in resolution.
+pub use crate::resolution::{AnalysisStatus, Resolution, ResolutionUnknown};
 
 #[cfg(feature = "postgres-catalog")]
 pub mod postgres;
@@ -68,38 +66,6 @@ pub enum Lookup<T> {
     Absent(AbsenceKind),
     Unknown(UnknownReason),
     Unavailable(AcquisitionError),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ResolutionUnknown {
-    Reason(UnknownReason),
-    Unavailable(AcquisitionError),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Resolution<T> {
-    Resolved(T),
-    Absent(AbsenceKind),
-    Ambiguous,
-    Unknown(ResolutionUnknown),
-}
-
-impl<T> From<Lookup<T>> for Resolution<T> {
-    fn from(value: Lookup<T>) -> Self {
-        match value {
-            Lookup::Found(value) => Self::Resolved(value),
-            Lookup::Absent(reason) => Self::Absent(reason),
-            Lookup::Unknown(reason) => Self::Unknown(ResolutionUnknown::Reason(reason)),
-            Lookup::Unavailable(error) => Self::Unknown(ResolutionUnknown::Unavailable(error)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AnalysisStatus {
-    Complete,
-    Excluded(UnknownReason),
-    Failed(AcquisitionError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

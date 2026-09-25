@@ -1,5 +1,6 @@
 use crate::{
-    catalog::{input, resolution, AcquisitionError, CatalogSnapshot},
+    catalog::{AcquisitionError, CatalogSnapshot},
+    resolution::{self, query},
     RuleEnum,
 };
 use crate::{
@@ -93,7 +94,7 @@ impl Linter {
     ) -> Result<CatalogLintResult, LintError> {
         let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
         let root = tree.root_node();
-        let prepared = input::prepare(&root);
+        let prepared = query::extract(&root);
         let statements = resolution::resolve(&prepared, acquired);
         let mut diagnostics = self.run_cst(&root, sql, resolved_config);
         for (rule, severity) in &resolved_config.rules {

@@ -1,8 +1,8 @@
 use super::*;
 use crate::catalog::{
-    input::prepare, AbsenceKind, AcquisitionErrorKind, AcquisitionPhase, CatalogEntry,
-    ColumnDefinition,
+    AbsenceKind, AcquisitionErrorKind, AcquisitionPhase, CatalogEntry, ColumnDefinition,
 };
+use crate::resolution::query::extract;
 use postgresql_cst_parser::tree_sitter;
 
 fn table(schema: &str, name: &str, columns: &[&str]) -> TableDefinition {
@@ -40,7 +40,7 @@ fn snapshot() -> CatalogSnapshot {
 }
 fn run(sql: &str, snapshot: &CatalogSnapshot) -> ResolvedSelect {
     resolve(
-        &prepare(&tree_sitter::parse_2way(sql).unwrap().root_node()),
+        &extract(&tree_sitter::parse_2way(sql).unwrap().root_node()),
         Ok(snapshot),
     )
     .pop()
@@ -247,7 +247,7 @@ fn absent_unknown_and_unavailable_sources_propagate_without_qualifier_errors() {
         run("SELECT id FROM users", &s).source,
         Resolution::Unknown(ResolutionUnknown::Reason(UnknownReason::IncompleteCoverage))
     ));
-    let prepared = prepare(
+    let prepared = extract(
         &tree_sitter::parse_2way("SELECT id FROM users; SELECT count(*) FROM users")
             .unwrap()
             .root_node(),

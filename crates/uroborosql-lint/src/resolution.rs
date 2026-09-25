@@ -1,11 +1,45 @@
 //! SQL-local visibility over acquired definitions; providers know nothing about aliases.
+#[allow(dead_code)]
+pub(crate) mod query;
+
 use postgresql_cst_parser::tree_sitter::Range;
 
-use super::{
-    input::{ColumnRef, Exclusion, Expr, Prepared, Select, SourceName},
-    AcquisitionError, AnalysisStatus, CatalogSnapshot, Lookup, Resolution, ResolutionUnknown,
-    TableDefinition, UnknownReason,
+use self::query::{ColumnRef, Exclusion, Expr, Prepared, Select, SourceName};
+use crate::catalog::{
+    AbsenceKind, AcquisitionError, CatalogSnapshot, Lookup, TableDefinition, UnknownReason,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolutionUnknown {
+    Reason(UnknownReason),
+    Unavailable(AcquisitionError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Resolution<T> {
+    Resolved(T),
+    Absent(AbsenceKind),
+    Ambiguous,
+    Unknown(ResolutionUnknown),
+}
+
+impl<T> From<Lookup<T>> for Resolution<T> {
+    fn from(value: Lookup<T>) -> Self {
+        match value {
+            Lookup::Found(value) => Self::Resolved(value),
+            Lookup::Absent(reason) => Self::Absent(reason),
+            Lookup::Unknown(reason) => Self::Unknown(ResolutionUnknown::Reason(reason)),
+            Lookup::Unavailable(error) => Self::Unknown(ResolutionUnknown::Unavailable(error)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnalysisStatus {
+    Complete,
+    Excluded(UnknownReason),
+    Failed(AcquisitionError),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourceIdentity {

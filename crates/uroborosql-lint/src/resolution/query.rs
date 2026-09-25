@@ -1,6 +1,6 @@
-//! Owned, conservative input for catalog resolution. No parser nodes cross this boundary.
+//! Owned, conservative SQL input for name resolution. No parser nodes cross this boundary.
 
-use super::TableRequest;
+use crate::catalog::TableRequest;
 use postgresql_cst_parser::{
     syntax_kind::SyntaxKind as K,
     tree_sitter::{Node, Range},
@@ -101,7 +101,7 @@ pub(crate) struct Prepared {
     pub requests: Vec<TableRequest>,
 }
 
-pub(crate) fn prepare(root: &Node<'_>) -> Prepared {
+pub(crate) fn extract(root: &Node<'_>) -> Prepared {
     let session_change = root.descendants().any(|n| {
         matches!(
             n.kind(),

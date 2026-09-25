@@ -1,9 +1,7 @@
 use crate::{
-    catalog::{
-        resolution::{Reference, ReferenceOutcome, StatementResult},
-        AbsenceKind, Resolution,
-    },
+    catalog::AbsenceKind,
     diagnostic::{Diagnostic, Severity},
+    resolution::{Reference, ReferenceOutcome, Resolution, StatementResult},
     rule::Rule,
 };
 

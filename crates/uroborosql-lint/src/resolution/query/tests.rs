@@ -2,7 +2,7 @@ use super::*;
 use postgresql_cst_parser::tree_sitter;
 
 fn prepare_sql(sql: &str) -> Prepared {
-    prepare(
+    extract(
         &tree_sitter::parse_2way(sql)
             .unwrap_or_else(|e| panic!("{sql}: {e:?}"))
             .root_node(),

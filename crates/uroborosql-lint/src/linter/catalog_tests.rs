@@ -1,11 +1,11 @@
 use super::*;
 use crate::{
     catalog::{
-        AbsenceKind, AcquisitionErrorKind, AcquisitionPhase, AnalysisStatus, CatalogEntry,
-        CatalogProvider, ColumnDefinition, InMemoryCatalogProvider, Lookup, Resolution,
-        ResolutionUnknown, TableDefinition, UnknownReason,
+        AbsenceKind, AcquisitionErrorKind, AcquisitionPhase, CatalogEntry, CatalogProvider,
+        ColumnDefinition, InMemoryCatalogProvider, Lookup, TableDefinition, UnknownReason,
     },
     diagnostic::Severity,
+    resolution::{query, AnalysisStatus, Resolution, ResolutionUnknown},
     rules::{NoDistinct, NoUnknownReference},
     ConfigStore,
 };
@@ -74,7 +74,7 @@ async fn accepted_sql_runs_from_prepared_requests_through_memory_provider() {
         "/*IF false*/ SELECT /*param*/ AS result, id FROM users; /*END*/",
     ] {
         let tree = tree_sitter::parse_2way(sql).unwrap();
-        let prepared = input::prepare(&tree.root_node());
+        let prepared = query::extract(&tree.root_node());
         let acquired = InMemoryCatalogProvider::new(snapshot())
             .acquire(&prepared.requests)
             .await
@@ -401,7 +401,7 @@ fn recovered_sources_preserve_partial_results_without_absence_or_acquisition_fai
         "SELECT , /*param*/ AS result, x AS result, wrong.nmae FROM , /*#table*/ AS x WHERE AND x.id = /*param*/ ;",
     ] {
         let tree = tree_sitter::parse_2way(sql).unwrap();
-        assert!(input::prepare(&tree.root_node()).requests.is_empty());
+        assert!(query::extract(&tree.root_node()).requests.is_empty());
         let error = AcquisitionError::new(AcquisitionPhase::Connect, AcquisitionErrorKind::Connection);
         for acquired in [Ok(&snapshot()), Err(&error)] {
             let result = Linter::new().run_with_catalog(sql, &config(), acquired).unwrap();
@@ -413,7 +413,7 @@ fn recovered_sources_preserve_partial_results_without_absence_or_acquisition_fai
             assert!(matches!(resolved.source, Resolution::Unknown(ResolutionUnknown::Reason(UnknownReason::RecoveredSource))));
             assert_eq!(resolved.outputs.iter().map(|o| o.name.as_deref()).collect::<Vec<_>>(), [Some("result"), Some("result"), None]);
             for reference in resolved.outputs.iter().flat_map(|o| &o.references).chain(&resolved.predicate_references) {
-                assert!(matches!(reference.outcome, crate::catalog::resolution::ReferenceOutcome::Lookup { resolution: Resolution::Unknown(ResolutionUnknown::Reason(UnknownReason::RecoveredSource)), .. }));
+                assert!(matches!(reference.outcome, crate::resolution::ReferenceOutcome::Lookup { resolution: Resolution::Unknown(ResolutionUnknown::Reason(UnknownReason::RecoveredSource)), .. }));
                 assert_eq!(&sql[reference.input.column.range.start_byte..reference.input.column.range.end_byte], reference.input.column.spelling);
             }
         }
@@ -460,7 +460,7 @@ async fn inspect_postgres_sql() {
     let path = env::var("CATALOG_REVIEW_SQL").expect("set CATALOG_REVIEW_SQL to a SQL file");
     let sql = fs::read_to_string(&path).expect("read SQL file");
     let tree = tree_sitter::parse_2way(&sql).expect("parse SQL file");
-    let prepared = input::prepare(&tree.root_node());
+    let prepared = query::extract(&tree.root_node());
     let mut connection = PostgresConfig::new("127.0.0.1", "postgres", "postgres");
     connection.port = env::var("CATALOG_TEST_PORT")
         .expect("run tests/postgres/run.py")
