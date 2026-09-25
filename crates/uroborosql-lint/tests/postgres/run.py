@@ -23,13 +23,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--major', type=int, choices=range(14, 19), action='append')
     parser.add_argument('--cargo-config')
+    parser.add_argument('--review-sql', type=Path, help='inspect a SQL file against the disposable fixture')
     args = parser.parse_args()
     cargo = ['cargo', 'test', '-p', 'uroborosql-lint', '--features', 'postgres-catalog',
-             '--test', 'postgres']
+             *(['--lib'] if args.review_sql else ['--test', 'postgres'])]
     if args.cargo_config:
         cargo += ['--config', str(Path(args.cargo_config).resolve())]
     command(cargo + ['--no-run'], cwd=ROOT)
-    for major in args.major or range(14, 19):
+    for major in args.major or ([18] if args.review_sql else range(14, 19)):
         service = 'pg' + str(major)
         password = secrets.token_hex(24)
         compose_env = dict(os.environ, CATALOG_TEST_PASSWORD=password)
@@ -62,6 +63,12 @@ def main():
                     if changes:
                         env.update(changes)
                     command(cargo + [test_name, '--', '--ignored', '--exact', '--nocapture'], cwd=ROOT, env=env)
+
+                if args.review_sql:
+                    test('linter::catalog_tests::inspect_postgres_sql', {
+                        'CATALOG_REVIEW_SQL': str(args.review_sql.resolve()),
+                    })
+                    continue
 
                 for test_name in ['definitions_and_visibility', 'refreshes_each_acquisition', 'failures_are_not_absence', 'concurrent_ddl_keeps_one_snapshot']:
                     test(test_name)
