@@ -275,18 +275,33 @@ fn recovery_does_not_expand_supported_syntax() {
 #[test]
 fn temp_alias_and_uncertain_identifier_normalization_are_excluded() {
     for schema in ["pg_temp", "PG_TEMP", "\"pg_temp\""] {
+        let input = prepare_sql(&format!("SELECT id FROM {schema}.users AS u"));
+        assert!(input.requests.is_empty(), "{schema}: {input:?}");
         assert!(matches!(
-            prepare_sql(&format!("SELECT id FROM {schema}.users")).statements[0].input,
+            input.statements[0].input,
             Err(Exclusion::TemporarySchema)
         ));
     }
     for schema in ["\"PG_TEMP\"", "pg_temp_data"] {
-        assert!(
-            prepare_sql(&format!("SELECT id FROM {schema}.users")).statements[0]
-                .input
-                .is_ok()
+        let input = prepare_sql(&format!("SELECT id FROM {schema}.users AS u"));
+        assert!(input.statements[0].input.is_ok(), "{schema}: {input:?}");
+        assert_eq!(input.requests.len(), 1);
+        assert_eq!(
+            input.requests[0].schema.as_deref(),
+            Some(schema.trim_matches('"'))
         );
     }
+    let mixed = prepare_sql("SELECT id FROM pg_temp.users; SELECT id FROM users");
+    assert!(matches!(
+        mixed.statements[0].input,
+        Err(Exclusion::TemporarySchema)
+    ));
+    assert!(mixed.statements[1].input.is_ok());
+    assert_eq!(mixed.requests.len(), 1);
+    assert_eq!(mixed.requests[0].schema, None);
+    let recovered = prepare_sql("SELECT x.id FROM /*#table*/ AS x");
+    assert!(recovered.statements[0].input.is_ok());
+    assert!(recovered.requests.is_empty());
     for name in ["a".repeat(64), format!("\"{}\"", "あ".repeat(22))] {
         let input = prepare_sql(&format!("SELECT {name} FROM users"));
         assert!(input.requests.is_empty(), "{name}");

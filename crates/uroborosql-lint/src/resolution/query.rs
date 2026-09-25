@@ -191,10 +191,6 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
         return Err(Exclusion::UnsupportedSyntax);
     }
     let source = source(&c[2])?;
-    if matches!(&source.name, SourceName::Table { schema: Some(schema), .. } if schema.name == "pg_temp")
-    {
-        return Err(Exclusion::TemporarySchema);
-    }
     let list = children(&c[1]);
     if list.is_empty() || list.len().is_multiple_of(2) {
         return Err(Exclusion::UnsupportedSyntax);
@@ -284,6 +280,9 @@ fn source(node: &Node<'_>) -> Result<Source, Exclusion> {
     } else {
         None
     };
+    if matches!(&name, SourceName::Table { schema: Some(schema), .. } if schema.name == "pg_temp") {
+        return Err(Exclusion::TemporarySchema);
+    }
     Ok(Source {
         name,
         alias,
