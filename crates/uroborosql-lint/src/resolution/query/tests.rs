@@ -113,6 +113,48 @@ fn accepts_bounded_clauses_and_implicit_output_aliases() {
 }
 
 #[test]
+fn accepts_integer_spellings_even_when_parser_emits_fconst() {
+    for sql in [
+        "SELECT id FROM users LIMIT 2147483648",
+        "SELECT id FROM users LIMIT 1_000",
+        "SELECT id FROM users LIMIT 0x_FF",
+        "SELECT id FROM users OFFSET 2147483648",
+        "SELECT id FROM users OFFSET 1_000 ROWS",
+        "SELECT id FROM users FETCH FIRST 2147483648 ROW ONLY",
+        "SELECT id FROM users FETCH NEXT 1_000 ROWS ONLY",
+    ] {
+        let prepared = prepare_sql(sql);
+        assert_eq!(prepared.requests.len(), 1, "{sql}: {prepared:?}");
+        assert!(prepared.statements[0].input.is_ok(), "{sql}: {prepared:?}");
+    }
+    for sql in [
+        "SELECT id FROM users LIMIT 1.0",
+        "SELECT id FROM users LIMIT 1e3",
+        "SELECT id FROM users LIMIT 1 + 1",
+        "SELECT id FROM users OFFSET 1.0",
+        "SELECT id FROM users OFFSET 1e3 ROWS",
+        "SELECT id FROM users FETCH FIRST 1.0 ROW ONLY",
+        "SELECT id FROM users FETCH NEXT 1e3 ROWS ONLY",
+    ] {
+        let prepared = prepare_sql(sql);
+        assert!(prepared.requests.is_empty(), "{sql}: {prepared:?}");
+        assert!(prepared.statements[0].input.is_err(), "{sql}: {prepared:?}");
+    }
+}
+
+#[test]
+fn integer_spelling_checks_digits_and_separator_placement() {
+    for text in ["0", "2147483648", "1_000", "0x_FF", "0o_77", "0b_101"] {
+        assert!(integer_spelling(text), "{text}");
+    }
+    for text in [
+        "", "_1", "1_", "1__0", "1.0", "1e3", "0x", "0x__F", "0x_F_", "0xG", "0o8", "0b2",
+    ] {
+        assert!(!integer_spelling(text), "{text}");
+    }
+}
+
+#[test]
 fn accepts_bounded_value_expressions_and_collects_every_operand() {
     for sql in [
         "SELECT id IN (1, age, missing) FROM users",

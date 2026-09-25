@@ -160,6 +160,28 @@ fn bounded_clauses_keep_reference_ranges_and_implicit_aliases() {
 }
 
 #[test]
+fn large_and_separated_integer_clauses_keep_catalog_diagnostics() {
+    for sql in [
+        "SELECT nmae FROM users LIMIT 2147483648",
+        "SELECT nmae FROM users LIMIT 1_000",
+        "SELECT nmae FROM users OFFSET 2147483648",
+        "SELECT nmae FROM users OFFSET 1_000 ROWS",
+        "SELECT nmae FROM users FETCH FIRST 2147483648 ROW ONLY",
+        "SELECT nmae FROM users FETCH NEXT 1_000 ROWS ONLY",
+    ] {
+        let result = run(sql);
+        assert_eq!(slices(sql, &result.diagnostics), ["nmae"], "{sql}");
+        assert_eq!(result.statements[0].status, AnalysisStatus::Complete);
+    }
+    for value in ["1.0", "1e3", "1 + 1"] {
+        let sql = format!("SELECT nmae FROM users LIMIT {value}; SELECT agge FROM users");
+        let result = run(&sql);
+        assert_eq!(slices(&sql, &result.diagnostics), ["agge"], "{sql}");
+        assert!(result.statements[0].resolved.is_none(), "{sql}");
+    }
+}
+
+#[test]
 fn unsupported_clauses_exclude_without_losing_adjacent_query_diagnostics() {
     for unsupported in [
         "SELECT DISTINCT ON (missing) id FROM users",

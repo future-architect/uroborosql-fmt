@@ -305,9 +305,50 @@ fn integer_literal(node: &Node<'_>, expression_kind: K) -> Result<(), Exclusion>
         expression
     };
     let constant = only(&constant_base, K::AexprConst)?;
-    let integer = only(&constant, K::Iconst)?;
-    only(&integer, K::ICONST)?;
-    Ok(())
+    let parts = children(&constant);
+    match parts.as_slice() {
+        [integer] if integer.kind() == K::Iconst => {
+            only(integer, K::ICONST)?;
+            Ok(())
+        }
+        [number]
+            if number.kind() == K::FCONST
+                && number.node_or_token.as_token().is_some()
+                && integer_spelling(number.text()) =>
+        {
+            Ok(())
+        }
+        _ => Err(Exclusion::UnsupportedSyntax),
+    }
+}
+
+fn integer_spelling(text: &str) -> bool {
+    let (digits, base): (&str, fn(u8) -> bool) =
+        if let Some(rest) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
+            (rest, |digit| digit.is_ascii_hexdigit())
+        } else if let Some(rest) = text.strip_prefix("0o").or_else(|| text.strip_prefix("0O")) {
+            (rest, |digit| matches!(digit, b'0'..=b'7'))
+        } else if let Some(rest) = text.strip_prefix("0b").or_else(|| text.strip_prefix("0B")) {
+            (rest, |digit| matches!(digit, b'0' | b'1'))
+        } else {
+            (text, |digit| digit.is_ascii_digit())
+        };
+    let mut saw_digit = false;
+    let mut last_was_separator = false;
+    for (index, digit) in digits.bytes().enumerate() {
+        if digit == b'_' {
+            if last_was_separator || (index == 0 && digits.len() == text.len()) {
+                return false;
+            }
+            last_was_separator = true;
+        } else if base(digit) {
+            saw_digit = true;
+            last_was_separator = false;
+        } else {
+            return false;
+        }
+    }
+    saw_digit && !last_was_separator
 }
 
 fn row_or_rows(node: &Node<'_>, offset: bool) -> Result<(), Exclusion> {
