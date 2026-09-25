@@ -56,6 +56,82 @@ fn column(reference: &Reference, name: &str) {
 }
 
 #[test]
+fn wildcard_projections_have_no_fabricated_columns_or_requests() {
+    let sql = "SELECT x.*, missing, u.*, * FROM users u WHERE absent = 1";
+    let prepared = extract(&tree_sitter::parse_2way(sql).unwrap().root_node());
+    assert_eq!(prepared.requests.len(), 1);
+    assert_eq!(prepared.requests[0].name, "users");
+    let result = resolve(&prepared, Ok(&snapshot()));
+    let select = result[0].resolved.as_ref().unwrap();
+    assert_eq!(select.outputs.len(), 1);
+    assert_eq!(select.projections.len(), 4);
+    assert!(
+        matches!(&select.projections[0], Projection::Wildcard { qualifier: Some((name, WildcardMatch::Mismatched)) } if name.spelling == "x" && &sql[name.range.start_byte..name.range.end_byte] == "x")
+    );
+    assert!(matches!(select.projections[1], Projection::Output(0)));
+    assert!(matches!(
+        &select.projections[2],
+        Projection::Wildcard {
+            qualifier: Some((_, WildcardMatch::Matched))
+        }
+    ));
+    assert!(matches!(
+        select.projections[3],
+        Projection::Wildcard { qualifier: None }
+    ));
+    assert!(matches!(
+        select.outputs[0].references[0].outcome,
+        ReferenceOutcome::Lookup {
+            resolution: Resolution::Absent(AbsenceKind::Column),
+            ..
+        }
+    ));
+    assert_eq!(select.predicate_references.len(), 1);
+}
+
+#[test]
+fn wildcard_source_uncertainty_never_becomes_qualifier_mismatch() {
+    let absent_snapshot = CatalogSnapshot::new(
+        vec!["public".into()],
+        [entry("public", "usres", Lookup::Absent(AbsenceKind::Table))],
+    )
+    .unwrap();
+    let absent = run("SELECT x.* FROM usres u", &absent_snapshot);
+    assert!(matches!(
+        absent.source,
+        Resolution::Absent(AbsenceKind::Table)
+    ));
+    assert!(matches!(
+        absent.projections[0],
+        Projection::Wildcard {
+            qualifier: Some((_, WildcardMatch::Unknown))
+        }
+    ));
+    let recovered = run("SELECT x.* FROM /*#table*/ AS u", &snapshot());
+    assert!(matches!(recovered.source, Resolution::Unknown(_)));
+    assert!(matches!(
+        recovered.projections[0],
+        Projection::Wildcard {
+            qualifier: Some((_, WildcardMatch::Unknown))
+        }
+    ));
+    let error = AcquisitionError::new(AcquisitionPhase::Connect, AcquisitionErrorKind::Connection);
+    let prepared = extract(
+        &tree_sitter::parse_2way("SELECT x.* FROM users u")
+            .unwrap()
+            .root_node(),
+    );
+    let failed = resolve(&prepared, Err(&error));
+    let failed = failed[0].resolved.as_ref().unwrap();
+    assert!(matches!(
+        failed.projections[0],
+        Projection::Wildcard {
+            qualifier: Some((_, WildcardMatch::Unknown))
+        }
+    ));
+}
+
+#[test]
 fn columns_aliases_and_system_columns_resolve_without_output_alias_visibility() {
     let r = run("SELECT u.id AS user_id, ctid, (age + 1) AS next_age FROM public.users u WHERE user_id = 1 AND u.age > 0", &snapshot());
     assert_eq!(

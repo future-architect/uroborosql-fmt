@@ -10,6 +10,67 @@ fn prepare_sql(sql: &str) -> Prepared {
 }
 
 #[test]
+fn wildcard_targets_keep_order_qualifier_ranges_and_only_from_request() {
+    let sql = "SELECT *, \"U\".*, id * 2 FROM public.users AS \"U\" WHERE absent = 1";
+    let prepared = prepare_sql(sql);
+    assert_eq!(
+        prepared.requests,
+        [TableRequest {
+            schema: Some("public".into()),
+            name: "users".into()
+        }]
+    );
+    let select = prepared.statements[0].input.as_ref().unwrap();
+    assert!(matches!(
+        select.targets[0],
+        Target::Wildcard { qualifier: None }
+    ));
+    let Target::Wildcard {
+        qualifier: Some(qualifier),
+    } = &select.targets[1]
+    else {
+        panic!("qualified wildcard expected")
+    };
+    assert_eq!(qualifier.name, "U");
+    assert_eq!(
+        &sql[qualifier.range.start_byte..qualifier.range.end_byte],
+        "\"U\""
+    );
+    assert!(matches!(
+        select.targets[2],
+        Target::Expression {
+            expr: Expr::Binary { .. },
+            ..
+        }
+    ));
+    assert!(select.predicate.is_some());
+}
+
+#[test]
+fn wildcard_eligibility_keeps_narrow_shapes() {
+    for sql in [
+        "SELECT * FROM users",
+        "SELECT u.* FROM users u",
+        "SELECT DISTINCT * FROM users LIMIT ALL",
+        "SELECT id * 2 FROM users",
+    ] {
+        let prepared = prepare_sql(sql);
+        assert!(prepared.statements[0].input.is_ok(), "{sql}: {prepared:?}");
+        assert_eq!(prepared.requests.len(), 1, "{sql}");
+    }
+    for sql in [
+        "SELECT public.users.* FROM users",
+        "SELECT (u).* FROM users u",
+        "SELECT u.* AS alias FROM users u",
+        "SELECT (u.*) FROM users u",
+    ] {
+        let prepared = prepare_sql(sql);
+        assert!(prepared.statements[0].input.is_err(), "{sql}: {prepared:?}");
+        assert!(prepared.requests.is_empty(), "{sql}");
+    }
+}
+
+#[test]
 fn supported_shapes_keep_requests_outputs_and_original_identifiers() {
     let sql = "SELECT u.\"a\"\"b\" AS \"別名\", +age, -age, (age + 1), age-1, age*2, age/2, 1.5, 'str', TRUE, FALSE, NULL FROM public.users AS u WHERE NOT (id < 18 OR name IS NULL) AND u.age >= 18 AND name IS NOT NULL;";
     let prepared = prepare_sql(sql);
@@ -22,8 +83,11 @@ fn supported_shapes_keep_requests_outputs_and_original_identifiers() {
         }]
     );
     assert_eq!(select.targets.len(), 12);
-    assert_eq!(select.targets[0].alias.as_ref().unwrap().name, "別名");
-    let Expr::Column(reference) = &select.targets[0].expr else {
+    let Target::Expression { expr, alias } = &select.targets[0] else {
+        panic!()
+    };
+    assert_eq!(alias.as_ref().unwrap().name, "別名");
+    let Expr::Column(reference) = expr else {
         panic!()
     };
     assert_eq!(reference.column.name, "a\"b");
@@ -111,9 +175,22 @@ fn accepts_bounded_clauses_and_implicit_output_aliases() {
     }
     let prepared = prepare_sql("SELECT id alias, id + 1 \"Alias\" FROM users");
     let targets = &prepared.statements[0].input.as_ref().unwrap().targets;
-    assert_eq!(targets[0].alias.as_ref().unwrap().name, "alias");
-    assert_eq!(targets[1].alias.as_ref().unwrap().name, "Alias");
-    assert_eq!(targets[1].alias.as_ref().unwrap().spelling, "\"Alias\"");
+    let Target::Expression {
+        alias: first_alias, ..
+    } = &targets[0]
+    else {
+        panic!()
+    };
+    let Target::Expression {
+        alias: second_alias,
+        ..
+    } = &targets[1]
+    else {
+        panic!()
+    };
+    assert_eq!(first_alias.as_ref().unwrap().name, "alias");
+    assert_eq!(second_alias.as_ref().unwrap().name, "Alias");
+    assert_eq!(second_alias.as_ref().unwrap().spelling, "\"Alias\"");
     let recovered = prepare_sql("SELECT x.id FROM /*#table*/ AS x FOR UPDATE OF x");
     assert!(recovered.requests.is_empty());
     assert!(recovered.statements[0].input.is_ok());
@@ -182,7 +259,10 @@ fn accepts_bounded_value_expressions_and_collects_every_operand() {
         assert!(prepared.statements[0].input.is_ok(), "{sql}: {prepared:?}");
     }
     let prepared = prepare_sql("SELECT id IN (age, missing) FROM users");
-    let Expr::In { value, items } = &prepared.statements[0].input.as_ref().unwrap().targets[0].expr
+    let Target::Expression {
+        expr: Expr::In { value, items },
+        ..
+    } = &prepared.statements[0].input.as_ref().unwrap().targets[0]
     else {
         panic!("IN operands were not retained");
     };
@@ -218,8 +298,8 @@ fn between_lower_b_expr_accepts_bounded_cast_and_concat() {
 #[test]
 fn rejects_unlisted_syntax_before_collecting_requests() {
     for sql in [
-        "SELECT * FROM users",
-        "SELECT u.* FROM users u",
+        "SELECT public.users.* FROM users",
+        "SELECT (u).* FROM users u",
         "SELECT id FROM users ORDER BY id",
         "SELECT id FROM users GROUP BY id",
         "SELECT id FROM users HAVING TRUE",

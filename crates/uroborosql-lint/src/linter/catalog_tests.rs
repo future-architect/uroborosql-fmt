@@ -62,6 +62,66 @@ fn slices<'a>(sql: &'a str, diagnostics: &[Diagnostic]) -> Vec<&'a str> {
         .collect()
 }
 
+#[test]
+fn wildcard_targets_diagnose_visible_names_and_other_references() {
+    for (sql, expected) in [
+        ("SELECT * FROM users", vec![]),
+        ("SELECT u.* FROM users u", vec![]),
+        ("SELECT users.* FROM users u", vec!["users"]),
+        ("SELECT x.* FROM users u", vec!["x"]),
+        ("SELECT \"U\".* FROM users \"U\"", vec![]),
+        ("SELECT u.* FROM users \"U\"", vec!["u"]),
+        (
+            "SELECT x.*, missing, u.* FROM users u WHERE absent = 1",
+            vec!["x", "missing", "absent"],
+        ),
+        ("SELECT * FROM usres", vec!["usres"]),
+        (
+            "SELECT users.* FROM usres u WHERE absent = 1",
+            vec!["usres"],
+        ),
+        ("SELECT id * 2 FROM users", vec![]),
+        ("SELECT DISTINCT * FROM users LIMIT ALL", vec![]),
+    ] {
+        let result = run(sql);
+        assert_eq!(
+            slices(sql, &result.diagnostics),
+            expected,
+            "{sql}: {result:?}"
+        );
+    }
+    let sql = "SELECT public.users.* FROM users; SELECT x.*, missing FROM users u WHERE absent = 1";
+    let result = run(sql);
+    assert!(result.statements[0].resolved.is_none());
+    assert_eq!(slices(sql, &result.diagnostics), ["x", "missing", "absent"]);
+}
+
+#[test]
+fn wildcard_policy_warning_remains_independent_of_catalog_resolution() {
+    let sql = "SELECT x.*, missing FROM users u";
+    let mut config = config();
+    config.rules.push((
+        RuleEnum::NoWildcardProjection(crate::rules::NoWildcardProjection),
+        Severity::Warning,
+    ));
+    let result = Linter::new()
+        .run_with_catalog(sql, &config, Ok(&snapshot()))
+        .unwrap();
+    assert!(result
+        .diagnostics
+        .iter()
+        .any(|d| d.code == "no-wildcard-projection"));
+    assert_eq!(
+        result
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == "no-unknown-reference")
+            .map(|d| &sql[d.span.start.byte..d.span.end.byte])
+            .collect::<Vec<_>>(),
+        ["x", "missing"]
+    );
+}
+
 #[tokio::test]
 async fn accepted_sql_runs_from_prepared_requests_through_memory_provider() {
     for sql in [
@@ -419,7 +479,7 @@ fn unsupported_value_expressions_remain_statement_exclusions() {
         "SELECT missing::int[] FROM users",
         "SELECT missing::public.custom FROM users",
         "SELECT CASE WHEN missing THEN name END FROM users",
-        "SELECT users.* FROM users",
+        "SELECT public.users.* FROM users",
     ] {
         let sql = format!("{unsupported}; SELECT nmae FROM users");
         let result = run(&sql);

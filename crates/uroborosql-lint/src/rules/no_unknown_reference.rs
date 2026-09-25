@@ -1,7 +1,9 @@
 use crate::{
     catalog::AbsenceKind,
     diagnostic::{Diagnostic, Severity},
-    resolution::{Reference, ReferenceOutcome, Resolution, StatementResult},
+    resolution::{
+        Projection, Reference, ReferenceOutcome, Resolution, StatementResult, WildcardMatch,
+    },
     rule::Rule,
 };
 
@@ -37,12 +39,31 @@ impl NoUnknownReference {
                     &select.source_range,
                 )),
                 Resolution::Resolved(_) => {
-                    for reference in select
-                        .outputs
-                        .iter()
-                        .flat_map(|o| &o.references)
-                        .chain(&select.predicate_references)
-                    {
+                    for projection in &select.projections {
+                        match projection {
+                            Projection::Output(index) => {
+                                for reference in &select.outputs[*index].references {
+                                    if let Some(diagnostic) =
+                                        self.reference_diagnostic(reference, severity)
+                                    {
+                                        diagnostics.push(diagnostic);
+                                    }
+                                }
+                            }
+                            Projection::Wildcard {
+                                qualifier: Some((name, WildcardMatch::Mismatched)),
+                            } => {
+                                diagnostics.push(Diagnostic::new(
+                                    self.name(),
+                                    severity,
+                                    format!("Unknown qualifier `{}`.", name.spelling),
+                                    &name.range,
+                                ));
+                            }
+                            Projection::Wildcard { .. } => {}
+                        }
+                    }
+                    for reference in &select.predicate_references {
                         if let Some(diagnostic) = self.reference_diagnostic(reference, severity) {
                             diagnostics.push(diagnostic);
                         }

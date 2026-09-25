@@ -4,7 +4,7 @@ pub(crate) mod query;
 
 use postgresql_cst_parser::tree_sitter::Range;
 
-use self::query::{ColumnRef, Exclusion, Expr, Prepared, Select, SourceName};
+use self::query::{ColumnRef, Exclusion, Expr, Identifier, Prepared, Select, SourceName, Target};
 use crate::catalog::{
     AbsenceKind, AcquisitionError, CatalogSnapshot, Lookup, TableDefinition, UnknownReason,
 };
@@ -86,12 +86,28 @@ pub(crate) struct OutputColumn {
     pub references: Vec<Reference>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WildcardMatch {
+    Matched,
+    Mismatched,
+    Unknown,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum Projection {
+    Output(usize),
+    Wildcard {
+        qualifier: Option<(Identifier, WildcardMatch)>,
+    },
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedSelect {
     pub source: Resolution<SourceIdentity>,
     pub source_range: Range,
     pub source_spelling: String,
     pub outputs: Vec<OutputColumn>,
+    pub projections: Vec<Projection>,
     pub predicate_references: Vec<Reference>,
 }
 
@@ -140,26 +156,37 @@ pub(crate) fn resolve(
                     Resolution::Unknown(ResolutionUnknown::Unavailable(error.clone()))
                 }
             };
-            let outputs = select
-                .targets
-                .iter()
-                .map(|target| {
-                    let mut references = Vec::new();
-                    resolve_expr(
-                        &target.expr,
-                        Clause::Select,
-                        select,
-                        &source,
-                        &mut references,
-                    );
-                    let name = target
-                        .alias
-                        .as_ref()
-                        .map(|alias| alias.name.clone())
-                        .or_else(|| output_name(&target.expr, select, &references));
-                    OutputColumn { name, references }
-                })
-                .collect();
+            let mut outputs = Vec::new();
+            let mut projections = Vec::new();
+            for target in &select.targets {
+                match target {
+                    Target::Expression { expr, alias } => {
+                        let mut references = Vec::new();
+                        resolve_expr(expr, Clause::Select, select, &source, &mut references);
+                        let name = alias
+                            .as_ref()
+                            .map(|alias| alias.name.clone())
+                            .or_else(|| output_name(expr, select, &references));
+                        projections.push(Projection::Output(outputs.len()));
+                        outputs.push(OutputColumn { name, references });
+                    }
+                    Target::Wildcard { qualifier } => {
+                        let qualifier = qualifier.as_ref().map(|name| {
+                            let outcome = match &source {
+                                Lookup::Found(_)
+                                    if Some(name.name.as_str()) == select.source.visible_name() =>
+                                {
+                                    WildcardMatch::Matched
+                                }
+                                Lookup::Found(_) => WildcardMatch::Mismatched,
+                                _ => WildcardMatch::Unknown,
+                            };
+                            (name.clone(), outcome)
+                        });
+                        projections.push(Projection::Wildcard { qualifier });
+                    }
+                }
+            }
             let mut predicate_references = Vec::new();
             if let Some(predicate) = &select.predicate {
                 resolve_expr(
@@ -186,6 +213,7 @@ pub(crate) fn resolve(
                     source_range: select.source.range.clone(),
                     source_spelling,
                     outputs,
+                    projections,
                     predicate_references,
                 }),
             }

@@ -54,9 +54,14 @@ pub(crate) enum Expr {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Target {
-    pub expr: Expr,
-    pub alias: Option<Identifier>,
+pub(crate) enum Target {
+    Expression {
+        expr: Expr,
+        alias: Option<Identifier>,
+    },
+    Wildcard {
+        qualifier: Option<Identifier>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -263,6 +268,18 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
                 return Err(Exclusion::UnsupportedSyntax);
             }
             let t = children(node);
+            if kinds(&t, &[K::Star]) {
+                targets.push(Target::Wildcard { qualifier: None });
+                continue;
+            }
+            if kinds(&t, &[K::a_expr]) {
+                if let Some(qualifier) = wildcard_qualifier(&t[0])? {
+                    targets.push(Target::Wildcard {
+                        qualifier: Some(qualifier),
+                    });
+                    continue;
+                }
+            }
             let alias = if kinds(&t, &[K::a_expr, K::AS, K::ColLabel]) {
                 let output_alias = &t[2];
                 Some(identifier(output_alias)?)
@@ -275,7 +292,7 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
                 return Err(Exclusion::UnsupportedSyntax);
             };
             let target_expr = &t[0];
-            targets.push(Target {
+            targets.push(Target::Expression {
                 expr: expr(target_expr)?,
                 alias,
             });
@@ -296,6 +313,29 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
         targets,
         predicate,
     })
+}
+
+fn wildcard_qualifier(node: &Node<'_>) -> Result<Option<Identifier>, Exclusion> {
+    let expression = match children(node).as_slice() {
+        [expression] if expression.kind() == K::c_expr => expression.clone(),
+        _ => return Ok(None),
+    };
+    let column = match children(&expression).as_slice() {
+        [column] if column.kind() == K::columnref => column.clone(),
+        _ => return Ok(None),
+    };
+    let parts = children(&column);
+    let [name, indirection] = parts.as_slice() else {
+        return Ok(None);
+    };
+    if name.kind() != K::ColId || indirection.kind() != K::indirection {
+        return Ok(None);
+    }
+    let element = only(indirection, K::indirection_el)?;
+    if !kinds(&children(&element), &[K::Dot, K::Star]) {
+        return Ok(None);
+    }
+    Ok(Some(identifier(name)?))
 }
 
 fn integer_literal(node: &Node<'_>, expression_kind: K) -> Result<(), Exclusion> {
