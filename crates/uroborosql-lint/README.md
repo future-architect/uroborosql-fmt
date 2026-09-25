@@ -6,7 +6,7 @@ For CLI usage, see the [`uroborosql-lint-cli` README](../uroborosql-lint-cli/REA
 
 ## Configuration
 
-The config file supports rule levels, file ignores, per-file overrides, and future schema-aware settings.
+The config file supports rule levels, file ignores, per-file overrides, and PostgreSQL catalog settings.
 
 Example:
 
@@ -26,8 +26,10 @@ Example:
     }
   ],
   "db": {
-    "schemaProvider": "file",
-    "path": "schema/schema.sql"
+    "schemaProvider": "server",
+    "host": "localhost",
+    "user": "catalog_reader",
+    "dbname": "app"
   }
 }
 ```
@@ -63,42 +65,70 @@ Each override must have:
 
 Configures how schema information should be loaded for rules that need database metadata.
 
-This setting is reserved for schema-aware rules.
-It is not used by the currently implemented rules yet.
-
-Supported values are:
-
-- `file`
-  - Loads schema information from a file
-  - `path` is required
-- `server`
-  - Loads schema information from a PostgreSQL server
-  - `host`, `user`, and `dbname` are required
-  - `port` and `password` are optional
-
-Examples:
-
-```json
-{
-  "db": {
-    "schemaProvider": "file",
-    "path": "schema/schema.sql"
-  }
-}
-```
+The async API and CLI use `server` settings to check references against PostgreSQL
+14–18. `host`, `user`, and `dbname` are required; `port` defaults to 5432.
+`password` is optional and otherwise uses `PGPASSWORD`. pgpass files are not read.
+The connection's effective search path is used; `PGOPTIONS` can configure it.
 
 ```json
 {
   "db": {
     "schemaProvider": "server",
     "host": "localhost",
-    "port": 5432,
-    "user": "postgres",
-    "password": "secret",
-    "dbname": "app"
+    "user": "catalog_reader",
+    "dbname": "app",
+    "tlsMode": "verify-full",
+    "timeouts": {
+      "connectMs": 5000,
+      "queryMs": 5000,
+      "acquisitionMs": 10000
+    }
   }
 }
 ```
+
+`tlsMode` accepts `verify-full` (default), `verify-ca`, `require`, and `disable`.
+The explicit/default mode overrides `PGSSLMODE`. The first two verify the server
+certificate; `verify-full` also verifies the hostname. `require` encrypts without
+certificate verification; `disable` is plaintext. Existing SQLx certificate
+settings such as `PGSSLROOTCERT` remain available.
+
+Timeouts are positive integer milliseconds. Omitted fields keep the defaults
+shown above. The overall acquisition limit includes connection setup and all
+queries, rather than resetting for each table.
+
+`schemaProvider: file` with a `path` is recognized but SQLite acquisition is not
+available in this version. An eligible catalog check reports an acquisition
+failure; it never creates a file or falls back to a server.
+
+## Library API
+
+`Linter::run` remains synchronous and runs CST rules only. `run_async` also runs
+`no-unknown-reference` using a caller-selected `CatalogProvider` and returns
+`LintResult { diagnostics, catalog }`. The catalog report preserves each
+statement's span, status, exclusion reason, and recovered-source deferral.
+Acquisition failures retain the CST diagnostics; parse failures still return
+`LintError`. A completed traversal does not imply a recovered source was checked.
+
+Typical calling code inside an existing async runtime:
+
+```rust,ignore
+let provider = resolved_config.catalog_provider();
+let result = Linter::new()
+    .run_async(sql, &resolved_config, provider.as_deref())
+    .await?;
+```
+
+The library does not create a runtime. Enable `postgres-catalog` when constructing
+a configured PostgreSQL provider; the CLI enables it. The default library build
+still supports in-memory/custom providers without SQLx. Passing a provider
+explicitly selects it regardless of `resolved_config.db`; passing `None` skips
+catalog analysis. Provider construction performs no I/O.
+
+There is no acquisition when the source is unconfigured, the catalog rule is off
+(including file overrides), or syntax preparation produces no table requests.
+SQL disable comments suppress diagnostics, not acquisition. A configured provider
+missing from the build fails only when acquisition is needed.
 
 ## Path Resolution
 
