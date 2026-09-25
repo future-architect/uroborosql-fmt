@@ -113,6 +113,36 @@ fn accepts_bounded_clauses_and_implicit_output_aliases() {
 }
 
 #[test]
+fn accepts_bounded_value_expressions_and_collects_every_operand() {
+    for sql in [
+        "SELECT id IN (1, age, missing) FROM users",
+        "SELECT id NOT IN (age, missing) FROM users",
+        "SELECT id BETWEEN age + 1 AND missing FROM users",
+        "SELECT id NOT BETWEEN -age AND missing FROM users",
+        "SELECT name LIKE pattern FROM users",
+        "SELECT name ILIKE pattern FROM users",
+        "SELECT name NOT LIKE pattern FROM users",
+        "SELECT name NOT ILIKE pattern FROM users",
+        "SELECT name || suffix FROM users",
+        "SELECT id::text, CAST(age AS integer) FROM users",
+        "SELECT (id + age)::text, CAST(id AS double precision) FROM users",
+        "SELECT id::interval, id::timestamp, id::character varying FROM users",
+    ] {
+        let prepared = prepare_sql(sql);
+        assert_eq!(prepared.requests.len(), 1, "{sql}: {prepared:?}");
+        assert!(prepared.statements[0].input.is_ok(), "{sql}: {prepared:?}");
+    }
+    let prepared = prepare_sql("SELECT id IN (age, missing) FROM users");
+    let Expr::In { value, items } = &prepared.statements[0].input.as_ref().unwrap().targets[0].expr
+    else {
+        panic!("IN operands were not retained");
+    };
+    assert!(matches!(**value, Expr::Column(_)));
+    assert_eq!(items.len(), 2);
+    assert!(items.iter().all(|item| matches!(item, Expr::Column(_))));
+}
+
+#[test]
 fn rejects_unlisted_syntax_before_collecting_requests() {
     for sql in [
         "SELECT * FROM users",
@@ -150,12 +180,18 @@ fn rejects_unlisted_syntax_before_collecting_requests() {
         "SELECT id FROM users EXCEPT SELECT id FROM users",
         "UPDATE users SET id = 1",
         "SELECT count(*) FROM users",
-        "SELECT id::text FROM users",
-        "SELECT CAST(id AS text) FROM users",
+        "SELECT id::varchar(10) FROM users",
+        "SELECT id::int[] FROM users",
+        "SELECT id::public.custom FROM users",
+        "SELECT CAST(id AS numeric(10,2)) FROM users",
+        "SELECT id::interval year to month FROM users",
+        "SELECT id::timestamp(3) FROM users",
         "SELECT CASE WHEN TRUE THEN id END FROM users",
-        "SELECT id IN (1) FROM users",
-        "SELECT id BETWEEN 1 AND 2 FROM users",
-        "SELECT name LIKE 'a' FROM users",
+        "SELECT id IN (SELECT id FROM users) FROM users",
+        "SELECT name LIKE pattern ESCAPE esc FROM users",
+        "SELECT name SIMILAR TO pattern FROM users",
+        "SELECT name ## suffix FROM users",
+        "SELECT name OPERATOR(public.##) suffix FROM users",
         "SELECT row_number() OVER () FROM users",
         "SELECT public.users.id FROM users",
         "SELECT id[1] FROM users",

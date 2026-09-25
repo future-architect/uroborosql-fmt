@@ -178,6 +178,116 @@ fn unsupported_clauses_exclude_without_losing_adjacent_query_diagnostics() {
 }
 
 #[test]
+fn bounded_expressions_diagnose_all_value_references_at_original_ranges() {
+    for (sql, expected) in [
+        (
+            "SELECT missing IN (age, other) FROM users",
+            vec!["missing", "other"],
+        ),
+        (
+            "SELECT id NOT IN (other, more) FROM users",
+            vec!["other", "more"],
+        ),
+        (
+            "SELECT id IN (other + more, age) FROM users",
+            vec!["other", "more"],
+        ),
+        (
+            "SELECT id BETWEEN low + age AND high FROM users",
+            vec!["low", "high"],
+        ),
+        (
+            "SELECT id NOT BETWEEN -low AND high FROM users",
+            vec!["low", "high"],
+        ),
+        ("SELECT name LIKE pattern FROM users", vec!["pattern"]),
+        ("SELECT name ILIKE pattern FROM users", vec!["pattern"]),
+        ("SELECT name NOT LIKE pattern FROM users", vec!["pattern"]),
+        ("SELECT name NOT ILIKE pattern FROM users", vec!["pattern"]),
+        (
+            "SELECT missing LIKE other FROM users",
+            vec!["missing", "other"],
+        ),
+        ("SELECT name || suffix FROM users", vec!["suffix"]),
+        (
+            "SELECT missing || other FROM users",
+            vec!["missing", "other"],
+        ),
+        (
+            "SELECT missing::text, CAST(other AS integer) FROM users",
+            vec!["missing", "other"],
+        ),
+        ("SELECT (missing + age)::text FROM users", vec!["missing"]),
+        (
+            "SELECT id FROM users WHERE missing IN (age, other)",
+            vec!["missing", "other"],
+        ),
+    ] {
+        let result = run(sql);
+        assert_eq!(
+            slices(sql, &result.diagnostics),
+            expected,
+            "{sql}: {result:?}"
+        );
+        assert_eq!(result.statements[0].status, AnalysisStatus::Complete);
+    }
+    let result = run("SELECT id::missing_type, CAST(age AS another_type) FROM users");
+    assert!(result.diagnostics.is_empty(), "{result:?}");
+}
+
+#[test]
+fn bounded_expression_unknown_sources_do_not_create_derived_absence() {
+    let sql = "SELECT missing IN (other, age) FROM usres";
+    let result = run(sql);
+    assert_eq!(slices(sql, &result.diagnostics), ["usres"]);
+
+    let sql = "SELECT x.missing BETWEEN other AND age FROM /*#table*/ AS x";
+    let tree = tree_sitter::parse_2way(sql).unwrap();
+    assert!(query::extract(&tree.root_node()).requests.is_empty());
+    assert!(run(sql).diagnostics.is_empty());
+
+    let error = AcquisitionError::new(AcquisitionPhase::Connect, AcquisitionErrorKind::Connection);
+    let sql = "SELECT missing || other FROM users";
+    let result = Linter::new()
+        .run_with_catalog(sql, &config(), Err(&error))
+        .unwrap();
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.statements[0].status, AnalysisStatus::Failed(error));
+    assert_eq!(
+        result.statements[0].resolved.as_ref().unwrap().outputs[0]
+            .references
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn unsupported_value_expressions_remain_statement_exclusions() {
+    for unsupported in [
+        "SELECT missing IN (SELECT id FROM users) FROM users",
+        "SELECT name LIKE pattern ESCAPE esc FROM users",
+        "SELECT name SIMILAR TO pattern FROM users",
+        "SELECT name ## suffix FROM users",
+        "SELECT missing::varchar(10) FROM users",
+        "SELECT CAST(missing AS numeric(10,2)) FROM users",
+        "SELECT missing::int[] FROM users",
+        "SELECT missing::public.custom FROM users",
+        "SELECT CASE WHEN missing THEN name END FROM users",
+        "SELECT users.* FROM users",
+    ] {
+        let sql = format!("{unsupported}; SELECT nmae FROM users");
+        let result = run(&sql);
+        assert_eq!(
+            slices(&sql, &result.diagnostics),
+            ["nmae"],
+            "{sql}: {result:?}"
+        );
+        assert!(result.statements[0].resolved.is_none(), "{sql}");
+        assert!(result.statements[1].resolved.is_some(), "{sql}");
+    }
+}
+
+#[test]
 fn qualified_table_and_utf8_crlf_repeated_identifiers_have_original_spans() {
     let sql = "-- 普通のコメント\r\nSELECT \"a\"\"b\", \"名前\", nmae, nmae FROM users;\r\nSELECT id FROM public.usres;";
     let r = run(sql);

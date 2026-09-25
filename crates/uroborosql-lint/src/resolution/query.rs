@@ -26,9 +26,28 @@ pub(crate) enum Expr {
     Column(Box<ColumnRef>),
     Literal,
     Group(Box<Expr>),
-    Unary { operand: Box<Expr> },
-    Binary { left: Box<Expr>, right: Box<Expr> },
-    IsNull { operand: Box<Expr> },
+    Unary {
+        operand: Box<Expr>,
+    },
+    Binary {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    IsNull {
+        operand: Box<Expr>,
+    },
+    In {
+        value: Box<Expr>,
+        items: Vec<Expr>,
+    },
+    Between {
+        value: Box<Expr>,
+        lower: Box<Expr>,
+        upper: Box<Expr>,
+    },
+    Cast {
+        operand: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -495,17 +514,72 @@ fn identifier(node: &Node<'_>) -> Result<Identifier, Exclusion> {
     })
 }
 
+fn in_items(node: &Node<'_>) -> Result<Vec<Expr>, Exclusion> {
+    let parts = children(node);
+    let [open, expression_list, close] = parts.as_slice() else {
+        return Err(Exclusion::UnsupportedSyntax);
+    };
+    if open.kind() != K::LParen
+        || expression_list.kind() != K::expr_list
+        || close.kind() != K::RParen
+    {
+        return Err(Exclusion::UnsupportedSyntax);
+    }
+    let list = children(expression_list);
+    if list.is_empty() || list.len().is_multiple_of(2) {
+        return Err(Exclusion::UnsupportedSyntax);
+    }
+    let mut items = Vec::new();
+    for (index, item) in list.iter().enumerate() {
+        if index.is_multiple_of(2) {
+            if item.kind() != K::a_expr {
+                return Err(Exclusion::UnsupportedSyntax);
+            }
+            items.push(expr(item)?);
+        } else if item.kind() != K::Comma {
+            return Err(Exclusion::UnsupportedSyntax);
+        }
+    }
+    Ok(items)
+}
+
+fn simple_type(node: &Node<'_>) -> Result<(), Exclusion> {
+    let simple = only(node, K::SimpleTypename)?;
+    let family = children(&simple);
+    if !matches!(family.as_slice(), [kind] if matches!(kind.kind(),
+        K::GenericType | K::Numeric | K::Character | K::Bit | K::ConstDatetime | K::ConstInterval))
+        || simple.descendants().any(|part| {
+            matches!(
+                part.kind(),
+                K::attrs
+                    | K::opt_type_modifiers
+                    | K::CharacterWithLength
+                    | K::LParen
+                    | K::RParen
+                    | K::LBracket
+                    | K::RBracket
+                    | K::Dot
+                    | K::Comma
+            )
+        })
+    {
+        return Err(Exclusion::UnsupportedSyntax);
+    }
+    Ok(())
+}
+
 fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
     let c = children(node);
     match node.kind() {
-        K::a_expr => {
+        K::a_expr | K::b_expr => {
+            let expression_kind = node.kind();
             if kinds(&c, &[K::c_expr]) {
                 let primary_expr = &c[0];
                 return expr(primary_expr);
             }
             if let [operator, operand] = c.as_slice() {
                 if matches!(operator.kind(), K::Plus | K::Minus | K::NOT)
-                    && operand.kind() == K::a_expr
+                    && operand.kind() == expression_kind
                 {
                     return Ok(Expr::Unary {
                         operand: Box::new(expr(operand)?),
@@ -513,8 +587,8 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
                 }
             }
             if let [left, operator, right] = c.as_slice() {
-                if left.kind() == K::a_expr
-                    && right.kind() == K::a_expr
+                if left.kind() == expression_kind
+                    && right.kind() == expression_kind
                     && matches!(
                         operator.kind(),
                         K::Plus
@@ -545,6 +619,74 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
                     operand: Box::new(expr(operand)?),
                 });
             }
+            if kinds(&c, &[K::a_expr, K::IN_P, K::in_expr])
+                || kinds(&c, &[K::a_expr, K::NOT_LA, K::IN_P, K::in_expr])
+            {
+                let value = &c[0];
+                let in_expression = c.last().expect("checked IN shape");
+                let items = in_items(in_expression)?;
+                return Ok(Expr::In {
+                    value: Box::new(expr(value)?),
+                    items,
+                });
+            }
+            if kinds(&c, &[K::a_expr, K::BETWEEN, K::b_expr, K::AND, K::a_expr])
+                || kinds(
+                    &c,
+                    &[
+                        K::a_expr,
+                        K::NOT_LA,
+                        K::BETWEEN,
+                        K::b_expr,
+                        K::AND,
+                        K::a_expr,
+                    ],
+                )
+            {
+                let (value, lower, upper) = match c.as_slice() {
+                    [value, _, lower, _, upper] | [value, _, _, lower, _, upper] => {
+                        (value, lower, upper)
+                    }
+                    _ => unreachable!("checked BETWEEN shape"),
+                };
+                return Ok(Expr::Between {
+                    value: Box::new(expr(value)?),
+                    lower: Box::new(expr(lower)?),
+                    upper: Box::new(expr(upper)?),
+                });
+            }
+            if kinds(&c, &[K::a_expr, K::LIKE, K::a_expr])
+                || kinds(&c, &[K::a_expr, K::ILIKE, K::a_expr])
+                || kinds(&c, &[K::a_expr, K::NOT_LA, K::LIKE, K::a_expr])
+                || kinds(&c, &[K::a_expr, K::NOT_LA, K::ILIKE, K::a_expr])
+            {
+                let left = &c[0];
+                let right = c.last().expect("checked LIKE shape");
+                return Ok(Expr::Binary {
+                    left: Box::new(expr(left)?),
+                    right: Box::new(expr(right)?),
+                });
+            }
+            if let [left, operator, right] = c.as_slice() {
+                if left.kind() == K::a_expr
+                    && operator.kind() == K::qual_Op
+                    && right.kind() == K::a_expr
+                    && only(operator, K::Op).is_ok_and(|op| op.text() == "||")
+                {
+                    return Ok(Expr::Binary {
+                        left: Box::new(expr(left)?),
+                        right: Box::new(expr(right)?),
+                    });
+                }
+            }
+            if kinds(&c, &[K::a_expr, K::TYPECAST, K::Typename]) {
+                let value = &c[0];
+                let type_name = &c[2];
+                simple_type(type_name)?;
+                return Ok(Expr::Cast {
+                    operand: Box::new(expr(value)?),
+                });
+            }
         }
         K::c_expr => {
             if kinds(&c, &[K::columnref]) {
@@ -564,6 +706,26 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
             if kinds(&c, &[K::LParen, K::a_expr, K::RParen]) {
                 let grouped_expr = &c[1];
                 return Ok(Expr::Group(Box::new(expr(grouped_expr)?)));
+            }
+            if kinds(&c, &[K::func_expr]) {
+                let function = &c[0];
+                let common = only(function, K::func_expr_common_subexpr)?;
+                let cast = children(&common);
+                if let [cast_keyword, open, value, as_keyword, type_name, close] = cast.as_slice() {
+                    if cast_keyword.kind() != K::CAST
+                        || open.kind() != K::LParen
+                        || value.kind() != K::a_expr
+                        || as_keyword.kind() != K::AS
+                        || type_name.kind() != K::Typename
+                        || close.kind() != K::RParen
+                    {
+                        return Err(Exclusion::UnsupportedSyntax);
+                    }
+                    simple_type(type_name)?;
+                    return Ok(Expr::Cast {
+                        operand: Box::new(expr(value)?),
+                    });
+                }
             }
             if kinds(&c, &[K::AexprConst]) {
                 let constant = &c[0];

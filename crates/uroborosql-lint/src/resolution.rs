@@ -213,12 +213,28 @@ fn resolve_expr(
             input: input.as_ref().clone(),
             outcome: resolve_reference(input, select, source),
         }),
-        Expr::Group(operand) | Expr::Unary { operand } | Expr::IsNull { operand } => {
-            resolve_expr(operand, clause, select, source, results)
-        }
+        Expr::Group(operand)
+        | Expr::Unary { operand }
+        | Expr::IsNull { operand }
+        | Expr::Cast { operand } => resolve_expr(operand, clause, select, source, results),
         Expr::Binary { left, right } => {
             resolve_expr(left, clause, select, source, results);
             resolve_expr(right, clause, select, source, results);
+        }
+        Expr::In { value, items } => {
+            resolve_expr(value, clause, select, source, results);
+            for item in items {
+                resolve_expr(item, clause, select, source, results);
+            }
+        }
+        Expr::Between {
+            value,
+            lower,
+            upper,
+        } => {
+            resolve_expr(value, clause, select, source, results);
+            resolve_expr(lower, clause, select, source, results);
+            resolve_expr(upper, clause, select, source, results);
         }
         Expr::Literal => {}
     }
