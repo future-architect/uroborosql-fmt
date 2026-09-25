@@ -208,10 +208,8 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
         return Err(Exclusion::UnsupportedSyntax);
     }
     let mut next = 1;
-    if c.get(next)
-        .is_some_and(|part| part.kind() == K::distinct_clause)
-    {
-        if !kinds(&children(&c[next]), &[K::DISTINCT]) {
+    if let Some(distinct_clause) = c.get(next).filter(|part| part.kind() == K::distinct_clause) {
+        if !kinds(&children(distinct_clause), &[K::DISTINCT]) {
             return Err(Exclusion::UnsupportedSyntax);
         }
         next += 1;
@@ -429,10 +427,13 @@ fn locking(node: &Node<'_>, source: &Source) -> Result<(), Exclusion> {
             return Err(Exclusion::UnsupportedSyntax);
         }
         let relations = children(locked_rels);
-        if !kinds(&relations, &[K::OF, K::qualified_name_list]) {
+        let [of_keyword, qualified_names] = relations.as_slice() else {
+            return Err(Exclusion::UnsupportedSyntax);
+        };
+        if of_keyword.kind() != K::OF || qualified_names.kind() != K::qualified_name_list {
             return Err(Exclusion::UnsupportedSyntax);
         }
-        let relation = only(&relations[1], K::qualified_name)?;
+        let relation = only(qualified_names, K::qualified_name)?;
         let names = names(&relation)?;
         if !matches!(names.as_slice(), [name] if Some(name.name.as_str()) == source.visible_name())
         {
