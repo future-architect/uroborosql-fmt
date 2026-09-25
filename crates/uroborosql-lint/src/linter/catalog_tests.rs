@@ -236,6 +236,68 @@ fn bounded_expressions_diagnose_all_value_references_at_original_ranges() {
 }
 
 #[test]
+fn between_lower_cast_and_concat_keep_all_reference_ranges_and_unknowns() {
+    for (sql, expected) in [
+        (
+            "SELECT id BETWEEN low::text || other AND high FROM users",
+            vec!["low", "other", "high"],
+        ),
+        (
+            "SELECT id NOT BETWEEN CAST(low AS text) || other AND high FROM users",
+            vec!["low", "other", "high"],
+        ),
+        (
+            "SELECT id BETWEEN (low::text || other) AND high FROM users",
+            vec!["low", "other", "high"],
+        ),
+        (
+            "SELECT id FROM users WHERE id BETWEEN low::text || other AND high",
+            vec!["low", "other", "high"],
+        ),
+    ] {
+        let result = run(sql);
+        assert_eq!(
+            slices(sql, &result.diagnostics),
+            expected,
+            "{sql}: {result:?}"
+        );
+        assert_eq!(result.statements[0].status, AnalysisStatus::Complete);
+    }
+
+    let sql = "SELECT id BETWEEN low::text || other AND high FROM usres";
+    assert_eq!(slices(sql, &run(sql).diagnostics), ["usres"]);
+
+    let sql = "SELECT x.id BETWEEN x.low::text || x.other AND x.high FROM /*#table*/ AS x";
+    let tree = tree_sitter::parse_2way(sql).unwrap();
+    assert!(query::extract(&tree.root_node()).requests.is_empty());
+    assert!(run(sql).diagnostics.is_empty());
+
+    let error = AcquisitionError::new(AcquisitionPhase::Connect, AcquisitionErrorKind::Connection);
+    let sql = "SELECT id BETWEEN low::text || other AND high FROM users";
+    let result = Linter::new()
+        .run_with_catalog(sql, &config(), Err(&error))
+        .unwrap();
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.statements[0].status, AnalysisStatus::Failed(error));
+    assert_eq!(
+        result.statements[0].resolved.as_ref().unwrap().outputs[0]
+            .references
+            .len(),
+        4
+    );
+
+    for unsupported in [
+        "SELECT id BETWEEN low::varchar(10) AND high FROM users",
+        "SELECT id BETWEEN low ## other AND high FROM users",
+    ] {
+        let sql = format!("{unsupported}; SELECT nmae FROM users");
+        let result = run(&sql);
+        assert_eq!(slices(&sql, &result.diagnostics), ["nmae"], "{sql}");
+        assert!(result.statements[0].resolved.is_none(), "{sql}");
+    }
+}
+
+#[test]
 fn bounded_expression_unknown_sources_do_not_create_derived_absence() {
     let sql = "SELECT missing IN (other, age) FROM usres";
     let result = run(sql);

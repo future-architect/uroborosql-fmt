@@ -668,9 +668,9 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
                 });
             }
             if let [left, operator, right] = c.as_slice() {
-                if left.kind() == K::a_expr
+                if left.kind() == expression_kind
                     && operator.kind() == K::qual_Op
-                    && right.kind() == K::a_expr
+                    && right.kind() == expression_kind
                     && only(operator, K::Op).is_ok_and(|op| op.text() == "||")
                 {
                     return Ok(Expr::Binary {
@@ -679,7 +679,7 @@ fn expr(node: &Node<'_>) -> Result<Expr, Exclusion> {
                     });
                 }
             }
-            if kinds(&c, &[K::a_expr, K::TYPECAST, K::Typename]) {
+            if kinds(&c, &[expression_kind, K::TYPECAST, K::Typename]) {
                 let value = &c[0];
                 let type_name = &c[2];
                 simple_type(type_name)?;

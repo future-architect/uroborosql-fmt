@@ -143,6 +143,30 @@ fn accepts_bounded_value_expressions_and_collects_every_operand() {
 }
 
 #[test]
+fn between_lower_b_expr_accepts_bounded_cast_and_concat() {
+    for sql in [
+        "SELECT id BETWEEN low::text AND high FROM users",
+        "SELECT id BETWEEN low || other AND high FROM users",
+        "SELECT id NOT BETWEEN CAST(low AS text) || other AND high FROM users",
+        "SELECT id BETWEEN (low::text || other) AND high FROM users",
+        "SELECT id FROM users WHERE id BETWEEN low::text || other AND high",
+    ] {
+        let prepared = prepare_sql(sql);
+        assert_eq!(prepared.requests.len(), 1, "{sql}: {prepared:?}");
+        assert!(prepared.statements[0].input.is_ok(), "{sql}: {prepared:?}");
+    }
+    for sql in [
+        "SELECT id BETWEEN low::varchar(10) AND high FROM users",
+        "SELECT id BETWEEN low::public.custom AND high FROM users",
+        "SELECT id BETWEEN low ## other AND high FROM users",
+    ] {
+        let prepared = prepare_sql(sql);
+        assert!(prepared.requests.is_empty(), "{sql}: {prepared:?}");
+        assert!(prepared.statements[0].input.is_err(), "{sql}: {prepared:?}");
+    }
+}
+
+#[test]
 fn rejects_unlisted_syntax_before_collecting_requests() {
     for sql in [
         "SELECT * FROM users",
