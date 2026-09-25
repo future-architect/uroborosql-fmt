@@ -208,6 +208,40 @@ fn failures_and_unknown_sources_never_become_absence() {
 }
 
 #[test]
+fn file_effect_suppresses_catalog_diagnostics_but_keeps_cst_diagnostics() {
+    let sql =
+        "SELECT DISTINCT nmae FROM users; CREATE TABLE scratch(id integer); SELECT agge FROM users";
+    let mut cfg = config();
+    cfg.rules
+        .push((RuleEnum::NoDistinct(NoDistinct), Severity::Warning));
+    let result = Linter::new()
+        .run_with_catalog(sql, &cfg, Ok(&snapshot()))
+        .unwrap();
+    assert_eq!(result.diagnostics.len(), 1);
+    assert_eq!(result.diagnostics[0].code, "no-distinct");
+    assert!(result.statements.iter().all(|statement| {
+        matches!(statement.status, AnalysisStatus::Excluded(_)) && statement.resolved.is_none()
+    }));
+
+    for effect in [
+        "SET CONSTRAINTS ALL DEFERRED",
+        "SELECT set_config('search_path', 'public', false) FROM users",
+        "SELECT id INTO scratch FROM users",
+        "WITH changed AS (UPDATE users SET id = 1 RETURNING id) SELECT id FROM users",
+    ] {
+        let sql = format!("SELECT nmae FROM users; {effect}; SELECT agge FROM users");
+        let tree = tree_sitter::parse_2way(&sql).unwrap();
+        assert!(
+            query::extract(&tree.root_node()).requests.is_empty(),
+            "{sql}"
+        );
+        let result = run(&sql);
+        assert!(result.diagnostics.is_empty(), "{sql}: {result:?}");
+        assert!(result.statements.iter().all(|s| s.resolved.is_none()));
+    }
+}
+
+#[test]
 fn suppression_preserves_other_rules_lines_and_internal_resolution() {
     let mut cfg = config();
     cfg.rules

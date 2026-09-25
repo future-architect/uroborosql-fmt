@@ -122,7 +122,7 @@ fn rejects_unlisted_syntax_before_collecting_requests() {
 }
 
 #[test]
-fn session_changes_exclude_the_whole_file_but_not_other_unsupported_statements() {
+fn non_select_statements_hold_catalog_resolution_for_the_whole_file() {
     for change in [
         "SET search_path = public",
         "RESET search_path",
@@ -134,6 +134,18 @@ fn session_changes_exclude_the_whole_file_but_not_other_unsupported_statements()
         "SET SESSION work_mem = DEFAULT",
         "DISCARD ALL",
         "DISCARD PLANS",
+        "SET CONSTRAINTS ALL DEFERRED",
+        "CREATE TABLE scratch(id integer)",
+        "CREATE TABLE scratch AS SELECT id FROM users",
+        "ALTER TABLE users ADD COLUMN extra integer",
+        "ALTER TABLE users RENAME TO people",
+        "DROP TABLE users",
+        "TRUNCATE users",
+        "INSERT INTO users(id) VALUES (1)",
+        "UPDATE users SET id = 1",
+        "DELETE FROM users",
+        "DO $$ BEGIN NULL; END $$",
+        "CALL refresh_users()",
     ] {
         for sql in [
             format!("{change}; SELECT id FROM users"),
@@ -145,19 +157,38 @@ fn session_changes_exclude_the_whole_file_but_not_other_unsupported_statements()
                 input
                     .statements
                     .iter()
-                    .all(|s| matches!(s.input, Err(Exclusion::SessionChange))),
+                    .all(|s| matches!(s.input, Err(Exclusion::FileEffect))),
                 "{sql}"
             );
         }
     }
-    let input = prepare_sql("SET CONSTRAINTS ALL DEFERRED; SELECT id FROM users;");
-    assert_eq!(input.requests.len(), 1);
-    assert!(input.statements[1].input.is_ok());
+}
+
+#[test]
+fn select_effects_hold_adjacent_queries_before_request_collection() {
+    for effect in [
+        "SELECT id INTO scratch FROM users",
+        "SELECT set_config('search_path', 'public', false) FROM users",
+        "SELECT pg_catalog.set_config('search_path', 'public', false) FROM users",
+        "SELECT id FROM users WHERE set_config('search_path', 'public', false) = 'public'",
+        "WITH changed AS (UPDATE users SET id = 1 RETURNING id) SELECT id FROM users",
+    ] {
+        let sql = format!("SELECT nmae FROM users; {effect}; SELECT agge FROM users");
+        let input = prepare_sql(&sql);
+        assert!(input.requests.is_empty(), "{sql}: {input:?}");
+        assert!(
+            input
+                .statements
+                .iter()
+                .all(|s| matches!(s.input, Err(Exclusion::FileEffect))),
+            "{sql}: {input:?}"
+        );
+    }
 }
 
 #[test]
 fn ordinary_comments_strings_and_mixed_statements_do_not_hide_eligible_sql() {
-    let input = prepare_sql("-- SET ROLE\nSELECT /* ordinary comment */ 'SET ROLE' AS label, name FROM users; SELECT count(*) FROM users; SELECT id FROM users;");
+    let input = prepare_sql("-- SET ROLE and CREATE TABLE; set_config()\nSELECT /* ordinary comment */ 'SET ROLE and CREATE TABLE; set_config()' AS label, name FROM users; SELECT DISTINCT id FROM users; SELECT id FROM users;");
     assert_eq!(
         input
             .statements

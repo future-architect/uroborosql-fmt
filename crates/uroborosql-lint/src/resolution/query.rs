@@ -83,7 +83,7 @@ pub(crate) struct Select {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Exclusion {
-    SessionChange,
+    FileEffect,
     UnsupportedSyntax,
     UnsupportedIdentifier,
     TemporarySchema,
@@ -102,12 +102,24 @@ pub(crate) struct Prepared {
 }
 
 pub(crate) fn extract(root: &Node<'_>) -> Prepared {
-    let session_change = root.descendants().any(|n| {
-        matches!(
-            n.kind(),
-            K::VariableSetStmt | K::VariableResetStmt | K::DiscardStmt
-        )
-    });
+    let file_effect = root
+        .children()
+        .into_iter()
+        .filter(|n| !comment(n) && n.kind() != K::Semicolon)
+        .any(|statement| {
+            statement.kind() != K::SelectStmt
+                || statement.descendants().any(|n| {
+                    matches!(
+                        n.kind(),
+                        K::into_clause
+                            | K::func_application
+                            | K::InsertStmt
+                            | K::UpdateStmt
+                            | K::DeleteStmt
+                            | K::MergeStmt
+                    )
+                })
+        });
     let mut statements = Vec::new();
     let mut requests = Vec::new();
     for node in root
@@ -116,8 +128,8 @@ pub(crate) fn extract(root: &Node<'_>) -> Prepared {
         .filter(|n| !comment(n) && n.kind() != K::Semicolon)
     {
         let range = node.range();
-        let input = if session_change {
-            Err(Exclusion::SessionChange)
+        let input = if file_effect {
+            Err(Exclusion::FileEffect)
         } else {
             select(&node)
         };
