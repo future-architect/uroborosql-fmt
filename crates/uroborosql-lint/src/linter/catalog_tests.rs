@@ -120,6 +120,64 @@ fn acceptance_examples_diagnose_only_the_original_reference() {
 }
 
 #[test]
+fn bounded_clauses_keep_reference_ranges_and_implicit_aliases() {
+    for (sql, expected) in [
+        ("SELECT nmae FROM users LIMIT 1 OFFSET 2", vec!["nmae"]),
+        (
+            "SELECT nmae FROM users WHERE agge > 1 LIMIT 1 OFFSET 2",
+            vec!["nmae", "agge"],
+        ),
+        (
+            "SELECT nmae FROM users OFFSET 2 ROWS FETCH NEXT 1 ROW ONLY",
+            vec!["nmae"],
+        ),
+        ("SELECT DISTINCT nmae FROM users", vec!["nmae"]),
+        ("SELECT id alias FROM users WHERE alias = 1", vec!["alias"]),
+        ("SELECT u.nmae FROM users u FOR UPDATE OF u", vec!["nmae"]),
+    ] {
+        let result = run(sql);
+        assert_eq!(slices(sql, &result.diagnostics), expected, "{sql}");
+        assert_eq!(result.statements[0].status, AnalysisStatus::Complete);
+    }
+    let result = run("SELECT id alias, id + 1 \"Alias\" FROM users");
+    let outputs = &result.statements[0].resolved.as_ref().unwrap().outputs;
+    assert_eq!(
+        outputs
+            .iter()
+            .map(|output| output.name.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("alias"), Some("Alias")]
+    );
+    let result = run("SELECT missing FROM users FOR UPDATE OF users");
+    assert_eq!(result.diagnostics[0].code, "no-unknown-reference");
+    assert_eq!(
+        slices(
+            "SELECT missing FROM users FOR UPDATE OF users",
+            &result.diagnostics
+        ),
+        ["missing"]
+    );
+}
+
+#[test]
+fn unsupported_clauses_exclude_without_losing_adjacent_query_diagnostics() {
+    for unsupported in [
+        "SELECT DISTINCT ON (missing) id FROM users",
+        "SELECT id FROM users LIMIT missing",
+        "SELECT id FROM users FETCH FIRST ROW ONLY",
+        "SELECT id FROM users FOR UPDATE OF other",
+        "SELECT id FROM users u FOR UPDATE OF users",
+        "SELECT id FROM users FOR UPDATE SKIP LOCKED",
+    ] {
+        let sql = format!("{unsupported}; SELECT nmae FROM users");
+        let result = run(&sql);
+        assert_eq!(slices(&sql, &result.diagnostics), ["nmae"], "{sql}");
+        assert!(result.statements[0].resolved.is_none(), "{sql}");
+        assert!(result.statements[1].resolved.is_some(), "{sql}");
+    }
+}
+
+#[test]
 fn qualified_table_and_utf8_crlf_repeated_identifiers_have_original_spans() {
     let sql = "-- 普通のコメント\r\nSELECT \"a\"\"b\", \"名前\", nmae, nmae FROM users;\r\nSELECT id FROM public.usres;";
     let r = run(sql);
@@ -193,7 +251,7 @@ fn failures_and_unknown_sources_never_become_absence() {
         .push((RuleEnum::NoDistinct(NoDistinct), Severity::Warning));
     let r = Linter::new()
         .run_with_catalog(
-            "SELECT DISTINCT id FROM users; SELECT missing FROM users",
+            "SELECT DISTINCT ON (id) id FROM users; SELECT missing FROM users",
             &cfg,
             Err(&error),
         )
@@ -246,7 +304,7 @@ fn suppression_preserves_other_rules_lines_and_internal_resolution() {
     let mut cfg = config();
     cfg.rules
         .push((RuleEnum::NoDistinct(NoDistinct), Severity::Warning));
-    let sql = "-- uroborosql-lint-disable-next-line no-unknown-reference\nSELECT , nmae FROM users;\nSELECT nmae FROM users; SELECT DISTINCT id FROM users;";
+    let sql = "-- uroborosql-lint-disable-next-line no-unknown-reference\nSELECT , nmae FROM users;\nSELECT nmae FROM users; SELECT DISTINCT ON (id) id FROM users;";
     let r = Linter::new()
         .run_with_catalog(sql, &cfg, Ok(&snapshot()))
         .unwrap();
@@ -256,7 +314,7 @@ fn suppression_preserves_other_rules_lines_and_internal_resolution() {
     );
     assert_eq!(r.diagnostics[0].span.start.line, 2);
     assert!(r.statements[0].resolved.is_some());
-    let sql = "-- uroborosql-lint-disable no-unknown-reference\nSELECT , nmae FROM users; SELECT DISTINCT id FROM users;";
+    let sql = "-- uroborosql-lint-disable no-unknown-reference\nSELECT , nmae FROM users; SELECT DISTINCT ON (id) id FROM users;";
     let r = Linter::new()
         .run_with_catalog(sql, &cfg, Ok(&snapshot()))
         .unwrap();

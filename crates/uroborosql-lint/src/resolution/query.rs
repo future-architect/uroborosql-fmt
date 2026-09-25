@@ -182,18 +182,52 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
     }
     let body = only(node, K::select_no_parens)?;
     let c = children(&body);
-    if !kinds(&c, &[K::SELECT, K::target_list, K::from_clause])
-        && !kinds(
-            &c,
-            &[K::SELECT, K::target_list, K::from_clause, K::where_clause],
-        )
-    {
+    if c.first().is_none_or(|keyword| keyword.kind() != K::SELECT) {
         return Err(Exclusion::UnsupportedSyntax);
     }
-    let target_list = &c[1];
-    let from_clause = &c[2];
-    let where_clause = c.get(3);
+    let mut next = 1;
+    if c.get(next)
+        .is_some_and(|part| part.kind() == K::distinct_clause)
+    {
+        if !kinds(&children(&c[next]), &[K::DISTINCT]) {
+            return Err(Exclusion::UnsupportedSyntax);
+        }
+        next += 1;
+    }
+    let Some(target_list) = c.get(next).filter(|part| part.kind() == K::target_list) else {
+        return Err(Exclusion::UnsupportedSyntax);
+    };
+    next += 1;
+    let Some(from_clause) = c.get(next).filter(|part| part.kind() == K::from_clause) else {
+        return Err(Exclusion::UnsupportedSyntax);
+    };
+    next += 1;
     let source = source(from_clause)?;
+    let where_clause = c.get(next).filter(|part| part.kind() == K::where_clause);
+    if where_clause.is_some() {
+        next += 1;
+    }
+    let mut seen_limit = false;
+    let mut seen_offset = false;
+    let mut seen_locking = false;
+    let trailing = &c[next..];
+    for part in trailing {
+        match part.kind() {
+            K::limit_clause if !seen_limit => {
+                limit(part)?;
+                seen_limit = true;
+            }
+            K::offset_clause if !seen_offset => {
+                offset(part)?;
+                seen_offset = true;
+            }
+            K::for_locking_clause | K::opt_for_locking_clause if !seen_locking => {
+                locking(part, &source)?;
+                seen_locking = true;
+            }
+            _ => return Err(Exclusion::UnsupportedSyntax),
+        }
+    }
     let list = children(target_list);
     if list.is_empty() || list.len().is_multiple_of(2) {
         return Err(Exclusion::UnsupportedSyntax);
@@ -211,6 +245,9 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
             let t = children(node);
             let alias = if kinds(&t, &[K::a_expr, K::AS, K::ColLabel]) {
                 let output_alias = &t[2];
+                Some(identifier(output_alias)?)
+            } else if kinds(&t, &[K::a_expr, K::BareColLabel]) {
+                let output_alias = &t[1];
                 Some(identifier(output_alias)?)
             } else if kinds(&t, &[K::a_expr]) {
                 None
@@ -239,6 +276,107 @@ fn select(node: &Node<'_>) -> Result<Select, Exclusion> {
         targets,
         predicate,
     })
+}
+
+fn integer_literal(node: &Node<'_>, expression_kind: K) -> Result<(), Exclusion> {
+    let expression = only(node, expression_kind)?;
+    let constant_base = if expression_kind == K::a_expr {
+        only(&expression, K::c_expr)?
+    } else {
+        expression
+    };
+    let constant = only(&constant_base, K::AexprConst)?;
+    let integer = only(&constant, K::Iconst)?;
+    only(&integer, K::ICONST)?;
+    Ok(())
+}
+
+fn row_or_rows(node: &Node<'_>, offset: bool) -> Result<(), Exclusion> {
+    let tokens = children(node);
+    match tokens.as_slice() {
+        [token] if token.kind() == K::ROWS || (!offset && token.kind() == K::ROW) => Ok(()),
+        _ => Err(Exclusion::UnsupportedSyntax),
+    }
+}
+
+fn limit(node: &Node<'_>) -> Result<(), Exclusion> {
+    let parts = children(node);
+    match parts.as_slice() {
+        [keyword, value] if keyword.kind() == K::LIMIT && value.kind() == K::select_limit_value => {
+            integer_literal(value, K::a_expr)
+        }
+        [keyword, first_or_next, value, rows, only]
+            if keyword.kind() == K::FETCH
+                && first_or_next.kind() == K::first_or_next
+                && value.kind() == K::select_fetch_first_value
+                && rows.kind() == K::row_or_rows
+                && only.kind() == K::ONLY =>
+        {
+            let first_or_next = children(first_or_next);
+            if !matches!(first_or_next.as_slice(), [token] if matches!(token.kind(), K::FIRST_P | K::NEXT))
+            {
+                return Err(Exclusion::UnsupportedSyntax);
+            }
+            integer_literal(value, K::c_expr)?;
+            row_or_rows(rows, false)
+        }
+        _ => Err(Exclusion::UnsupportedSyntax),
+    }
+}
+
+fn offset(node: &Node<'_>) -> Result<(), Exclusion> {
+    let parts = children(node);
+    match parts.as_slice() {
+        [keyword, value]
+            if keyword.kind() == K::OFFSET && value.kind() == K::select_offset_value =>
+        {
+            integer_literal(value, K::a_expr)
+        }
+        [keyword, value, rows]
+            if keyword.kind() == K::OFFSET
+                && value.kind() == K::select_fetch_first_value
+                && rows.kind() == K::row_or_rows =>
+        {
+            integer_literal(value, K::c_expr)?;
+            row_or_rows(rows, true)
+        }
+        _ => Err(Exclusion::UnsupportedSyntax),
+    }
+}
+
+fn locking(node: &Node<'_>, source: &Source) -> Result<(), Exclusion> {
+    let clause = if node.kind() == K::opt_for_locking_clause {
+        only(node, K::for_locking_clause)?
+    } else if node.kind() == K::for_locking_clause {
+        node.clone()
+    } else {
+        return Err(Exclusion::UnsupportedSyntax);
+    };
+    let items = only(&clause, K::for_locking_items)?;
+    let item = only(&items, K::for_locking_item)?;
+    let parts = children(&item);
+    let ([strength] | [strength, _]) = parts.as_slice() else {
+        return Err(Exclusion::UnsupportedSyntax);
+    };
+    if !kinds(&children(strength), &[K::FOR, K::UPDATE]) {
+        return Err(Exclusion::UnsupportedSyntax);
+    }
+    if let Some(locked_rels) = parts.get(1) {
+        if locked_rels.kind() != K::locked_rels_list {
+            return Err(Exclusion::UnsupportedSyntax);
+        }
+        let relations = children(locked_rels);
+        if !kinds(&relations, &[K::OF, K::qualified_name_list]) {
+            return Err(Exclusion::UnsupportedSyntax);
+        }
+        let relation = only(&relations[1], K::qualified_name)?;
+        let names = names(&relation)?;
+        if !matches!(names.as_slice(), [name] if Some(name.name.as_str()) == source.visible_name())
+        {
+            return Err(Exclusion::UnsupportedSyntax);
+        }
+    }
+    Ok(())
 }
 
 fn source(node: &Node<'_>) -> Result<Source, Exclusion> {

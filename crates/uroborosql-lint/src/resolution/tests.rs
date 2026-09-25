@@ -248,7 +248,7 @@ fn absent_unknown_and_unavailable_sources_propagate_without_qualifier_errors() {
         Resolution::Unknown(ResolutionUnknown::Reason(UnknownReason::IncompleteCoverage))
     ));
     let prepared = extract(
-        &tree_sitter::parse_2way("SELECT id FROM users; SELECT DISTINCT id FROM users")
+        &tree_sitter::parse_2way("SELECT id FROM users; SELECT DISTINCT ON (id) id FROM users")
             .unwrap()
             .root_node(),
     );

@@ -76,17 +76,66 @@ fn accepts_each_operator_and_identifier_keyword() {
 }
 
 #[test]
+fn accepts_bounded_clauses_and_implicit_output_aliases() {
+    for sql in [
+        "SELECT nmae FROM users LIMIT 1",
+        "SELECT nmae FROM users OFFSET 2",
+        "SELECT nmae FROM users OFFSET 2 ROWS",
+        "SELECT nmae FROM users FETCH FIRST 1 ROW ONLY",
+        "SELECT nmae FROM users FETCH NEXT 1 ROWS ONLY",
+        "SELECT nmae FROM users LIMIT 1 OFFSET 2",
+        "SELECT nmae FROM users OFFSET 2 ROWS FETCH NEXT 1 ROW ONLY",
+        "SELECT nmae FROM users WHERE agge > 1 LIMIT 1 OFFSET 2",
+        "SELECT , nmae FROM , users LIMIT 1",
+        "SELECT DISTINCT nmae FROM users",
+        "SELECT DISTINCT , nmae FROM users",
+        "SELECT id alias, id + 1 \"Alias\" FROM users",
+        "SELECT nmae FROM users FOR UPDATE",
+        "SELECT nmae FROM users FOR UPDATE OF users",
+        "SELECT u.nmae FROM users u FOR UPDATE OF u",
+        "SELECT nmae FROM users LIMIT 1 FOR UPDATE",
+        "SELECT nmae FROM users FOR UPDATE LIMIT 1",
+        "SELECT nmae FROM users OFFSET 2 ROWS FOR UPDATE",
+        "SELECT nmae FROM users FETCH NEXT 2 ROWS ONLY FOR UPDATE",
+    ] {
+        let prepared = prepare_sql(sql);
+        assert_eq!(prepared.requests.len(), 1, "{sql}: {prepared:?}");
+        assert!(prepared.statements[0].input.is_ok(), "{sql}: {prepared:?}");
+    }
+    let prepared = prepare_sql("SELECT id alias, id + 1 \"Alias\" FROM users");
+    let targets = &prepared.statements[0].input.as_ref().unwrap().targets;
+    assert_eq!(targets[0].alias.as_ref().unwrap().name, "alias");
+    assert_eq!(targets[1].alias.as_ref().unwrap().name, "Alias");
+    assert_eq!(targets[1].alias.as_ref().unwrap().spelling, "\"Alias\"");
+    let recovered = prepare_sql("SELECT x.id FROM /*#table*/ AS x FOR UPDATE OF x");
+    assert!(recovered.requests.is_empty());
+    assert!(recovered.statements[0].input.is_ok());
+}
+
+#[test]
 fn rejects_unlisted_syntax_before_collecting_requests() {
     for sql in [
         "SELECT * FROM users",
         "SELECT u.* FROM users u",
-        "SELECT id alias FROM users",
-        "SELECT DISTINCT id FROM users",
         "SELECT id FROM users ORDER BY id",
         "SELECT id FROM users GROUP BY id",
         "SELECT id FROM users HAVING TRUE",
-        "SELECT id FROM users LIMIT 1",
-        "SELECT id FROM users OFFSET 1",
+        "SELECT id FROM users LIMIT ALL",
+        "SELECT id FROM users LIMIT id",
+        "SELECT id FROM users LIMIT 1 + 1",
+        "SELECT id FROM users OFFSET id",
+        "SELECT id FROM users OFFSET 1 + 1",
+        "SELECT id FROM users OFFSET 1 ROW",
+        "SELECT id FROM users FETCH FIRST ROW ONLY",
+        "SELECT id FROM users FETCH FIRST 1 ROW WITH TIES",
+        "SELECT DISTINCT ON (missing) id FROM users",
+        "SELECT id FROM users FOR UPDATE OF other",
+        "SELECT u.id FROM users u FOR UPDATE OF users",
+        "SELECT id FROM users FOR UPDATE OF users, other",
+        "SELECT id FROM users FOR UPDATE OF public.users",
+        "SELECT id FROM users FOR UPDATE NOWAIT",
+        "SELECT id FROM users FOR UPDATE SKIP LOCKED",
+        "SELECT id FROM users FOR NO KEY UPDATE",
         "SELECT id INTO other FROM users",
         "SELECT ALL id FROM users",
         "SELECT id FROM ONLY users",
@@ -188,7 +237,7 @@ fn select_effects_hold_adjacent_queries_before_request_collection() {
 
 #[test]
 fn ordinary_comments_strings_and_mixed_statements_do_not_hide_eligible_sql() {
-    let input = prepare_sql("-- SET ROLE and CREATE TABLE; set_config()\nSELECT /* ordinary comment */ 'SET ROLE and CREATE TABLE; set_config()' AS label, name FROM users; SELECT DISTINCT id FROM users; SELECT id FROM users;");
+    let input = prepare_sql("-- SET ROLE and CREATE TABLE; set_config()\nSELECT /* ordinary comment */ 'SET ROLE and CREATE TABLE; set_config()' AS label, name FROM users; SELECT id FROM users ORDER BY id; SELECT id FROM users;");
     assert_eq!(
         input
             .statements
@@ -254,7 +303,6 @@ fn recovered_source_retains_alias_and_range_without_request() {
 fn recovery_does_not_expand_supported_syntax() {
     for sql in [
         "SELECT ALL , id FROM users",
-        "SELECT DISTINCT , id FROM users",
         "SELECT DISTINCT ON (id) , id FROM users",
         "SELECT id FROM users ORDER BY , id",
         "SELECT id FROM users GROUP BY , id",
