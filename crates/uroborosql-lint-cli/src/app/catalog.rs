@@ -31,7 +31,7 @@ pub(super) fn summary(file: &str, report: &CatalogReport) -> String {
                 excluded += 1;
                 Some(
                     match statement.exclusion {
-                        Some(CatalogExclusion::SessionChange) => "session-changing SQL",
+                        Some(CatalogExclusion::FileEffect) => "file effect in SQL input",
                         Some(CatalogExclusion::UnsupportedSyntax) => "unsupported syntax",
                         Some(CatalogExclusion::UnsupportedIdentifier) => "unsupported identifier",
                         Some(CatalogExclusion::TemporarySchema) => "temporary schema",

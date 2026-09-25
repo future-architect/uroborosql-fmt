@@ -89,6 +89,37 @@ async fn public_async_is_send_deduplicates_and_preserves_sync_behavior() {
 }
 
 #[tokio::test]
+async fn public_async_keeps_wildcards_and_other_reference_diagnostics() {
+    let provider = InMemoryCatalogProvider::new(snapshot());
+    let sql = "SELECT *, missing FROM users; SELECT u.*, u.missing FROM users AS u WHERE u.absent = 1; SELECT users.*, u.id FROM users AS u;";
+    let result = Linter::new()
+        .run_async(sql, &ResolvedLintConfig::default(), Some(&provider))
+        .await
+        .unwrap();
+    let spans: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "no-unknown-reference")
+        .map(|d| &sql[d.span.start.byte..d.span.end.byte])
+        .collect();
+    assert_eq!(spans, ["missing", "missing", "absent", "users"]);
+    assert_eq!(
+        result
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == "no-wildcard-projection")
+            .count(),
+        3
+    );
+    let CatalogReport::Statements(statements) = result.catalog else {
+        panic!()
+    };
+    assert!(statements
+        .iter()
+        .all(|s| s.status == AnalysisStatus::Complete));
+}
+
+#[tokio::test]
 async fn no_acquisition_for_skipped_empty_unsupported_recovered_or_parse_failure() {
     let provider = RecordingProvider {
         calls: Mutex::new(vec![]),

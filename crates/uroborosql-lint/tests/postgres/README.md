@@ -59,7 +59,7 @@ parsed and linted, never executed. Its table references are resolved against
 `fixture.sql`, including `public.users(id, name, age)`, as the fixture's
 `postgres` user. Only `no-unknown-reference` is enabled.
 
-The test calls the existing input preparation, PostgreSQL provider and internal
+The test calls the current query extraction, PostgreSQL provider and internal
 catalog linter, then prints statement status and diagnostics with source
 positions. This is a manual inspection helper, not the product CLI or a public
 async API. Cargo test success means the helper ran; inspect the printed status
