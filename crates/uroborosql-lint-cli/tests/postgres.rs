@@ -26,7 +26,7 @@ async fn cli_and_public_api_use_postgres() {
         fs::write(&config, format!(r#"{{"db":{{"schemaProvider":"server","host":"127.0.0.1","port":{port},"user":"postgres","password":"{password}","dbname":"postgres","tlsMode":"disable","timeouts":{{"connectMs":5000,"queryMs":5000,"acquisitionMs":10000}}}}}}"#)).unwrap()
     };
     write_config(&password);
-    fs::write(&input, "SELECT missing FROM public.users; SELECT id FROM public.missing_table; SELECT DISTINCT id FROM public.users;").unwrap();
+    fs::write(&input, "SELECT missing FROM public.users; SELECT id FROM public.missing_table; SELECT DISTINCT ON (id) id FROM public.users;").unwrap();
     let run = |level: &str| {
         let mut command = Command::cargo_bin("uroborosql-lint").unwrap();
         command

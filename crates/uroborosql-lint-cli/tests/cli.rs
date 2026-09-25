@@ -243,7 +243,7 @@ fn invalid_fail_level_returns_usage_error() {
 #[test]
 fn catalog_skip_and_exclusion_are_visible_without_connecting() {
     let temp = TempDir::new().unwrap();
-    let input = write_sql(&temp, "query.sql", "SELECT DISTINCT id FROM users;");
+    let input = write_sql(&temp, "query.sql", "SELECT DISTINCT ON (id) id FROM users;");
     let cfg = temp.child("lint.json");
     for (json, expected) in [
         (r#"{}"#, "skipped (not configured)"),
@@ -271,12 +271,37 @@ fn catalog_skip_and_exclusion_are_visible_without_connecting() {
 }
 
 #[test]
+fn file_effect_holds_catalog_checks_for_the_whole_input() {
+    let temp = TempDir::new().unwrap();
+    let input = write_sql(
+        &temp,
+        "query.sql",
+        "SELECT id FROM users; SELECT set_config('search_path', 'public', false);",
+    );
+    let cfg = temp.child("lint.json");
+    cfg.write_str(r#"{"db":{"schemaProvider":"file","path":"absent.sqlite"}}"#)
+        .unwrap();
+    Command::cargo_bin("uroborosql-lint")
+        .unwrap()
+        .current_dir(temp.path())
+        .arg(input.path())
+        .arg("--config")
+        .arg(cfg.path())
+        .assert()
+        .success()
+        .stderr(contains(
+            "complete=0 excluded=2 failed=0; file effect in SQL input",
+        ));
+    assert!(!temp.path().join("absent.sqlite").exists());
+}
+
+#[test]
 fn unavailable_file_catalog_retains_diagnostics_and_overrides_fail_none() {
     let temp = TempDir::new().unwrap();
     let input = write_sql(
         &temp,
         "query.sql",
-        "SELECT DISTINCT id FROM users; SELECT missing FROM users;",
+        "SELECT DISTINCT ON (id) id FROM users; SELECT missing FROM users;",
     );
     let cfg = temp.child("lint.json");
     cfg.write_str(r#"{"db":{"schemaProvider":"file","path":"absent.sqlite"}}"#)
@@ -324,7 +349,7 @@ fn invalid_connection_keeps_cst_and_reports_safe_classified_failure_once() {
     let input = write_sql(
         &temp,
         "query.sql",
-        "SELECT DISTINCT id FROM users; SELECT id FROM users; SELECT id FROM users;",
+        "SELECT DISTINCT ON (id) id FROM users; SELECT id FROM users; SELECT id FROM users;",
     );
     let cfg = temp.child("lint.json");
     cfg.write_str(r#"{"db":{"schemaProvider":"server","host":"private-host,other","user":"private-user","password":"private-password","dbname":"app"}}"#).unwrap();
