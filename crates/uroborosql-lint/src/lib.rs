@@ -4,6 +4,8 @@ mod context;
 mod diagnostic;
 mod directive;
 mod linter;
+#[allow(dead_code)]
+pub mod resolution;
 mod rule;
 mod rules;
 mod tree;
