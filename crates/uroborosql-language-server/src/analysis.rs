@@ -85,6 +85,16 @@ impl State {
     }
 }
 impl Backend {
+    fn select_provider(
+        &self,
+        config: &ResolvedLintConfig,
+    ) -> Option<Box<dyn uroborosql_lint::catalog::CatalogProvider>> {
+        #[cfg(test)]
+        if let Some(factory) = &self.provider_factory {
+            return Some(factory());
+        }
+        config.catalog_provider()
+    }
     pub(crate) async fn publish_analysis(
         &self,
         uri: Uri,
@@ -135,10 +145,11 @@ impl Backend {
                 return;
             }
             root_stamp = Some((workspace.path, root.generation, root.dirty));
-            if let (Some(store), Some(path)) = (&root.store, file_uri_to_path(uri)) {
-                if !crate::paths::has_parent_dir_component(&path) && !store.is_ignored(&path) {
-                    config = Some(store.resolve(&path));
-                }
+            if let (Some(store), Some(path)) = (&root.store, file_uri_to_path(uri))
+                && !crate::paths::has_parent_dir_component(&path)
+                && !store.is_ignored(&path)
+            {
+                config = Some(store.resolve(&path));
             }
         }
         let request = state.next();
@@ -177,7 +188,8 @@ impl Backend {
                     }
                 }
             };
-            let permit = if job.config.is_some() {
+            let provider = job.config.as_ref().and_then(|c| self.select_provider(c));
+            let permit = if provider.is_some() {
                 match tokio::time::timeout(Duration::from_secs(10), self.slots.acquire()).await {
                     Ok(Ok(p)) => Some(p),
                     _ => {
@@ -203,7 +215,6 @@ impl Backend {
             }
             let mut status = None;
             let diagnostics = if let Some(config) = &job.config {
-                let provider = config.catalog_provider();
                 match self
                     .linter
                     .run_async(&job.sql, config, provider.as_deref())
@@ -229,8 +240,21 @@ impl Backend {
                                 // Structured enums only: never connection strings, SQL, or server errors.
                                 let reasons: Vec<_> =
                                     statements.iter().filter_map(|s| s.exclusion).collect();
+                                let outcomes: Vec<_> = statements
+                                    .iter()
+                                    .filter_map(|s| match &s.status {
+                                        AnalysisStatus::Excluded(reason) => {
+                                            Some(format!("{reason:?}"))
+                                        }
+                                        AnalysisStatus::Failed(error) => Some(format!(
+                                            "{:?}/{:?}/{:?}",
+                                            error.phase, error.kind, error.detail
+                                        )),
+                                        _ => None,
+                                    })
+                                    .collect();
                                 format!(
-                                    "catalog complete={complete}, excluded={excluded}, failed={failures}, exclusions={reasons:?}"
+                                    "catalog complete={complete}, excluded={excluded}, failed={failures}, exclusions={reasons:?}, reasons={outcomes:?}"
                                 )
                             }
                         };

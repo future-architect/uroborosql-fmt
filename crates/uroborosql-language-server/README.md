@@ -141,3 +141,35 @@ The server does not currently provide features such as completion, hover, or sem
 
 For the embedded SQL request, configuration resolution details, and other integration notes, see
 [docs/protocol.md](docs/protocol.md).
+
+## Catalog diagnostics
+
+The server uses the lint configuration's `db` settings to check table and column
+references on open and save. PostgreSQL support is enabled by default; build with
+`--no-default-features --features runtime-tokio` to omit it. SQL is not executed.
+The current file-provider configuration reports an unavailable provider; SQLite
+integration is maintained separately from the LSP connection.
+
+SQL diagnostics appear through `textDocument/publishDiagnostics`. One
+`window/logMessage` summary per accepted analysis reports completed/excluded
+statements and acquisition failures. Acquisition failure preserves syntax lint
+results and does not turn unknown references into missing-name errors. Connection
+credentials and SQL text are not included in these summaries.
+
+Changes invalidate pending results without starting another analysis. Saved
+analyses retain their original document snapshot, and stale results after edits,
+close/reopen or configuration changes are discarded. Each document has one active
+analysis and one pending latest save. At most four analyses acquire definitions
+concurrently; a request waiting ten seconds for a slot is discarded with a log
+message and can be retried by saving again.
+
+Configuration changes suspend new analysis while keeping displayed diagnostics.
+Only the latest configuration response can be applied. Configuration acquisition
+has a five-second deadline per workspace root. A failed refresh clears that root's
+diagnostics and suspends lint until a successful refresh; other roots continue.
+Server shutdown stops publication and waits at most five seconds for active work.
+
+The protocol regression tests use controlled providers and configuration responses.
+The ignored `postgres_configuration_reaches_lsp_diagnostics` test additionally
+requires PostgreSQL with `public.users(id)`, user `postgres`, password
+`catalog-test`, database `postgres`, and the port in `LSP_TEST_PG_PORT`.

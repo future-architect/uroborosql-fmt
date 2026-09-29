@@ -136,6 +136,7 @@ impl Backend {
                             .unwrap()
                             .insert(root.path.clone(), config);
                     } else {
+                        entry.config = None;
                         backend.fail_root(&mut state, &root.path).await;
                         return;
                     }
@@ -218,6 +219,10 @@ impl Backend {
                 ConfigStore::try_new(build_path, resolved)
             })
             .await;
+            #[cfg(test)]
+            if let Some(hook) = &self.build_hook {
+                hook().await;
+            }
             let mut state = self.analysis.lock().await;
             if state.stopped {
                 return;
@@ -289,3 +294,8 @@ pub(crate) fn resolve_config_path(
     let path = root_dir.join(default_filename);
     path.exists().then_some(path)
 }
+
+#[cfg(test)]
+pub(crate) type BuildHook = std::sync::Arc<
+    dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> + Send + Sync,
+>;
