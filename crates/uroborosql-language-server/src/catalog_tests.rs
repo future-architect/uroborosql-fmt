@@ -425,6 +425,8 @@ async fn slot_wait_deadline_reports_deferred_without_acquiring() {
     )
     .await
     .unwrap();
+    assert_eq!(result.method(), "textDocument/publishDiagnostics");
+    let result = server.receive_notification().await;
     assert_eq!(result.method(), "window/logMessage");
     assert!(
         result.params().unwrap()["message"]
@@ -521,4 +523,208 @@ async fn postgres_configuration_reaches_lsp_diagnostics() {
         )
         .await;
     assert!(server.receive_response().await.is_ok());
+}
+
+#[tokio::test]
+async fn acquisition_free_diagnostics_bypass_saturated_slots() {
+    let (mut server, mut b, uri, mut started) = setup().await;
+    let slots = b.slots.clone();
+    let held = slots.acquire_many(4).await.unwrap();
+    // Parse errors and unsupported SELECTs must not enter CatalogProvider::acquire.
+    for (sql, expected) in [
+        ("SELECT ( FROM users", "Failed to parse SQL"),
+        (
+            "SELECT DISTINCT id FROM users JOIN others ON TRUE",
+            "no-distinct",
+        ),
+    ] {
+        open(&b, &uri, sql).await;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            server.receive_notification(),
+        )
+        .await
+        .unwrap();
+        assert!(
+            result.params().unwrap()["diagnostics"]
+                .to_string()
+                .contains(expected)
+        );
+    }
+    let root = b.workspace_dir_for_uri(&uri).unwrap();
+    write_file(
+        &root.join(".uroborosqllintrc.json"),
+        r#"{"rules":{"no-unknown-reference":"off"}}"#,
+    );
+    b.rebuild_lint_config_stores().await;
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        server.receive_notification(),
+    )
+    .await
+    .unwrap();
+    assert!(
+        result.params().unwrap()["diagnostics"]
+            .to_string()
+            .contains("no-distinct")
+    );
+    assert!(started.try_recv().is_err());
+    // Unconfigured DB also runs the syntax rules without a slot.
+    b.provider_factory = None;
+    save(&b, &uri, "SELECT DISTINCT id FROM users").await;
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        server.receive_notification(),
+    )
+    .await
+    .unwrap();
+    assert!(
+        result.params().unwrap()["diagnostics"]
+            .to_string()
+            .contains("no-distinct")
+    );
+    drop(held);
+    b.stop_analysis().await;
+}
+
+#[cfg(feature = "postgres-catalog")]
+#[tokio::test]
+#[ignore = "requires LSP_TEST_PG_PORT and an isolated PostgreSQL fixture"]
+async fn shutdown_releases_real_postgres_session_and_transaction() {
+    use sqlx::{Connection, Executor};
+    assert_eq!(
+        std::env::var("LSP_TEST_DISPOSABLE_DATABASE").as_deref(),
+        Ok("catalog-lsp-smoke-20260929"),
+        "catalog mutation test requires an explicitly designated disposable local container; never use an existing database"
+    );
+    let port: u16 = std::env::var("LSP_TEST_PG_PORT").unwrap().parse().unwrap();
+    let options = sqlx::postgres::PgConnectOptions::new()
+        .host("127.0.0.1")
+        .port(port)
+        .username("postgres")
+        .password("catalog-test")
+        .database("postgres")
+        .ssl_mode(sqlx::postgres::PgSslMode::Disable);
+    let mut observer = sqlx::PgConnection::connect_with(&options).await.unwrap();
+    let mut locker = sqlx::PgConnection::connect_with(&options).await.unwrap();
+    observer
+        .execute("CREATE ROLE lsp_abort LOGIN PASSWORD 'catalog-test'")
+        .await
+        .unwrap();
+    observer
+        .execute("GRANT USAGE ON SCHEMA public TO lsp_abort")
+        .await
+        .unwrap();
+    observer
+        .execute("GRANT SELECT ON public.users TO lsp_abort")
+        .await
+        .unwrap();
+    observer
+        .execute("ALTER ROLE lsp_abort SET client_connection_check_interval='100ms'")
+        .await
+        .unwrap();
+    // Isolated-fixture injection: pause the real metadata query inside its transaction,
+    // without blocking connection initialization or the independent observer.
+    observer.execute("ALTER FUNCTION pg_catalog.has_schema_privilege(oid,text) RENAME TO lsp_fixture_original_has_schema_privilege").await.unwrap();
+    observer.execute("CREATE FUNCTION pg_catalog.has_schema_privilege(oid,text) RETURNS boolean LANGUAGE plpgsql VOLATILE AS $$ BEGIN PERFORM pg_catalog.pg_advisory_xact_lock(734271); RETURN true; END $$").await.unwrap();
+    let (mut server, mut b, uri, _) = setup().await;
+    b.provider_factory = None;
+    let root = b.workspace_dir_for_uri(&uri).unwrap();
+    write_file(&root.join(".uroborosqllintrc.json"),&serde_json::json!({"db":{"schemaProvider":"server","host":"127.0.0.1","port":port,"user":"lsp_abort","password":"catalog-test","dbname":"postgres","tlsMode":"disable","timeouts":{"connectMs":5000,"queryMs":60000,"acquisitionMs":60000}}}).to_string());
+    b.rebuild_lint_config_stores().await;
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            if !b.analysis.lock().await.roots[&root].pending {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    // Prepare independent observations before starting the blocked acquisition.
+    let _:i64=sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE usename='lsp_abort' AND wait_event_type='Lock' AND xact_start IS NOT NULL").fetch_one(&mut observer).await.unwrap();
+    let _: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE usename='lsp_abort'")
+            .fetch_one(&mut observer)
+            .await
+            .unwrap();
+    locker
+        .execute("BEGIN; SELECT pg_advisory_xact_lock(734271)")
+        .await
+        .unwrap();
+    let free: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(734271)")
+        .fetch_one(&mut observer)
+        .await
+        .unwrap();
+    assert!(!free, "fixture lock is not held");
+    let function:String=sqlx::query_scalar("SELECT prosrc FROM pg_proc WHERE oid='pg_catalog.has_schema_privilege(oid,text)'::regprocedure").fetch_one(&mut observer).await.unwrap();
+    assert!(function.contains("pg_advisory_xact_lock"));
+    let mut probe = sqlx::PgConnection::connect_with(&options).await.unwrap();
+    probe
+        .execute("SET client_connection_check_interval='100ms'")
+        .await
+        .unwrap();
+    assert!(
+        tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            probe.execute(
+                "SELECT pg_catalog.has_schema_privilege('public'::regnamespace::oid,'USAGE')"
+            )
+        )
+        .await
+        .is_err(),
+        "fixture function did not block standalone SQL"
+    );
+    probe.close_hard().await.unwrap();
+    open(&b, &uri, "SELECT missing FROM public.users").await;
+    let observed=tokio::time::timeout(std::time::Duration::from_secs(10),async{loop{
+        let count:i64=sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE usename='lsp_abort' AND wait_event_type='Lock' AND xact_start IS NOT NULL").fetch_one(&mut observer).await.unwrap();
+        if count==1{break;}
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }}).await;
+    assert!(
+        observed.is_ok(),
+        "provider did not reach blocked catalog acquisition"
+    );
+    let before = tokio::time::Instant::now();
+    b.stop_analysis().await;
+    assert!(
+        before.elapsed() >= std::time::Duration::from_secs(5),
+        "provider completed before forced cancellation"
+    );
+    let gone = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let count: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM pg_stat_activity WHERE usename='lsp_abort'",
+            )
+            .fetch_one(&mut observer)
+            .await
+            .unwrap();
+            if count == 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+    })
+    .await;
+    locker.execute("ROLLBACK").await.unwrap();
+    assert!(
+        gone.is_ok(),
+        "provider session or transaction survived shutdown cancellation"
+    );
+    assert_eq!(b.slots.available_permits(), 4);
+    assert!(
+        server
+            .receive_notification_timeout(std::time::Duration::from_millis(20))
+            .await
+            .is_none()
+    );
+    observer.execute("DROP FUNCTION pg_catalog.has_schema_privilege(oid,text); ALTER FUNCTION pg_catalog.lsp_fixture_original_has_schema_privilege(oid,text) RENAME TO has_schema_privilege").await.unwrap();
+    observer
+        .execute("DROP OWNED BY lsp_abort; DROP ROLE lsp_abort")
+        .await
+        .unwrap();
+    locker.close().await.unwrap();
+    observer.close().await.unwrap();
 }

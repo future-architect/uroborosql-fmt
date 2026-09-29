@@ -160,8 +160,10 @@ Changes invalidate pending results without starting another analysis. Saved
 analyses retain their original document snapshot, and stale results after edits,
 close/reopen or configuration changes are discarded. Each document has one active
 analysis and one pending latest save. At most four analyses acquire definitions
-concurrently; a request waiting ten seconds for a slot is discarded with a log
-message and can be retried by saving again.
+concurrently. Slots are acquired only inside the Provider acquisition call, so
+parse errors, disabled catalog rules and unsupported SQL do not wait for a DB slot.
+After ten seconds waiting for a slot, catalog acquisition is deferred with an INFO
+log; syntax diagnostics are still published. Saving retries the catalog analysis.
 
 Configuration changes suspend new analysis while keeping displayed diagnostics.
 Only the latest configuration response can be applied. Configuration acquisition
@@ -173,3 +175,15 @@ The protocol regression tests use controlled providers and configuration respons
 The ignored `postgres_configuration_reaches_lsp_diagnostics` test additionally
 requires PostgreSQL with `public.users(id)`, user `postgres`, password
 `catalog-test`, database `postgres`, and the port in `LSP_TEST_PG_PORT`.
+
+The ignored `shutdown_releases_real_postgres_session_and_transaction` test is only
+for a disposable local PostgreSQL container, never an existing database. In addition
+to `LSP_TEST_PG_PORT`, it requires `LSP_TEST_DISPOSABLE_DATABASE` to be explicitly
+set to `catalog-lsp-smoke-20260929`. It temporarily renames a catalog privilege
+function and installs a same-signature advisory-lock fixture, restoring the original
+function on success. Always discard the test container on failure. The test first
+proves the fixture blocks standalone SQL, then observes a real Provider transaction
+waiting for that lock, invokes shutdown, and checks from another connection that
+the Provider session is gone while the lock is still held. The fixture role uses
+`client_connection_check_interval=100ms` to make server-side disconnect observation
+bounded; this is a test setting, not a change to user database configuration.

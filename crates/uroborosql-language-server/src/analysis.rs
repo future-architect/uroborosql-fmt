@@ -84,6 +84,36 @@ impl State {
             })
     }
 }
+/// Acquire slots only when the analyzer actually requests catalog definitions.
+struct LimitedProvider {
+    inner: Box<dyn uroborosql_lint::catalog::CatalogProvider>,
+    slots: std::sync::Arc<tokio::sync::Semaphore>,
+    deferred: std::sync::atomic::AtomicBool,
+}
+impl uroborosql_lint::catalog::CatalogProvider for LimitedProvider {
+    fn acquire<'a>(
+        &'a self,
+        requests: &'a [uroborosql_lint::catalog::TableRequest],
+    ) -> uroborosql_lint::catalog::AcquisitionFuture<'a> {
+        Box::pin(async move {
+            use uroborosql_lint::catalog::{
+                AcquisitionError, AcquisitionErrorKind, AcquisitionPhase,
+            };
+            let Ok(Ok(_permit)) =
+                tokio::time::timeout(Duration::from_secs(10), self.slots.acquire()).await
+            else {
+                self.deferred
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                // Local sentinel consumed below; never published as a provider failure.
+                return Err(AcquisitionError::new(
+                    AcquisitionPhase::Connect,
+                    AcquisitionErrorKind::Timeout,
+                ));
+            };
+            self.inner.acquire(requests).await
+        })
+    }
+}
 impl Backend {
     fn select_provider(
         &self,
@@ -188,28 +218,15 @@ impl Backend {
                     }
                 }
             };
-            let provider = job.config.as_ref().and_then(|c| self.select_provider(c));
-            let permit = if provider.is_some() {
-                match tokio::time::timeout(Duration::from_secs(10), self.slots.acquire()).await {
-                    Ok(Ok(p)) => Some(p),
-                    _ => {
-                        let state = self.analysis.lock().await;
-                        if state.current(&job) {
-                            self.log_analysis(
-                                MessageType::INFO,
-                                format!(
-                                    "{}: catalog analysis deferred: acquisition slots busy",
-                                    job.uri.as_str()
-                                ),
-                            )
-                            .await;
-                        }
-                        continue;
-                    }
-                }
-            } else {
-                None
-            };
+            let provider = job
+                .config
+                .as_ref()
+                .and_then(|c| self.select_provider(c))
+                .map(|inner| LimitedProvider {
+                    inner,
+                    slots: self.slots.clone(),
+                    deferred: std::sync::atomic::AtomicBool::new(false),
+                });
             if !self.analysis.lock().await.current(&job) {
                 continue;
             }
@@ -217,7 +234,13 @@ impl Backend {
             let diagnostics = if let Some(config) = &job.config {
                 match self
                     .linter
-                    .run_async(&job.sql, config, provider.as_deref())
+                    .run_async(
+                        &job.sql,
+                        config,
+                        provider
+                            .as_ref()
+                            .map(|p| p as &dyn uroborosql_lint::catalog::CatalogProvider),
+                    )
                     .await
                 {
                     Ok(result) => {
@@ -258,13 +281,22 @@ impl Backend {
                                 )
                             }
                         };
+                        let deferred = provider
+                            .as_ref()
+                            .is_some_and(|p| p.deferred.load(std::sync::atomic::Ordering::Relaxed));
                         status = Some((
-                            if failed {
+                            if deferred {
+                                MessageType::INFO
+                            } else if failed {
                                 MessageType::ERROR
                             } else {
                                 MessageType::INFO
                             },
-                            summary,
+                            if deferred {
+                                "catalog analysis deferred: acquisition slots busy".into()
+                            } else {
+                                summary
+                            },
                         ));
                         result
                             .diagnostics
@@ -277,7 +309,6 @@ impl Backend {
             } else {
                 Vec::new()
             };
-            drop(permit);
             let state = self.analysis.lock().await;
             if state.current(&job) {
                 self.publish_analysis(job.uri.clone(), diagnostics, Some(job.version))
