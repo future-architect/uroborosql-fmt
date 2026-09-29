@@ -1,3 +1,4 @@
+mod analysis;
 mod code_action;
 mod configuration;
 mod document;
@@ -15,7 +16,7 @@ pub use tower_lsp_server::ClientSocket;
 use tower_lsp_server::Server;
 use tower_lsp_server::lsp_types::Uri;
 use tower_lsp_server::{Client, LspService};
-use uroborosql_lint::{ConfigStore, Linter};
+use uroborosql_lint::Linter;
 
 use crate::configuration::ClientConfig;
 use crate::document::DocumentState;
@@ -34,10 +35,9 @@ pub struct Backend {
     /// `lintConfigurationFilePath`. Also reused as the formatting fallback when a
     /// live config fetch fails.
     workspace_configs: Arc<RwLock<HashMap<PathBuf, ClientConfig>>>,
-    /// Lint config stores keyed by the normalized workspace root path.
-    /// `None` distinguishes "no `.uroborosqllintrc.json` for this root" from
-    /// "this root has not been resolved yet".
-    lint_config_stores: Arc<RwLock<HashMap<PathBuf, Option<ConfigStore>>>>,
+    analysis: Arc<tokio::sync::Mutex<analysis::State>>,
+    slots: Arc<tokio::sync::Semaphore>,
+    stopping: tokio::sync::watch::Sender<bool>,
     /// Normalized workspace roots resolved from `workspaceFolders` (or the
     /// `rootUri` fallback). All config resolution is scoped through these.
     workspace_roots: Arc<RwLock<Vec<WorkspaceRoot>>>,
@@ -52,7 +52,9 @@ impl Backend {
             linter: Arc::new(Linter::new()),
             documents: Arc::new(RwLock::new(HashMap::new())),
             workspace_configs: Arc::new(RwLock::new(HashMap::new())),
-            lint_config_stores: Arc::new(RwLock::new(HashMap::new())),
+            analysis: Arc::new(tokio::sync::Mutex::new(analysis::State::default())),
+            slots: Arc::new(tokio::sync::Semaphore::new(4)),
+            stopping: tokio::sync::watch::channel(false).0,
             workspace_roots: Arc::new(RwLock::new(Vec::new())),
             supports_dynamic_watched_files: Arc::new(RwLock::new(false)),
             has_watched_files_registration: Arc::new(RwLock::new(false)),

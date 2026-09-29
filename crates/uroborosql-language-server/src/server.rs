@@ -88,18 +88,20 @@ impl LanguageServer for Backend {
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
         self.refresh_workspace_configs().await;
         self.sync_watched_files_registration().await;
-        self.relint_open_documents().await;
     }
 
     async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
         // A config file on disk changed: rebuild every workspace's store from the
         // already-fetched client config rather than re-querying the client.
         self.rebuild_lint_config_stores().await;
-        self.relint_open_documents().await;
     }
 
     async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
         {
+            let mut state = self.analysis.lock().await;
+            for (uri, _, _) in self.open_documents() {
+                state.invalidate(&uri);
+            }
             let mut roots = self.workspace_roots.write().unwrap();
 
             for removed in &params.event.removed {
@@ -120,10 +122,10 @@ impl LanguageServer for Backend {
         // Re-fetch per-root config so added roots get their own settings.
         self.refresh_workspace_configs().await;
         self.sync_watched_files_registration().await;
-        self.relint_open_documents().await;
     }
 
     async fn shutdown(&self) -> Result<()> {
+        self.stop_analysis().await;
         Ok(())
     }
 
@@ -133,8 +135,13 @@ impl LanguageServer for Backend {
         let version = text_document.version;
         let text = text_document.text;
 
+        let mut state = self.analysis.lock().await;
+        if state.stopped {
+            return;
+        }
+        state.opened(&uri);
         self.upsert_document(&uri, &text, Some(version));
-        self.lint_and_publish(&uri, &text, Some(version)).await;
+        self.queue_analysis(&mut state, &uri);
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -144,6 +151,11 @@ impl LanguageServer for Backend {
 
         let uri = params.text_document.uri;
         let version = params.text_document.version;
+        let mut state = self.analysis.lock().await;
+        if state.stopped {
+            return;
+        }
+        state.invalidate(&uri);
         for change in params.content_changes {
             if change.range.is_some() {
                 self.apply_change(&uri, change, version);
@@ -155,25 +167,28 @@ impl LanguageServer for Backend {
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let uri = params.text_document.uri;
+        let mut state = self.analysis.lock().await;
+        if state.stopped {
+            return;
+        }
+        state.invalidate(&uri);
+        if let Some(doc) = state.docs.get_mut(&uri) {
+            doc.open = false;
+        }
         self.remove_document(&uri);
-        self.client.publish_diagnostics(uri, vec![], None).await;
+        self.publish_analysis(uri, vec![], None).await;
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         let uri = params.text_document.uri;
+        let mut state = self.analysis.lock().await;
+        if state.stopped || !state.docs.get(&uri).is_some_and(|d| d.open) {
+            return;
+        }
         if let Some(text) = params.text {
             self.upsert_document(&uri, &text, None);
-            self.lint_and_publish(&uri, &text, None).await;
-        } else if let Some(text) = self.document_text(&uri) {
-            self.lint_and_publish(&uri, &text, None).await;
-        } else {
-            self.client
-                .log_message(
-                    MessageType::WARNING,
-                    "didSave received without text; skipping lint",
-                )
-                .await;
         }
+        self.queue_analysis(&mut state, &uri);
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
@@ -249,12 +264,6 @@ impl LanguageServer for Backend {
 }
 
 impl Backend {
-    async fn relint_open_documents(&self) {
-        for (uri, text, version) in self.open_documents() {
-            self.lint_and_publish(&uri, &text, Some(version)).await;
-        }
-    }
-
     fn watched_file_patterns(&self) -> Vec<String> {
         vec![format!("**/{DEFAULT_CONFIG_FILENAME}")]
     }

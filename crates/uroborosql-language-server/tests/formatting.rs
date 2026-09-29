@@ -90,6 +90,8 @@ async fn formatting_merges_config_file_with_explicit_client_overrides() {
         .await;
     let _ = server.receive_notification().await;
 
+    // Exercise cached formatter configuration after a malformed client reply.
+    server.push_workspace_configuration_response(serde_json::Value::Null);
     server.send_request(build_formatting(&uri, 2)).await;
     let response = server.receive_response().await;
     assert!(response.is_ok());
@@ -184,6 +186,8 @@ async fn formatting_returns_error_when_explicit_config_file_is_missing() {
         .await;
     let _ = server.receive_notification().await;
 
+    // Exercise cached formatter configuration after a malformed client reply.
+    server.push_workspace_configuration_response(serde_json::Value::Null);
     server.send_request(build_formatting(&uri, 2)).await;
     let response = server.receive_response().await;
     assert!(response.is_error());

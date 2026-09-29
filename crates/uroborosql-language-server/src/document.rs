@@ -7,7 +7,7 @@ use tower_lsp_server::lsp_types::{Position, Range};
 #[derive(Clone)]
 pub(crate) struct DocumentState {
     rope: Rope,
-    version: i32,
+    pub(crate) version: i32,
 }
 
 pub(crate) fn rope_position_to_char_index(rope: &Rope, position: Position) -> Option<usize> {
@@ -156,10 +156,6 @@ impl Backend {
             .read()
             .ok()
             .and_then(|docs| docs.get(uri).map(|doc| doc.rope.clone()))
-    }
-
-    pub(crate) fn document_text(&self, uri: &Uri) -> Option<String> {
-        self.document_rope(uri).map(|rope| rope.to_string())
     }
 
     pub(crate) fn open_documents(&self) -> Vec<(Uri, String, i32)> {

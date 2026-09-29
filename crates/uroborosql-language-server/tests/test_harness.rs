@@ -139,7 +139,7 @@ impl TestServer {
             let result = if req.method() == WorkspaceConfiguration::METHOD {
                 self.workspace_configuration_responses
                     .pop_front()
-                    .unwrap_or(LSPAny::Null)
+                    .unwrap_or(serde_json::json!([null]))
             } else {
                 LSPAny::Null
             };
