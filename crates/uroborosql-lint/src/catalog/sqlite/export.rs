@@ -18,15 +18,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-/// Export limits are longer than request-scoped lint acquisition defaults.
-pub fn default_timeouts() -> CatalogTimeouts {
-    CatalogTimeouts {
-        connect: Duration::from_secs(5),
-        query: Duration::from_secs(30),
-        acquisition: Duration::from_secs(120),
-    }
-}
-
 /// Generate the UTC default name. Existing names use the same replacement policy.
 pub fn default_output_path() -> Result<PathBuf, ExportError> {
     let seconds = SystemTime::now()
@@ -384,6 +375,13 @@ impl Drop for Temporary {
 mod tests {
     use super::*;
     use crate::catalog::{CatalogProvider, Lookup, TableRequest};
+    fn timeouts() -> CatalogTimeouts {
+        CatalogTimeouts {
+            connect: Duration::from_secs(5),
+            query: Duration::from_secs(30),
+            acquisition: Duration::from_secs(120),
+        }
+    }
     #[test]
     fn default_name_is_utc_without_collision_suffixes() {
         assert_eq!(timestamp_filename(0), "catalog-19700101T000000Z.sqlite");
@@ -398,7 +396,7 @@ mod tests {
     }
     #[test]
     fn export_deadline_explains_local_work_and_its_setting() {
-        let error = overall_timeout(default_timeouts()).to_string();
+        let error = overall_timeout(timeouts()).to_string();
         for guidance in [
             "120s",
             "file writing/validation",
@@ -449,7 +447,7 @@ mod tests {
             data,
             output,
             tokio::time::Instant::now() + Duration::from_secs(10),
-            default_timeouts(),
+            timeouts(),
         )
         .await
     }
@@ -499,7 +497,7 @@ mod tests {
             );
         }
         large.meta.relation_count = large.relations.len() as i64;
-        let mut timeouts = default_timeouts();
+        let mut timeouts = timeouts();
         timeouts.acquisition = Duration::from_millis(10);
         let result = publish_snapshot(
             &large,
@@ -542,7 +540,7 @@ mod tests {
             let result = validate_and_close(
                 reader,
                 tokio::time::Instant::now() + Duration::from_millis(10),
-                default_timeouts(),
+                timeouts(),
             )
             .await;
             // Dropping would return at the deadline before lock release even starts.
@@ -564,7 +562,7 @@ mod tests {
         assert!(validate_and_close(
             reader,
             tokio::time::Instant::now() + Duration::from_secs(5),
-            default_timeouts()
+            timeouts()
         )
         .await
         .is_err());
@@ -619,7 +617,7 @@ mod tests {
         let error = validate_and_close(
             reader,
             tokio::time::Instant::now() + Duration::from_secs(5),
-            default_timeouts(),
+            timeouts(),
         )
         .await
         .unwrap_err();
@@ -632,11 +630,9 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), b"old bytes");
         assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
         let deadline = tokio::time::Instant::now() - Duration::from_secs(1);
-        assert!(
-            publish_snapshot(&data("new"), &path, deadline, default_timeouts())
-                .await
-                .is_err()
-        );
+        assert!(publish_snapshot(&data("new"), &path, deadline, timeouts())
+            .await
+            .is_err());
         tokio::time::sleep(Duration::from_millis(20)).await;
         assert_eq!(fs::read(&path).unwrap(), b"old bytes");
         assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);

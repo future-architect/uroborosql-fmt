@@ -1,11 +1,8 @@
 #![cfg(all(feature = "postgres-catalog", feature = "sqlite-catalog"))]
-use std::env;
+use std::{env, time::Duration};
 use uroborosql_lint::catalog::{
-    postgres::{PostgresCatalogProvider, PostgresConfig, TlsMode},
-    sqlite::{
-        export::{default_timeouts, export_catalog},
-        SqliteCatalogProvider,
-    },
+    postgres::{CatalogTimeouts, PostgresCatalogProvider, PostgresConfig, TlsMode},
+    sqlite::{export::export_catalog, SqliteCatalogProvider},
     CatalogProvider, TableRequest,
 };
 
@@ -17,7 +14,11 @@ fn config() -> PostgresConfig {
         .unwrap();
     config.password = Some(env::var("CATALOG_TEST_PASSWORD").unwrap());
     config.tls_mode = TlsMode::Disable;
-    config.timeouts = default_timeouts();
+    config.timeouts = CatalogTimeouts {
+        connect: Duration::from_secs(5),
+        query: Duration::from_secs(30),
+        acquisition: Duration::from_secs(120),
+    };
     config
 }
 
@@ -100,7 +101,6 @@ async fn export_is_consistent_during_ddl_and_query_timeout_preserves_output() {
         postgres::{PgConnectOptions, PgSslMode},
         Connection, PgConnection,
     };
-    use std::time::Duration;
     use uroborosql_lint::catalog::sqlite::export::ExportError;
     use uroborosql_lint::catalog::{AcquisitionErrorKind, Lookup};
     let cfg = config();

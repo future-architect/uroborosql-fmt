@@ -4,10 +4,7 @@ use crate::args::ExportArgs;
 fn config(args: &ExportArgs) -> uroborosql_lint::catalog::postgres::PostgresConfig {
     use crate::args::ExportTlsMode;
     use std::time::Duration;
-    use uroborosql_lint::catalog::{
-        postgres::{PostgresConfig, TlsMode},
-        sqlite::export::default_timeouts,
-    };
+    use uroborosql_lint::catalog::postgres::{CatalogTimeouts, PostgresConfig, TlsMode};
     let mut config = PostgresConfig::new(&args.host, &args.user, &args.dbname);
     config.port = args.port;
     config.tls_mode = match args.tls_mode {
@@ -16,16 +13,11 @@ fn config(args: &ExportArgs) -> uroborosql_lint::catalog::postgres::PostgresConf
         ExportTlsMode::Require => TlsMode::Require,
         ExportTlsMode::Disable => TlsMode::Disable,
     };
-    config.timeouts = default_timeouts();
-    if let Some(ms) = args.connect_timeout_ms {
-        config.timeouts.connect = Duration::from_millis(ms);
-    }
-    if let Some(ms) = args.query_timeout_ms {
-        config.timeouts.query = Duration::from_millis(ms);
-    }
-    if let Some(ms) = args.acquisition_timeout_ms {
-        config.timeouts.acquisition = Duration::from_millis(ms);
-    }
+    config.timeouts = CatalogTimeouts {
+        connect: Duration::from_millis(args.connect_timeout_ms),
+        query: Duration::from_millis(args.query_timeout_ms),
+        acquisition: Duration::from_millis(args.acquisition_timeout_ms),
+    };
     config
 }
 

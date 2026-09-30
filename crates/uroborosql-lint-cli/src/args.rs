@@ -82,25 +82,34 @@ pub enum Command {
 
 #[derive(clap::Args, Debug)]
 pub struct ExportArgs {
+    /// PostgreSQL host name or IP address
     #[arg(long)]
     pub host: String,
+    /// PostgreSQL user; set PGPASSWORD if a password is required
     #[arg(long)]
     pub user: String,
+    /// Database whose catalog is exported
     #[arg(long)]
     pub dbname: String,
+    /// PostgreSQL port
     #[arg(long, default_value_t = 5432)]
     pub port: u16,
+    /// TLS mode for the PostgreSQL connection
     #[arg(long, value_enum, default_value_t = ExportTlsMode::VerifyFull)]
     pub tls_mode: ExportTlsMode,
     /// Output file; defaults to catalog-YYYYMMDDTHHMMSSZ.sqlite in UTC
     #[arg(long)]
     pub output: Option<PathBuf>,
-    #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
-    pub connect_timeout_ms: Option<u64>,
-    #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
-    pub query_timeout_ms: Option<u64>,
-    #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
-    pub acquisition_timeout_ms: Option<u64>,
+    // Export limits are longer than the request-scoped lint acquisition defaults.
+    /// Connection timeout in milliseconds
+    #[arg(long, default_value_t = 5000, value_parser = clap::value_parser!(u64).range(1..))]
+    pub connect_timeout_ms: u64,
+    /// Timeout for each catalog query in milliseconds
+    #[arg(long, default_value_t = 30000, value_parser = clap::value_parser!(u64).range(1..))]
+    pub query_timeout_ms: u64,
+    /// Overall export deadline in milliseconds, including writing and validating the file
+    #[arg(long, default_value_t = 120000, value_parser = clap::value_parser!(u64).range(1..))]
+    pub acquisition_timeout_ms: u64,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
