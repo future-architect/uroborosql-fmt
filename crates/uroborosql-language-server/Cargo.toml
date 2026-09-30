@@ -11,8 +11,9 @@ name = "uroborosql-language-server"
 path = "src/main.rs"
 
 [features]
-default = ["runtime-tokio", "postgres-catalog"]
+default = ["runtime-tokio", "postgres-catalog", "sqlite-catalog"]
 postgres-catalog = ["uroborosql-lint/postgres-catalog"]
+sqlite-catalog = ["uroborosql-lint/sqlite-catalog"]
 runtime-tokio = [ "tower-lsp-server/runtime-tokio"]
 
 [dependencies]
@@ -26,4 +27,4 @@ uroborosql-fmt = { workspace = true }
 uroborosql-lint = { workspace = true }
 
 [dev-dependencies]
-sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres", "sqlite-bundled"] }

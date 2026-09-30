@@ -525,6 +525,68 @@ async fn postgres_configuration_reaches_lsp_diagnostics() {
     assert!(server.receive_response().await.is_ok());
 }
 
+/// Uses a real snapshot file, so offline checks are covered without PostgreSQL.
+#[cfg(feature = "sqlite-catalog")]
+#[tokio::test]
+async fn sqlite_snapshot_configuration_reaches_lsp_diagnostics() {
+    use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
+    let mut server = new_test_server();
+    let root = unique_temp_dir("lsp-sqlite");
+    let mut connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(root.join("catalog.sqlite"))
+            .create_if_missing(true),
+    )
+    .await
+    .unwrap();
+    // The snapshot format is owned by uroborosql-lint; reuse its schema instead of copying it.
+    sqlx::raw_sql(include_str!(
+        "../../uroborosql-lint/src/catalog/sqlite/schema.sql"
+    ))
+    .execute(&mut connection)
+    .await
+    .unwrap();
+    sqlx::raw_sql(
+        "INSERT INTO pg_namespace VALUES (2200, 'public');
+         INSERT INTO snapshot_schema_access VALUES (2200, 1);
+         INSERT INTO snapshot_search_path VALUES (1, 2200);
+         INSERT INTO pg_class VALUES (10, 2200, 'users', 'r', 1);
+         INSERT INTO pg_attribute VALUES (10, 1, 'id', 0);
+         INSERT INTO snapshot_meta VALUES (1, 1, 180000, 'db', 'login', 'role',
+             '2026-09-18T00:00:00Z', 'database_catalog', 1, 1, 1, 1, 1);",
+    )
+    .execute(&mut connection)
+    .await
+    .unwrap();
+    connection.close().await.unwrap();
+    write_file(
+        &root.join(".uroborosqllintrc.json"),
+        &serde_json::json!({"db":{"schemaProvider":"file","path":"catalog.sqlite"}}).to_string(),
+    );
+    initialize_server_with_root_uri(&mut server, Uri::from_file_path(&root).unwrap(), None).await;
+    let uri = Uri::from_file_path(root.join("query.sql")).unwrap();
+    server
+        .send_request(build_did_open(&uri, "SELECT id, missing FROM users", 1))
+        .await;
+    let result = server.receive_notification().await;
+    let diagnostics = result.params().unwrap()["diagnostics"].as_array().unwrap();
+    let unknown: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| d["code"] == "no-unknown-reference")
+        .map(|d| d["message"].as_str().unwrap())
+        .collect();
+    assert_eq!(unknown.len(), 1, "{diagnostics:?}");
+    assert!(unknown[0].contains("missing"), "{unknown:?}");
+    server
+        .send_request(
+            tower_lsp_server::jsonrpc::Request::build("shutdown")
+                .id(99)
+                .finish(),
+        )
+        .await;
+    assert!(server.receive_response().await.is_ok());
+}
+
 #[tokio::test]
 async fn acquisition_free_diagnostics_bypass_saturated_slots() {
     let (mut server, mut b, uri, mut started) = setup().await;

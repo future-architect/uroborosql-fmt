@@ -145,10 +145,13 @@ For the embedded SQL request, configuration resolution details, and other integr
 ## Catalog diagnostics
 
 The server uses the lint configuration's `db` settings to check table and column
-references on open and save. PostgreSQL support is enabled by default; build with
-`--no-default-features --features runtime-tokio` to omit it. SQL is not executed.
-The current file-provider configuration reports an unavailable provider; SQLite
-integration is maintained separately from the LSP connection.
+references on open and save. PostgreSQL (`schemaProvider: "server"`) and exported
+SQLite snapshots (`schemaProvider: "file"`) are enabled by default; build with
+`--no-default-features --features runtime-tokio` to omit both, or add
+`postgres-catalog` or `sqlite-catalog` to keep one. SQL is not executed.
+Snapshot files are created with `uroborosql-lint export-catalog`. The `path` is
+relative to the lint config file. The file is opened read-only for each analysis,
+so a re-exported snapshot is used from the next open or save.
 
 SQL diagnostics appear through `textDocument/publishDiagnostics`. One
 `window/logMessage` summary per accepted analysis reports completed/excluded
