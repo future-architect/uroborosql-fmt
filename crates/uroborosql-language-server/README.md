@@ -43,6 +43,9 @@ Lint diagnostics are published only when the server can resolve a lint config fi
 Without a lint config file, the server still provides formatting, but it publishes no lint
 diagnostics.
 
+If the lint config cannot be loaded, the server clears the lint diagnostics of that workspace
+and resumes linting once the config loads again.
+
 To create a starter lint config file, run:
 
 ```sh
@@ -63,6 +66,23 @@ Lint diagnostics are refreshed when:
 - watched lint config files change
 
 This server does not currently re-lint on every `textDocument/didChange` notification.
+
+### Catalog Checks
+
+When the lint config has a `db` section, the server also reports tables and columns that do
+not exist, using either a PostgreSQL connection (`schemaProvider: "server"`) or a catalog
+snapshot exported with `uroborosql-lint export-catalog` (`schemaProvider: "file"`, with
+`path` relative to the lint config file's directory). See the
+[`uroborosql-lint` CLI README](../uroborosql-lint-cli/README.md) for the `db` settings and
+exporting snapshots.
+
+Catalog checks run with the other lint diagnostics on open and save, so a re-exported
+snapshot or a database change is picked up on the next open or save. SQL is never executed.
+
+If the catalog cannot be read, the other lint diagnostics are still shown, and the reason is
+written to the server log (`window/logMessage`) without connection credentials or SQL text.
+When many documents are checked at once, a check may be postponed; saving the document again
+retries it.
 
 ## Editor Setup Examples
 
@@ -141,52 +161,3 @@ The server does not currently provide features such as completion, hover, or sem
 
 For the embedded SQL request, configuration resolution details, and other integration notes, see
 [docs/protocol.md](docs/protocol.md).
-
-## Catalog diagnostics
-
-The server uses the lint configuration's `db` settings to check table and column
-references on open and save. PostgreSQL (`schemaProvider: "server"`) and exported
-SQLite snapshots (`schemaProvider: "file"`) are enabled by default; build with
-`--no-default-features --features runtime-tokio` to omit both, or add
-`postgres-catalog` or `sqlite-catalog` to keep one. SQL is not executed.
-Snapshot files are created with `uroborosql-lint export-catalog`. The `path` is
-relative to the lint config file's directory. The file is opened read-only for each
-analysis, so a re-exported snapshot is used from the next open or save.
-
-SQL diagnostics appear through `textDocument/publishDiagnostics`. One
-`window/logMessage` summary per accepted analysis reports completed/excluded
-statements and acquisition failures. Acquisition failure preserves syntax lint
-results and does not turn unknown references into missing-name errors. Connection
-credentials and SQL text are not included in these summaries.
-
-Changes invalidate pending results without starting another analysis. Saved
-analyses retain their original document snapshot, and stale results after edits,
-close/reopen or configuration changes are discarded. Each document has one active
-analysis and one pending latest save. At most four analyses acquire definitions
-concurrently. Slots are acquired only inside the Provider acquisition call, so
-parse errors, disabled catalog rules and unsupported SQL do not wait for a DB slot.
-After ten seconds waiting for a slot, catalog acquisition is deferred with an INFO
-log; syntax diagnostics are still published. Saving retries the catalog analysis.
-
-Configuration changes suspend new analysis while keeping displayed diagnostics.
-Only the latest configuration response can be applied. Configuration acquisition
-has a five-second deadline per workspace root. A failed refresh clears that root's
-diagnostics and suspends lint until a successful refresh; other roots continue.
-Server shutdown stops publication and waits at most five seconds for active work.
-
-The protocol regression tests use controlled providers and configuration responses.
-The ignored `postgres_configuration_reaches_lsp_diagnostics` test additionally
-requires PostgreSQL with `public.users(id)`, user `postgres`, password
-`catalog-test`, database `postgres`, and the port in `LSP_TEST_PG_PORT`.
-
-The ignored `shutdown_releases_real_postgres_session_and_transaction` test is only
-for a disposable local PostgreSQL container, never an existing database. In addition
-to `LSP_TEST_PG_PORT`, it requires `LSP_TEST_DISPOSABLE_DATABASE` to be explicitly
-set to `catalog-lsp-smoke-20260929`. It temporarily renames a catalog privilege
-function and installs a same-signature advisory-lock fixture, restoring the original
-function on success. Always discard the test container on failure. The test first
-proves the fixture blocks standalone SQL, then observes a real Provider transaction
-waiting for that lock, invokes shutdown, and checks from another connection that
-the Provider session is gone while the lock is still held. The fixture role uses
-`client_connection_check_interval=100ms` to make server-side disconnect observation
-bounded; this is a test setting, not a change to user database configuration.
