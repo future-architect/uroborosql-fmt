@@ -8,10 +8,11 @@ mod args;
 use app::run;
 use args::Cli;
 
-fn main() -> process::ExitCode {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> process::ExitCode {
     let cli = Cli::parse();
 
-    match run(cli) {
+    match run(cli).await {
         Ok(()) => process::ExitCode::SUCCESS,
         Err(err) => {
             err.print();

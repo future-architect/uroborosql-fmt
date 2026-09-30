@@ -1,15 +1,26 @@
 use crate::{
-    catalog::{AcquisitionError, CatalogSnapshot},
+    catalog::{CatalogProvider, CatalogSnapshot},
     resolution::{self, query},
     RuleEnum,
 };
 use crate::{
-    context::LintContext, diagnostic::Diagnostic, directive::suppress_diagnostics,
-    tree::collect_preorder, ResolvedLintConfig,
+    context::LintContext,
+    diagnostic::Diagnostic,
+    directive::{suppress_diagnostics, PreparedSuppression},
+    tree::collect_preorder,
+    ResolvedLintConfig,
 };
 use postgresql_cst_parser::{tree_sitter, ParserError, ScanReport};
 
-#[allow(dead_code)]
+#[cfg(test)]
+use crate::catalog::AcquisitionError;
+
+mod report;
+pub use report::{
+    CatalogExclusion, CatalogReport, CatalogSkipReason, CatalogStatementReport, LintResult,
+};
+
+#[cfg(test)]
 #[derive(Debug)]
 pub(crate) struct CatalogLintResult {
     pub diagnostics: Vec<Diagnostic>,
@@ -85,7 +96,78 @@ impl Linter {
         ))
     }
 
-    #[allow(dead_code)]
+    /// Runs CST and catalog rules without creating a runtime.
+    ///
+    /// The caller explicitly selects the provider (normally via
+    /// `ResolvedLintConfig::catalog_provider`). `None` means unconfigured;
+    /// an explicitly supplied provider takes precedence over `config.db`.
+    /// Acquisition failures are returned in the report alongside retained diagnostics.
+    pub async fn run_async(
+        &self,
+        sql: &str,
+        config: &ResolvedLintConfig,
+        provider: Option<&dyn CatalogProvider>,
+    ) -> Result<LintResult, LintError> {
+        // No parser tree or borrowed node crosses the await boundary.
+        let (prepared, mut diagnostics, suppression) = {
+            let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
+            let root = tree.root_node();
+            let diagnostics = self.run_cst(&root, sql, config);
+            let suppression = PreparedSuppression::new(&root);
+            let skip = if provider.is_none() {
+                Some(CatalogSkipReason::NotConfigured)
+            } else if !config
+                .rules
+                .iter()
+                .any(|(rule, _)| matches!(rule, RuleEnum::NoUnknownReference(_)))
+            {
+                Some(CatalogSkipReason::RuleDisabled)
+            } else {
+                None
+            };
+            if let Some(reason) = skip {
+                return Ok(LintResult {
+                    diagnostics: suppression.apply(diagnostics),
+                    catalog: CatalogReport::Skipped(reason),
+                });
+            }
+            (query::extract(&root), diagnostics, suppression)
+        };
+        let acquired = if prepared.requests.is_empty() {
+            // Only excluded or recovered-source statements remain; no lookup occurs.
+            CatalogSnapshot::new(Vec::new(), Vec::new())
+        } else {
+            provider
+                .expect("configured provider checked above")
+                .acquire(&prepared.requests)
+                .await
+        };
+        let statements = resolution::resolve(&prepared, acquired.as_ref());
+        Self::diagnose_catalog(config, &statements, &mut diagnostics);
+        Ok(LintResult {
+            diagnostics: suppression.apply(diagnostics),
+            catalog: CatalogReport::Statements(
+                statements
+                    .iter()
+                    .map(CatalogStatementReport::from)
+                    .collect(),
+            ),
+        })
+    }
+
+    fn diagnose_catalog(
+        config: &ResolvedLintConfig,
+        statements: &[resolution::StatementResult],
+        diagnostics: &mut Vec<Diagnostic>,
+    ) {
+        for (rule, severity) in &config.rules {
+            if let RuleEnum::NoUnknownReference(rule) = rule {
+                diagnostics.extend(rule.diagnose(statements, *severity));
+            }
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn run_with_catalog(
         &self,
         sql: &str,
@@ -97,11 +179,7 @@ impl Linter {
         let prepared = query::extract(&root);
         let statements = resolution::resolve(&prepared, acquired);
         let mut diagnostics = self.run_cst(&root, sql, resolved_config);
-        for (rule, severity) in &resolved_config.rules {
-            if let RuleEnum::NoUnknownReference(rule) = rule {
-                diagnostics.extend(rule.diagnose(&statements, *severity));
-            }
-        }
+        Self::diagnose_catalog(resolved_config, &statements, &mut diagnostics);
         Ok(CatalogLintResult {
             diagnostics: suppress_diagnostics(&root, diagnostics),
             statements,

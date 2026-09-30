@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    lint_config::{DbConfig, LintConfigObject, LintOverride},
+    lint_config::{ConfigTimeouts, ConfigTlsMode, DbConfig, LintConfigObject, LintOverride},
     overrides::ResolvedOverride,
     RuleLevel, RuleSetting, DEFAULT_CONFIG_FILENAME,
 };
@@ -27,6 +27,8 @@ pub enum ResolvedDbConfig {
         user: String,
         password: Option<String>,
         dbname: String,
+        tls_mode: ConfigTlsMode,
+        timeouts: ConfigTimeouts,
     },
     File {
         path: PathBuf,
@@ -250,12 +252,16 @@ fn resolve_db_config(config: Option<DbConfig>, config_base_dir: &Path) -> Option
             user,
             password,
             dbname,
+            tls_mode,
+            timeouts,
         } => Some(ResolvedDbConfig::Server {
             host,
             port,
             user,
             password,
             dbname,
+            tls_mode,
+            timeouts,
         }),
         DbConfig::File { path } => Some(ResolvedDbConfig::File {
             path: config_base_dir.join(path),
