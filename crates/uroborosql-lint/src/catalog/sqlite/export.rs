@@ -189,6 +189,26 @@ async fn acquire(config: &PostgresConfig) -> Result<SnapshotData, AcquisitionErr
     result
 }
 
+const META_SQL: &str = "SELECT pg_catalog.current_setting('server_version_num')::bigint AS version,
+        pg_catalog.current_database()::text AS database,
+        session_user::text AS session_user,
+        current_user::text AS current_user,
+        pg_catalog.to_char(pg_catalog.transaction_timestamp() AT TIME ZONE 'UTC',
+            'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS captured_at";
+const NAMESPACES_SQL: &str = "SELECT oid::bigint AS oid, nspname::text AS name,
+        pg_catalog.has_schema_privilege(oid, 'USAGE') AS usable
+    FROM pg_catalog.pg_namespace";
+const RELATIONS_SQL: &str = "SELECT oid::bigint AS oid, relnamespace::bigint AS namespace,
+        relname::text AS name, relkind::text AS kind, relnatts::bigint AS count
+    FROM pg_catalog.pg_class";
+const ATTRIBUTES_SQL: &str = "SELECT attrelid::bigint AS relation, attnum,
+        attname::text AS name, attisdropped
+    FROM pg_catalog.pg_attribute";
+const SEARCH_PATH_SQL: &str = "SELECT p.position::bigint AS position, n.oid::bigint AS oid
+    FROM pg_catalog.unnest(pg_catalog.current_schemas(true)) WITH ORDINALITY p(name, position)
+    JOIN pg_catalog.pg_namespace n ON n.nspname = p.name
+    ORDER BY p.position";
+
 async fn acquire_rows(
     connection: &mut PgConnection,
     limit: Duration,
@@ -206,7 +226,10 @@ async fn acquire_rows(
         sqlx::query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             .execute(&mut *connection)
     );
-    let row = query!(SearchPath, sqlx::query("SELECT pg_catalog.current_setting('server_version_num')::bigint AS version, pg_catalog.current_database()::text AS database, session_user::text AS session_user, current_user::text AS current_user, pg_catalog.to_char(pg_catalog.transaction_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS captured_at").fetch_one(&mut *connection));
+    let row = query!(
+        SearchPath,
+        sqlx::query(META_SQL).fetch_one(&mut *connection)
+    );
     let mut data = SnapshotData {
         meta: Meta {
             version: row.try_get("version").map_err(read_error)?,
@@ -223,19 +246,53 @@ async fn acquire_rows(
             invalid().with_detail(crate::catalog::AcquisitionDetail::UnsupportedServerVersion)
         );
     }
-    for row in query!(Relation, sqlx::query("SELECT oid::bigint AS oid, nspname::text AS name, pg_catalog.has_schema_privilege(oid, 'USAGE') AS usable FROM pg_catalog.pg_namespace").fetch_all(&mut *connection)) {
-        let oid = pg_oid(&row,"oid")?;
-        data.namespaces.insert(oid,row.try_get("name").map_err(read_error)?);
-        data.access.insert(oid,row.try_get("usable").map_err(read_error)?);
+    for row in query!(
+        Relation,
+        sqlx::query(NAMESPACES_SQL).fetch_all(&mut *connection)
+    ) {
+        let oid = pg_oid(&row, "oid")?;
+        data.namespaces
+            .insert(oid, row.try_get("name").map_err(read_error)?);
+        data.access
+            .insert(oid, row.try_get("usable").map_err(read_error)?);
     }
-    for row in query!(Relation, sqlx::query("SELECT oid::bigint AS oid, relnamespace::bigint AS namespace, relname::text AS name, relkind::text AS kind, relnatts::bigint AS count FROM pg_catalog.pg_class").fetch_all(&mut *connection)) {
-        data.relations.insert(pg_oid(&row,"oid")?, Relation { namespace: pg_oid(&row,"namespace")?, name: row.try_get("name").map_err(read_error)?, kind: row.try_get("kind").map_err(read_error)?, count: row.try_get("count").map_err(read_error)? });
+    for row in query!(
+        Relation,
+        sqlx::query(RELATIONS_SQL).fetch_all(&mut *connection)
+    ) {
+        data.relations.insert(
+            pg_oid(&row, "oid")?,
+            Relation {
+                namespace: pg_oid(&row, "namespace")?,
+                name: row.try_get("name").map_err(read_error)?,
+                kind: row.try_get("kind").map_err(read_error)?,
+                count: row.try_get("count").map_err(read_error)?,
+            },
+        );
     }
-    for row in query!(Columns, sqlx::query("SELECT attrelid::bigint AS relation, attnum, attname::text AS name, attisdropped FROM pg_catalog.pg_attribute").fetch_all(&mut *connection)) {
-        data.attributes.insert((pg_oid(&row,"relation")?,row.try_get("attnum").map_err(read_error)?), Attribute { name: row.try_get("name").map_err(read_error)?, dropped: row.try_get("attisdropped").map_err(read_error)? });
+    for row in query!(
+        Columns,
+        sqlx::query(ATTRIBUTES_SQL).fetch_all(&mut *connection)
+    ) {
+        data.attributes.insert(
+            (
+                pg_oid(&row, "relation")?,
+                row.try_get("attnum").map_err(read_error)?,
+            ),
+            Attribute {
+                name: row.try_get("name").map_err(read_error)?,
+                dropped: row.try_get("attisdropped").map_err(read_error)?,
+            },
+        );
     }
-    for row in query!(SearchPath, sqlx::query("SELECT p.position::bigint AS position, n.oid::bigint AS oid FROM pg_catalog.unnest(pg_catalog.current_schemas(true)) WITH ORDINALITY p(name, position) JOIN pg_catalog.pg_namespace n ON n.nspname = p.name ORDER BY p.position").fetch_all(&mut *connection)) {
-        data.path.insert(row.try_get("position").map_err(read_error)?,pg_oid(&row,"oid")?);
+    for row in query!(
+        SearchPath,
+        sqlx::query(SEARCH_PATH_SQL).fetch_all(&mut *connection)
+    ) {
+        data.path.insert(
+            row.try_get("position").map_err(read_error)?,
+            pg_oid(&row, "oid")?,
+        );
     }
     data.meta.namespace_count = data.namespaces.len() as i64;
     data.meta.relation_count = data.relations.len() as i64;
