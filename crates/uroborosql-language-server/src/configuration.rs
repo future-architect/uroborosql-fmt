@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -75,24 +74,86 @@ impl Backend {
         }
     }
 
-    /// Fetches the client config for every workspace root and rebuilds the lint
-    /// stores from the result.
-    ///
-    /// Each root is queried with its own `scopeUri`, so a multi-root client can
-    /// return a different `lintConfigurationFilePath` per folder.
+    /// Start independent root refreshes; a slow client never holds other roots.
     pub(crate) async fn refresh_workspace_configs(&self) {
-        let roots = self.workspace_roots.read().unwrap().clone();
-
-        let mut configs: HashMap<PathBuf, ClientConfig> = HashMap::new();
-        for root in &roots {
-            let Some(config) = self.fetch_client_config(Some(root.uri.clone())).await else {
-                continue;
-            };
-            configs.insert(root.path.clone(), config);
+        let mut state = self.analysis.lock().await;
+        if state.stopped {
+            return;
         }
-        *self.workspace_configs.write().unwrap() = configs;
-
-        self.rebuild_lint_config_stores().await;
+        let roots = self.workspace_roots.read().unwrap().clone();
+        let mut completions = Vec::new();
+        state
+            .roots
+            .retain(|p, _| roots.iter().any(|r| &r.path == p));
+        for uri in self.open_documents().into_iter().map(|d| d.0) {
+            state.invalidate(&uri);
+        }
+        for root in roots {
+            let generation = state.next();
+            let entry = state.roots.entry(root.path.clone()).or_default();
+            entry.generation = generation;
+            entry.fetching = true;
+            entry.pending = true;
+            let backend = self.clone();
+            state.tasks.retain(|h| !h.is_finished());
+            let (done, completion) = tokio::sync::oneshot::channel::<()>();
+            completions.push(completion);
+            state.tasks.push(tokio::spawn(async move {
+                let _done = done;
+                let request = backend.client.configuration(vec![ConfigurationItem {
+                    scope_uri: Some(root.uri),
+                    section: Some(CONFIGURATION_SECTION.into()),
+                }]);
+                let config =
+                    match tokio::time::timeout(std::time::Duration::from_secs(5), request).await {
+                        Ok(Ok(values)) => values.first().and_then(|v| {
+                            if v.is_null() {
+                                Some(ClientConfig::default())
+                            } else {
+                                serde_json::from_value(v.clone()).ok()
+                            }
+                        }),
+                        _ => None,
+                    };
+                {
+                    let mut state = backend.analysis.lock().await;
+                    if state.stopped {
+                        return;
+                    }
+                    let Some(entry) = state
+                        .roots
+                        .get_mut(&root.path)
+                        .filter(|r| r.generation == generation)
+                    else {
+                        return;
+                    };
+                    entry.fetching = false;
+                    if let Some(config) = config {
+                        entry.config = Some(config.clone());
+                        backend
+                            .workspace_configs
+                            .write()
+                            .unwrap()
+                            .insert(root.path.clone(), config);
+                    } else {
+                        entry.config = None;
+                        backend.fail_root(&mut state, &root.path).await;
+                        return;
+                    }
+                }
+                backend.build_root(root.path, generation).await;
+            }));
+        }
+        // Removed roots now have normal outside-workspace empty publication.
+        for (uri, _, _) in self.open_documents() {
+            if self.workspace_root_for_uri(&uri).is_none() {
+                self.queue_analysis(&mut state, &uri);
+            }
+        }
+        drop(state);
+        for completion in completions {
+            let _ = completion.await;
+        }
     }
 
     pub(crate) fn cached_workspace_config_for_uri(&self, uri: &Uri) -> ClientConfig {
@@ -101,43 +162,116 @@ impl Backend {
             .unwrap_or_default()
     }
 
-    /// Rebuilds the lint config store for every workspace root from the cached
-    /// per-root client config, without issuing new `workspace/configuration`
-    /// requests. Used when only the on-disk config files may have changed.
-    ///
-    /// The `lintConfigurationFilePath` setting (relative or absolute) is
-    /// resolved against each root independently so that nested / sibling
-    /// workspaces each pick up their own `.uroborosqllintrc.json`.
     pub(crate) async fn rebuild_lint_config_stores(&self) {
-        let roots = self.workspace_roots.read().unwrap().clone();
-        let configs = self.workspace_configs.read().unwrap().clone();
+        let mut state = self.analysis.lock().await;
+        if state.stopped {
+            return;
+        }
+        for (uri, _, _) in self.open_documents() {
+            state.invalidate(&uri);
+        }
+        let paths: Vec<_> = state.roots.keys().cloned().collect();
+        for path in paths {
+            let root = state.roots.get_mut(&path).unwrap();
+            root.dirty += 1;
+            if root.fetching || root.pending {
+                continue;
+            }
+            if root.config.is_none() {
+                continue;
+            }
+            root.pending = true;
+            let generation = root.generation;
+            let backend = self.clone();
+            state.tasks.retain(|h| !h.is_finished());
+            state.tasks.push(tokio::spawn(async move {
+                backend.build_root(path, generation).await;
+            }));
+        }
+    }
 
-        let mut stores = HashMap::new();
-        for root in roots {
-            let lint_config_path = configs
-                .get(&root.path)
-                .and_then(|config| config.lint_configuration_file_path.clone());
-            let resolved_path =
-                resolve_config_path(Some(&root.path), lint_config_path, DEFAULT_CONFIG_FILENAME);
-            match ConfigStore::try_new(root.path.clone(), resolved_path) {
-                Ok(store) => {
-                    stores.insert(root.path, store);
+    async fn build_root(&self, path: PathBuf, generation: u64) {
+        loop {
+            let (dirty, config) = {
+                let state = self.analysis.lock().await;
+                if state.stopped {
+                    return;
                 }
-                Err(err) => {
-                    self.client
-                        .log_message(
-                            MessageType::WARNING,
-                            format!(
-                                "failed to load lint config for {}: {err}",
-                                root.path.display()
-                            ),
-                        )
-                        .await;
-                    stores.insert(root.path, None);
+                let Some(root) = state
+                    .roots
+                    .get(&path)
+                    .filter(|r| r.generation == generation && !r.fetching)
+                else {
+                    return;
+                };
+                let Some(config) = root.config.clone() else {
+                    return;
+                };
+                (root.dirty, config)
+            };
+            let build_path = path.clone();
+            let built = tokio::task::spawn_blocking(move || {
+                let resolved = resolve_config_path(
+                    Some(&build_path),
+                    config.lint_configuration_file_path,
+                    DEFAULT_CONFIG_FILENAME,
+                );
+                ConfigStore::try_new(build_path, resolved)
+            })
+            .await;
+            #[cfg(test)]
+            if let Some(hook) = &self.build_hook {
+                hook().await;
+            }
+            let mut state = self.analysis.lock().await;
+            if state.stopped {
+                return;
+            }
+            let Some(root) = state
+                .roots
+                .get_mut(&path)
+                .filter(|r| r.generation == generation && !r.fetching)
+            else {
+                return;
+            };
+            if root.dirty != dirty {
+                continue;
+            }
+            match built {
+                Ok(Ok(store)) => {
+                    root.store = store;
+                    root.pending = false;
+                    root.unavailable = false;
+                }
+                _ => {
+                    self.fail_root(&mut state, &path).await;
+                    return;
                 }
             }
+            for (uri, _, _) in self.open_documents() {
+                if self.workspace_dir_for_uri(&uri).as_ref() == Some(&path) {
+                    self.queue_analysis(&mut state, &uri);
+                }
+            }
+            return;
         }
-        *self.lint_config_stores.write().unwrap() = stores;
+    }
+    async fn fail_root(&self, state: &mut crate::analysis::State, path: &Path) {
+        let root = state.roots.get_mut(path).unwrap();
+        root.pending = false;
+        root.unavailable = true;
+        root.store = None;
+        for (uri, _, version) in self.open_documents() {
+            if self.workspace_dir_for_uri(&uri).as_deref() == Some(path) {
+                state.invalidate(&uri);
+                self.publish_analysis(uri, vec![], Some(version)).await;
+            }
+        }
+        self.log_analysis(
+            MessageType::ERROR,
+            format!("{}: lint configuration unavailable", path.display()),
+        )
+        .await;
     }
 }
 
@@ -160,3 +294,8 @@ pub(crate) fn resolve_config_path(
     let path = root_dir.join(default_filename);
     path.exists().then_some(path)
 }
+
+#[cfg(test)]
+pub(crate) type BuildHook = std::sync::Arc<
+    dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> + Send + Sync,
+>;

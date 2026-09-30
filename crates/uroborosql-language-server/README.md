@@ -43,6 +43,9 @@ Lint diagnostics are published only when the server can resolve a lint config fi
 Without a lint config file, the server still provides formatting, but it publishes no lint
 diagnostics.
 
+If the lint config cannot be loaded, the server clears the lint diagnostics of that workspace
+and resumes linting once the config loads again.
+
 To create a starter lint config file, run:
 
 ```sh
@@ -63,6 +66,23 @@ Lint diagnostics are refreshed when:
 - watched lint config files change
 
 This server does not currently re-lint on every `textDocument/didChange` notification.
+
+### Catalog Checks
+
+When the lint config has a `db` section, the server also reports tables and columns that do
+not exist, using either a PostgreSQL connection (`schemaProvider: "server"`) or a catalog
+snapshot exported with `uroborosql-lint export-catalog` (`schemaProvider: "file"`, with
+`path` relative to the lint config file's directory). See the
+[`uroborosql-lint` CLI README](../uroborosql-lint-cli/README.md) for the `db` settings and
+exporting snapshots.
+
+Catalog checks run with the other lint diagnostics on open and save, so a re-exported
+snapshot or a database change is picked up on the next open or save. SQL is never executed.
+
+If the catalog cannot be read, the other lint diagnostics are still shown, and the reason is
+written to the server log (`window/logMessage`) without connection credentials or SQL text.
+When many documents are checked at once, a check may be postponed; saving the document again
+retries it.
 
 ## Editor Setup Examples
 
