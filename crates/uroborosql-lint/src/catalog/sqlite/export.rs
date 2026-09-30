@@ -203,16 +203,19 @@ async fn acquire_rows(
     limit: Duration,
 ) -> Result<SnapshotData, AcquisitionError> {
     let mut phase = AcquisitionPhase::SearchPath;
+    // Report the step that failed, like the live provider. Namespace rows use Relation because
+    // Schema implies a USAGE denial, which reading pg_namespace itself cannot produce.
     macro_rules! query {
-        ($q:expr) => {
-            postgres::query(&mut phase, AcquisitionPhase::Validate, limit, $q).await?
+        ($next:ident, $q:expr) => {
+            postgres::query(&mut phase, AcquisitionPhase::$next, limit, $q).await?
         };
     }
     query!(
+        SearchPath,
         sqlx::query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             .execute(&mut *connection)
     );
-    let row = query!(sqlx::query("SELECT pg_catalog.current_setting('server_version_num')::bigint AS version, pg_catalog.current_database()::text AS database, session_user::text AS session_user, current_user::text AS current_user, pg_catalog.to_char(pg_catalog.transaction_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS captured_at").fetch_one(&mut *connection));
+    let row = query!(SearchPath, sqlx::query("SELECT pg_catalog.current_setting('server_version_num')::bigint AS version, pg_catalog.current_database()::text AS database, session_user::text AS session_user, current_user::text AS current_user, pg_catalog.to_char(pg_catalog.transaction_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS captured_at").fetch_one(&mut *connection));
     let mut data = SnapshotData {
         meta: Meta {
             version: row.try_get("version").map_err(read_error)?,
@@ -229,18 +232,18 @@ async fn acquire_rows(
             invalid().with_detail(crate::catalog::AcquisitionDetail::UnsupportedServerVersion)
         );
     }
-    for row in query!(sqlx::query("SELECT oid::bigint AS oid, nspname::text AS name, pg_catalog.has_schema_privilege(oid, 'USAGE') AS usable FROM pg_catalog.pg_namespace").fetch_all(&mut *connection)) {
+    for row in query!(Relation, sqlx::query("SELECT oid::bigint AS oid, nspname::text AS name, pg_catalog.has_schema_privilege(oid, 'USAGE') AS usable FROM pg_catalog.pg_namespace").fetch_all(&mut *connection)) {
         let oid = pg_oid(&row,"oid")?;
         data.namespaces.insert(oid,row.try_get("name").map_err(read_error)?);
         data.access.insert(oid,row.try_get("usable").map_err(read_error)?);
     }
-    for row in query!(sqlx::query("SELECT oid::bigint AS oid, relnamespace::bigint AS namespace, relname::text AS name, relkind::text AS kind, relnatts::bigint AS count FROM pg_catalog.pg_class").fetch_all(&mut *connection)) {
+    for row in query!(Relation, sqlx::query("SELECT oid::bigint AS oid, relnamespace::bigint AS namespace, relname::text AS name, relkind::text AS kind, relnatts::bigint AS count FROM pg_catalog.pg_class").fetch_all(&mut *connection)) {
         data.relations.insert(pg_oid(&row,"oid")?, Relation { namespace: pg_oid(&row,"namespace")?, name: row.try_get("name").map_err(read_error)?, kind: row.try_get("kind").map_err(read_error)?, count: row.try_get("count").map_err(read_error)? });
     }
-    for row in query!(sqlx::query("SELECT attrelid::bigint AS relation, attnum, attname::text AS name, attisdropped FROM pg_catalog.pg_attribute").fetch_all(&mut *connection)) {
+    for row in query!(Columns, sqlx::query("SELECT attrelid::bigint AS relation, attnum, attname::text AS name, attisdropped FROM pg_catalog.pg_attribute").fetch_all(&mut *connection)) {
         data.attributes.insert((pg_oid(&row,"relation")?,row.try_get("attnum").map_err(read_error)?), Attribute { name: row.try_get("name").map_err(read_error)?, dropped: row.try_get("attisdropped").map_err(read_error)? });
     }
-    for row in query!(sqlx::query("SELECT p.position::bigint AS position, n.oid::bigint AS oid FROM pg_catalog.unnest(pg_catalog.current_schemas(true)) WITH ORDINALITY p(name, position) JOIN pg_catalog.pg_namespace n ON n.nspname = p.name ORDER BY p.position").fetch_all(&mut *connection)) {
+    for row in query!(SearchPath, sqlx::query("SELECT p.position::bigint AS position, n.oid::bigint AS oid FROM pg_catalog.unnest(pg_catalog.current_schemas(true)) WITH ORDINALITY p(name, position) JOIN pg_catalog.pg_namespace n ON n.nspname = p.name ORDER BY p.position").fetch_all(&mut *connection)) {
         data.path.insert(row.try_get("position").map_err(read_error)?,pg_oid(&row,"oid")?);
     }
     data.meta.namespace_count = data.namespaces.len() as i64;
@@ -248,7 +251,7 @@ async fn acquire_rows(
     data.meta.attribute_count = data.attributes.len() as i64;
     data.meta.search_path_count = data.path.len() as i64;
     data.validate()?;
-    query!(sqlx::query("COMMIT").execute(&mut *connection));
+    query!(Validate, sqlx::query("COMMIT").execute(&mut *connection));
     Ok(data)
 }
 fn pg_oid(row: &sqlx::postgres::PgRow, name: &str) -> Result<u32, AcquisitionError> {
