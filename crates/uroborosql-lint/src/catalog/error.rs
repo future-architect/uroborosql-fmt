@@ -42,6 +42,8 @@ pub enum TimeoutScope {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AcquisitionDetail {
     FileProviderUnavailable,
+    SnapshotFileUnavailable,
+    InvalidSnapshot,
     PostgresProviderUnavailable,
     InvalidConfiguration(ConfigurationField),
     Authentication,
@@ -82,6 +84,8 @@ impl std::error::Error for AcquisitionError {}
 impl fmt::Display for AcquisitionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let action = match self.detail {
+            Some(AcquisitionDetail::SnapshotFileUnavailable) => "Catalog snapshot could not be opened. Check that the file exists and is readable.",
+            Some(AcquisitionDetail::InvalidSnapshot) => "Catalog snapshot is invalid, incomplete or unsupported. Export a complete snapshot with a supported format version.",
             Some(AcquisitionDetail::FileProviderUnavailable) => "File catalog is unavailable in this build. Use a build with SQLite catalog support.",
             Some(AcquisitionDetail::PostgresProviderUnavailable) => "PostgreSQL catalog is unavailable in this build. Enable the postgres-catalog feature.",
             Some(AcquisitionDetail::InvalidConfiguration(field)) => match field {
@@ -110,7 +114,7 @@ impl fmt::Display for AcquisitionError {
                 AcquisitionErrorKind::UnsupportedProvider => "The configured catalog provider is unavailable in this build.",
                 AcquisitionErrorKind::Connection => "Catalog connection failed. Check host, port, database credentials, network access, and TLS settings (server support, trusted CA and host name).",
                 AcquisitionErrorKind::Timeout => "Catalog acquisition timed out. Check network delays, database load or locks, and the timeout limit.",
-                AcquisitionErrorKind::PermissionDenied if self.phase == AcquisitionPhase::Schema => "Catalog schema access was denied. Check the connection role's USAGE privilege on the requested schema.",
+                AcquisitionErrorKind::PermissionDenied if self.phase == AcquisitionPhase::Schema => "Catalog schema access was denied. Check the source role's USAGE privilege on the requested schema. For a snapshot, this is the saved access decision; export a new snapshot with a role that has USAGE.",
                 AcquisitionErrorKind::PermissionDenied => "Catalog access was denied. Check the connection role's catalog read privileges.",
                 AcquisitionErrorKind::InvalidData => "Catalog data was invalid or incomplete. Check catalog visibility and that the database environment is supported.",
                 AcquisitionErrorKind::Read => "Catalog read failed. Check the database connection, server state, and catalog visibility.",

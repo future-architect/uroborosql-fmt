@@ -12,7 +12,7 @@ The installed binary name is `uroborosql-lint`.
 
 ## Getting Started
 
-`uroborosql-lint` only runs when a lint config file can be resolved.
+SQL lint requires a lint config file. `export-catalog` uses connection arguments only.
 
 ### 1. Create a starter config file
 
@@ -38,6 +38,7 @@ For config file structure, rule settings, and directive details, see the
 ```bash
 uroborosql-lint [OPTIONS] <INPUT>
 uroborosql-lint --init
+uroborosql-lint export-catalog --host HOST --user USER --dbname DB [--output FILE]
 ```
 
 Examples:
@@ -87,8 +88,64 @@ existence cannot be checked are reported as deferred.
 If catalog acquisition fails, available CST diagnostics are still printed and
 the exit code is 2, even with `--fail-level none`. There is no database access
 when catalog checking is unconfigured, disabled by config, or has no table
-requests. SQLite file acquisition is not available yet and fails explicitly
-when an eligible check requests it.
+requests. File-backed checks follow the same rules and never connect to PostgreSQL.
+
+## Export and offline catalog checks
+
+On a machine that can reach PostgreSQL 14–18, export the catalog:
+
+```sh
+uroborosql-lint export-catalog --host db.example.com --user catalog_reader --dbname app --output catalog.sqlite
+```
+
+Set `PGPASSWORD` if authentication requires a password. Export does not read or
+require a lint config or SQL input. `--port` defaults to 5432; `--tls-mode` defaults
+to `verify-full` and also accepts `verify-ca`, `require`, and `disable`.
+Explicit arguments and defaults take precedence over `PGHOST`, `PGUSER`,
+`PGDATABASE`, `PGPORT`, and `PGSSLMODE`. Password, `PGOPTIONS`, and certificate
+environment variables follow the PostgreSQL provider's rules; pgpass is not read.
+
+The snapshot preserves the effective search path and schema USAGE decisions of
+the export session. For example, set `PGOPTIONS='-c search_path=app,public'` in a
+POSIX shell, or `$env:PGOPTIONS = '-c search_path=app,public'` in PowerShell.
+It contains object names, database and user names, and acquisition metadata, but
+no application data rows, host name, password, or connection string.
+
+Save this as `offline-lint.json` beside the snapshot, then copy both to the offline environment:
+
+```json
+{
+  "db": { "schemaProvider": "file", "path": "catalog.sqlite" },
+  "rules": { "no-unknown-reference": "error" }
+}
+```
+
+```sh
+uroborosql-lint query.sql --config offline-lint.json
+```
+
+The file path is relative to the config directory. PostgreSQL and its credentials
+are unnecessary for offline lint. Missing, corrupt, incomplete, or incompatible
+snapshots fail acquisition with exit code 2 while retaining other lint diagnostics.
+Snapshots do not refresh automatically; export again after relevant DDL changes.
+Stored privileges describe the export session, not the current CI user.
+
+`--output` is relative to the working directory. Omit it for a UTC name such as
+`catalog-20260918T111500Z.sqlite`. Both explicit and default names overwrite an
+existing regular file atomically after writing, validating, and closing a temporary
+file in the same directory. Failures preserve the previous file. Directories and
+symlinks are rejected, and parent directories are not created. No WAL sidecar is
+needed. Concurrent exports use the last successful replacement; there is no lock
+ordering or collision suffix. A same-named SQL file can be linted as `./export-catalog`.
+
+Export accepts `--connect-timeout-ms`, `--query-timeout-ms`, and
+`--acquisition-timeout-ms`, each a positive integer. Omitted values are 5000,
+30000, and 120000 ms respectively. The overall deadline covers acquisition,
+writing, and validation up to publication; timeout never publishes later.
+Local file operations and closing SQLite workers can delay cleanup beyond the
+deadline. Once atomic replacement starts, its result determines success.
+Export returns 0 on success and 2 on any failure, reports the result and output
+path to stderr, and leaves stdout empty.
 
 ## Limitations
 

@@ -69,11 +69,16 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: catalog-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-      - name: Clippy with PostgreSQL provider
+      - name: Clippy with PostgreSQL and SQLite providers
         if: runner.os == 'Linux'
-        run: cargo clippy --locked -p uroborosql-lint --all-targets --features postgres-catalog -- --deny warnings
-      - name: Run native unit and contract tests with PostgreSQL provider
-        run: cargo test --locked -p uroborosql-lint --features postgres-catalog
+        run: cargo clippy --locked -p uroborosql-lint -p uroborosql-lint-cli --all-targets --features postgres-catalog,sqlite-catalog -- --deny warnings
+      - name: Run native catalog and CLI contract tests
+        run: cargo test --locked -p uroborosql-lint -p uroborosql-lint-cli --features postgres-catalog,sqlite-catalog
+
+      - name: Check SQLite-only library without PostgreSQL or TLS
+        run: cargo check --locked -p uroborosql-lint --no-default-features --features sqlite-catalog
+      - name: Check library without optional providers
+        run: cargo check --locked -p uroborosql-lint --no-default-features
 
   catalog-postgres:
     name: Catalog PostgreSQL 14-18
@@ -96,4 +101,4 @@ jobs:
           key: catalog-postgres-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
       # run.py explicitly runs the ignored integration cases; PG18 adds fault cases.
       - name: Run disposable PostgreSQL integration fixture
-        run: python3 crates/uroborosql-lint/tests/postgres/run.py --cli
+        run: python3 crates/uroborosql-lint/tests/postgres/run.py --cli --sqlite
