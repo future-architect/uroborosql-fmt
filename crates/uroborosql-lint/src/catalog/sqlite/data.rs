@@ -20,7 +20,10 @@ pub(super) struct Meta {
     pub session_user: String,
     pub current_user: String,
     pub captured_at: String,
-    pub counts: [i64; 4],
+    pub namespace_count: i64,
+    pub relation_count: i64,
+    pub attribute_count: i64,
+    pub search_path_count: i64,
 }
 pub(super) struct Relation {
     pub namespace: u32,
@@ -161,12 +164,10 @@ pub(super) async fn read_validated(
         session_user: string(row, "session_user")?,
         current_user: string(row, "current_user")?,
         captured_at: string(row, "captured_at")?,
-        counts: [
-            integer(row, "namespace_count")?,
-            integer(row, "relation_count")?,
-            integer(row, "attribute_count")?,
-            integer(row, "search_path_count")?,
-        ],
+        namespace_count: integer(row, "namespace_count")?,
+        relation_count: integer(row, "relation_count")?,
+        attribute_count: integer(row, "attribute_count")?,
+        search_path_count: integer(row, "search_path_count")?,
     };
     for row in rows(connection, "pg_namespace", &["oid", "nspname"]).await? {
         insert(
@@ -242,13 +243,10 @@ impl SnapshotData {
             );
         }
         if !utc_timestamp(&self.meta.captured_at)
-            || self.meta.counts
-                != [
-                    self.namespaces.len() as i64,
-                    self.relations.len() as i64,
-                    self.attributes.len() as i64,
-                    self.path.len() as i64,
-                ]
+            || self.meta.namespace_count != self.namespaces.len() as i64
+            || self.meta.relation_count != self.relations.len() as i64
+            || self.meta.attribute_count != self.attributes.len() as i64
+            || self.meta.search_path_count != self.path.len() as i64
         {
             return Err(invalid());
         }

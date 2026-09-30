@@ -220,7 +220,7 @@ async fn acquire_rows(
             session_user: row.try_get("session_user").map_err(read_error)?,
             current_user: row.try_get("current_user").map_err(read_error)?,
             captured_at: row.try_get("captured_at").map_err(read_error)?,
-            counts: [0; 4],
+            ..Meta::default()
         },
         ..SnapshotData::default()
     };
@@ -243,12 +243,10 @@ async fn acquire_rows(
     for row in query!(sqlx::query("SELECT p.position::bigint AS position, n.oid::bigint AS oid FROM pg_catalog.unnest(pg_catalog.current_schemas(true)) WITH ORDINALITY p(name, position) JOIN pg_catalog.pg_namespace n ON n.nspname = p.name ORDER BY p.position").fetch_all(&mut *connection)) {
         data.path.insert(row.try_get("position").map_err(read_error)?,pg_oid(&row,"oid")?);
     }
-    data.meta.counts = [
-        data.namespaces.len() as i64,
-        data.relations.len() as i64,
-        data.attributes.len() as i64,
-        data.path.len() as i64,
-    ];
+    data.meta.namespace_count = data.namespaces.len() as i64;
+    data.meta.relation_count = data.relations.len() as i64;
+    data.meta.attribute_count = data.attributes.len() as i64;
+    data.meta.search_path_count = data.path.len() as i64;
     data.validate()?;
     query!(sqlx::query("COMMIT").execute(&mut *connection));
     Ok(data)
@@ -319,10 +317,10 @@ async fn write_snapshot(
         .bind(&m.session_user)
         .bind(&m.current_user)
         .bind(&m.captured_at)
-        .bind(m.counts[0])
-        .bind(m.counts[1])
-        .bind(m.counts[2])
-        .bind(m.counts[3])
+        .bind(m.namespace_count)
+        .bind(m.relation_count)
+        .bind(m.attribute_count)
+        .bind(m.search_path_count)
         .execute(&mut *tx)
         .await
         .map_err(read_error)?;
@@ -415,7 +413,10 @@ mod tests {
                 session_user: "login".into(),
                 current_user: "role".into(),
                 captured_at: "2026-09-18T00:00:00Z".into(),
-                counts: [1, 1, 1, 1],
+                namespace_count: 1,
+                relation_count: 1,
+                attribute_count: 1,
+                search_path_count: 1,
             },
             namespaces: [(1, "public".into())].into(),
             access: [(1, true)].into(),
@@ -494,7 +495,7 @@ mod tests {
                 },
             );
         }
-        large.meta.counts[1] = large.relations.len() as i64;
+        large.meta.relation_count = large.relations.len() as i64;
         let mut timeouts = default_timeouts();
         timeouts.acquisition = Duration::from_millis(10);
         let result = publish_snapshot(
@@ -595,7 +596,7 @@ mod tests {
         let path = temp.path().join("catalog.sqlite");
         fs::write(&path, b"old bytes").unwrap();
         let mut incomplete = data("new");
-        incomplete.meta.counts[2] = 2;
+        incomplete.meta.attribute_count = 2;
         // Writing commits the file; only the subsequent read-only validation certifies it.
         let staged = temp.path().join("unpublished.sqlite");
         let options = SqliteConnectOptions::new()
