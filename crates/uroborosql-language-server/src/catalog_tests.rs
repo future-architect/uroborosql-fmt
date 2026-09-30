@@ -681,6 +681,7 @@ async fn shutdown_releases_real_postgres_session_and_transaction() {
         .execute("GRANT SELECT ON public.users TO lsp_abort")
         .await
         .unwrap();
+    // A backend blocked on the lock notices its dropped client only through this check.
     observer
         .execute("ALTER ROLE lsp_abort SET client_connection_check_interval='100ms'")
         .await
