@@ -6,8 +6,6 @@ use uroborosql_lint::{
 
 use crate::args::Cli;
 
-mod catalog;
-
 const DEFAULT_CONFIG_CONTENTS: &str = "{}\n";
 
 #[repr(u8)]
@@ -103,7 +101,7 @@ async fn run_lint(args: Cli) -> Result<(), CliError> {
             std::io::stdout().flush().map_err(|err| {
                 CliError::execution(format!("Failed to flush diagnostics: {err}"))
             })?;
-            eprintln!("{}", catalog::summary(&display, &result.catalog));
+            eprintln!("{}", result.catalog.summary(&display));
             if result.catalog.has_failures() {
                 return Err(CliError {
                     code: ExitCode::ExecutionError,

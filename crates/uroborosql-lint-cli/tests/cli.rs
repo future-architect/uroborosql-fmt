@@ -253,7 +253,7 @@ fn catalog_skip_and_exclusion_are_visible_without_connecting() {
         ),
         (
             r#"{"db":{"schemaProvider":"server","host":"","user":"","dbname":""}}"#,
-            "complete=0 excluded=1 failed=0; unsupported syntax",
+            "query.sql:1:1: not checked against the catalog (unsupported syntax)",
         ),
     ] {
         cfg.write_str(json).unwrap();
@@ -289,9 +289,11 @@ fn file_effect_holds_catalog_checks_for_the_whole_input() {
         .arg(cfg.path())
         .assert()
         .success()
-        .stderr(contains(
-            "complete=0 excluded=2 failed=0; file effect in SQL input",
-        ));
+        .stderr(
+            contains("catalog: 0 checked, 2 not checked, 0 failed").and(contains(
+                "not checked against the catalog (file effect in SQL input)",
+            )),
+        );
     assert!(!temp.path().join("absent.sqlite").exists());
 }
 
@@ -316,13 +318,15 @@ fn unavailable_file_catalog_retains_diagnostics_and_overrides_fail_none() {
         .assert()
         .code(2)
         .stdout(contains("no-distinct"))
-        .stderr(contains("complete=0 excluded=1 failed=1").and(contains(
-            if cfg!(feature = "sqlite-catalog") {
-                "Catalog snapshot could not be opened"
-            } else {
-                "File catalog is unavailable"
-            },
-        )));
+        .stderr(
+            contains("catalog: 0 checked, 1 not checked, 1 failed").and(contains(
+                if cfg!(feature = "sqlite-catalog") {
+                    "Catalog snapshot could not be opened"
+                } else {
+                    "File catalog is unavailable"
+                },
+            )),
+        );
     assert!(!temp.path().join("absent.sqlite").exists());
 }
 
@@ -341,9 +345,12 @@ fn recovered_source_reports_deferred_checks_without_accessing_file() {
         .arg(cfg.path())
         .assert()
         .success()
-        .stderr(contains(
-            "complete=1 excluded=0 failed=0; recovered source checks deferred=1",
-        ));
+        .stderr(
+            contains("catalog: 1 checked, 0 not checked, 0 failed, 1 with deferred table checks")
+                .and(contains(
+                    "query.sql:1:1: table existence not checked (recovered source)",
+                )),
+        );
     assert!(!temp.path().join("absent.sqlite").exists());
 }
 
@@ -370,7 +377,8 @@ fn invalid_connection_keeps_cst_and_reports_safe_classified_failure_once() {
         .unwrap()
         .contains("no-distinct"));
     let status = String::from_utf8(output.stderr).unwrap();
-    assert!(status.contains("failed=2"));
+    assert!(status.contains("catalog: 0 checked, 1 not checked, 2 failed"));
+    assert!(status.contains("(and 1 more statements)"));
     let reason = if cfg!(feature = "postgres-catalog") {
         "Invalid catalog host"
     } else {

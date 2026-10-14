@@ -10,7 +10,7 @@ use ropey::Rope;
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 use tokio::task::JoinHandle;
 use tower_lsp_server::lsp_types::{MessageType, Uri};
-use uroborosql_lint::{CatalogReport, ConfigStore, ResolvedLintConfig};
+use uroborosql_lint::{ConfigStore, ResolvedLintConfig};
 
 #[derive(Default)]
 pub(crate) struct State {
@@ -245,42 +245,11 @@ impl Backend {
                 {
                     Ok(result) => {
                         let failed = result.catalog.has_failures();
-                        let summary = match &result.catalog {
-                            CatalogReport::Skipped(reason) => {
-                                format!("catalog skipped: {reason:?}")
-                            }
-                            CatalogReport::Statements(statements) => {
-                                use uroborosql_lint::catalog::AnalysisStatus;
-                                let complete = statements
-                                    .iter()
-                                    .filter(|s| matches!(s.status, AnalysisStatus::Complete))
-                                    .count();
-                                let excluded = statements
-                                    .iter()
-                                    .filter(|s| matches!(s.status, AnalysisStatus::Excluded(_)))
-                                    .count();
-                                let failures = statements.len() - complete - excluded;
-                                // Structured enums only: never connection strings, SQL, or server errors.
-                                let reasons: Vec<_> =
-                                    statements.iter().filter_map(|s| s.exclusion).collect();
-                                let outcomes: Vec<_> = statements
-                                    .iter()
-                                    .filter_map(|s| match &s.status {
-                                        AnalysisStatus::Excluded(reason) => {
-                                            Some(format!("{reason:?}"))
-                                        }
-                                        AnalysisStatus::Failed(error) => Some(format!(
-                                            "{:?}/{:?}/{:?}",
-                                            error.phase, error.kind, error.detail
-                                        )),
-                                        _ => None,
-                                    })
-                                    .collect();
-                                format!(
-                                    "catalog complete={complete}, excluded={excluded}, failed={failures}, exclusions={reasons:?}, reasons={outcomes:?}"
-                                )
-                            }
-                        };
+                        let file = file_uri_to_path(&job.uri).map_or_else(
+                            || job.uri.as_str().to_owned(),
+                            |path| path.display().to_string(),
+                        );
+                        let summary = result.catalog.summary(&file);
                         let deferred = provider
                             .as_ref()
                             .is_some_and(|p| p.deferred.load(std::sync::atomic::Ordering::Relaxed));
@@ -293,7 +262,7 @@ impl Backend {
                                 MessageType::INFO
                             },
                             if deferred {
-                                "catalog analysis deferred: acquisition slots busy".into()
+                                format!("{file}: catalog analysis deferred: acquisition slots busy")
                             } else {
                                 summary
                             },
@@ -314,8 +283,7 @@ impl Backend {
                 self.publish_analysis(job.uri.clone(), diagnostics, Some(job.version))
                     .await;
                 if let Some((level, summary)) = status {
-                    self.log_analysis(level, format!("{}: {summary}", job.uri.as_str()))
-                        .await;
+                    self.log_analysis(level, summary).await;
                 }
             }
         }
