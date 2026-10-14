@@ -7,10 +7,24 @@ use crate::{
     paths::file_uri_to_path,
 };
 use ropey::Rope;
-use std::{collections::HashMap, path::PathBuf, time::Duration};
-use tokio::task::JoinHandle;
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
+use tokio::{sync::Semaphore, task::JoinHandle};
 use tower_lsp_server::lsp_types::{MessageType, Uri};
-use uroborosql_lint::{ConfigStore, ResolvedLintConfig};
+use uroborosql_lint::{
+    ConfigStore, ResolvedLintConfig,
+    catalog::{
+        AcquisitionError, AcquisitionErrorKind, AcquisitionFuture, AcquisitionPhase,
+        CatalogProvider, TableRequest,
+    },
+};
 
 #[derive(Default)]
 pub(crate) struct State {
@@ -86,24 +100,17 @@ impl State {
 }
 /// Acquire slots only when the analyzer actually requests catalog definitions.
 struct LimitedProvider {
-    inner: Box<dyn uroborosql_lint::catalog::CatalogProvider>,
-    slots: std::sync::Arc<tokio::sync::Semaphore>,
-    deferred: std::sync::atomic::AtomicBool,
+    inner: Box<dyn CatalogProvider>,
+    slots: Arc<Semaphore>,
+    deferred: AtomicBool,
 }
-impl uroborosql_lint::catalog::CatalogProvider for LimitedProvider {
-    fn acquire<'a>(
-        &'a self,
-        requests: &'a [uroborosql_lint::catalog::TableRequest],
-    ) -> uroborosql_lint::catalog::AcquisitionFuture<'a> {
+impl CatalogProvider for LimitedProvider {
+    fn acquire<'a>(&'a self, requests: &'a [TableRequest]) -> AcquisitionFuture<'a> {
         Box::pin(async move {
-            use uroborosql_lint::catalog::{
-                AcquisitionError, AcquisitionErrorKind, AcquisitionPhase,
-            };
             let Ok(Ok(_permit)) =
                 tokio::time::timeout(Duration::from_secs(10), self.slots.acquire()).await
             else {
-                self.deferred
-                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                self.deferred.store(true, Ordering::Relaxed);
                 // Local sentinel consumed below; never published as a provider failure.
                 return Err(AcquisitionError::new(
                     AcquisitionPhase::Connect,
@@ -115,10 +122,7 @@ impl uroborosql_lint::catalog::CatalogProvider for LimitedProvider {
     }
 }
 impl Backend {
-    fn select_provider(
-        &self,
-        config: &ResolvedLintConfig,
-    ) -> Option<Box<dyn uroborosql_lint::catalog::CatalogProvider>> {
+    fn select_provider(&self, config: &ResolvedLintConfig) -> Option<Box<dyn CatalogProvider>> {
         #[cfg(test)]
         if let Some(factory) = &self.provider_factory {
             return Some(factory());
@@ -225,7 +229,7 @@ impl Backend {
                 .map(|inner| LimitedProvider {
                     inner,
                     slots: self.slots.clone(),
-                    deferred: std::sync::atomic::AtomicBool::new(false),
+                    deferred: AtomicBool::new(false),
                 });
             if !self.analysis.lock().await.current(&job) {
                 continue;
@@ -237,9 +241,7 @@ impl Backend {
                     .run_async(
                         &job.sql,
                         config,
-                        provider
-                            .as_ref()
-                            .map(|p| p as &dyn uroborosql_lint::catalog::CatalogProvider),
+                        provider.as_ref().map(|p| p as &dyn CatalogProvider),
                     )
                     .await
                 {
@@ -252,7 +254,7 @@ impl Backend {
                         let summary = result.catalog.summary(&file);
                         let deferred = provider
                             .as_ref()
-                            .is_some_and(|p| p.deferred.load(std::sync::atomic::Ordering::Relaxed));
+                            .is_some_and(|p| p.deferred.load(Ordering::Relaxed));
                         status = Some((
                             if deferred {
                                 MessageType::INFO
