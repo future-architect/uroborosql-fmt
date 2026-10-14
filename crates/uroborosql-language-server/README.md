@@ -23,11 +23,19 @@ point.
 
 ## Getting Started
 
-Install the language server:
+Install the language server in one of these ways:
 
-```sh
-cargo install --git https://github.com/future-architect/uroborosql-fmt uroborosql-language-server
-```
+- Download the binary for your platform from the latest `uroborosql-language-server-v*`
+  release on the [Releases page](https://github.com/future-architect/uroborosql-fmt/releases)
+  (for example `uroborosql-language-server-x86_64-pc-windows-msvc.exe` or
+  `uroborosql-language-server-aarch64-apple-darwin`). Each file is a standalone executable.
+  Rename it to `uroborosql-language-server` (`uroborosql-language-server.exe` on Windows) and
+  put it in a directory on your `PATH`. On macOS and Linux, also run `chmod +x`.
+- Build it with cargo:
+
+  ```sh
+  cargo install --git https://github.com/future-architect/uroborosql-fmt uroborosql-language-server
+  ```
 
 Run it over stdio:
 
@@ -70,11 +78,16 @@ This server does not currently re-lint on every `textDocument/didChange` notific
 ### Catalog Checks
 
 When the lint config has a `db` section, the server also reports tables and columns that do
-not exist, using either a PostgreSQL connection (`schemaProvider: "server"`) or a catalog
-snapshot exported with `uroborosql-lint export-catalog` (`schemaProvider: "file"`, with
-`path` relative to the lint config file's directory). See the
-[`uroborosql-lint` CLI README](../uroborosql-lint-cli/README.md) for the `db` settings and
-exporting snapshots.
+not exist. There are two ways to provide the catalog:
+
+- A catalog snapshot exported with `uroborosql-lint export-catalog` (`schemaProvider: "file"`,
+  with `path` relative to the lint config file's directory). This is recommended for regular
+  use, because the server needs no database connection or credentials.
+- A PostgreSQL connection (`schemaProvider: "server"`). This is useful for trying catalog
+  checks out; every check connects to the database.
+
+See the [`uroborosql-lint` CLI README](../uroborosql-lint-cli/README.md#catalog-checks) for the
+`db` settings and exporting snapshots.
 
 Catalog checks run with the other lint diagnostics on open and save, so a re-exported
 snapshot or a database change is picked up on the next open or save. SQL is never executed.
@@ -83,6 +96,13 @@ If the catalog cannot be read, the other lint diagnostics are still shown, and t
 written to the server log (`window/logMessage`) without connection credentials or SQL text.
 When many documents are checked at once, a check may be postponed; saving the document again
 retries it.
+
+> [!NOTE]
+> **Beta limitation:** Only single-table `SELECT` statements are checked against the catalog.
+> Other statements, including `JOIN`, subqueries, and `INSERT` / `UPDATE` / `DELETE`, are
+> skipped without a diagnostic. The server log lists each skipped statement as
+> `path:line:column: not checked against the catalog (reason)`. See
+> [`no-unknown-reference`](../../docs/rules/no-unknown-reference.md).
 
 ## Editor Setup Examples
 
