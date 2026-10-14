@@ -106,14 +106,14 @@ impl Backend {
                 }]);
                 let config =
                     match tokio::time::timeout(std::time::Duration::from_secs(5), request).await {
-                        Ok(Ok(values)) => values.first().and_then(|v| {
-                            if v.is_null() {
-                                Some(ClientConfig::default())
-                            } else {
-                                serde_json::from_value(v.clone()).ok()
-                            }
-                        }),
-                        _ => None,
+                        Ok(Ok(values)) => match values.first() {
+                            None => Err("client returned no configuration".to_string()),
+                            Some(v) if v.is_null() => Ok(ClientConfig::default()),
+                            Some(v) => serde_json::from_value(v.clone())
+                                .map_err(|e| format!("invalid client configuration: {e}")),
+                        },
+                        Ok(Err(e)) => Err(format!("failed to fetch client configuration: {e}")),
+                        Err(_) => Err("timed out fetching client configuration".to_string()),
                     };
                 {
                     let mut state = backend.analysis.lock().await;
@@ -128,17 +128,20 @@ impl Backend {
                         return;
                     };
                     entry.fetching = false;
-                    if let Some(config) = config {
-                        entry.config = Some(config.clone());
-                        backend
-                            .workspace_configs
-                            .write()
-                            .unwrap()
-                            .insert(root.path.clone(), config);
-                    } else {
-                        entry.config = None;
-                        backend.fail_root(&mut state, &root.path).await;
-                        return;
+                    match config {
+                        Ok(config) => {
+                            entry.config = Some(config.clone());
+                            backend
+                                .workspace_configs
+                                .write()
+                                .unwrap()
+                                .insert(root.path.clone(), config);
+                        }
+                        Err(reason) => {
+                            entry.config = None;
+                            backend.fail_root(&mut state, &root.path, &reason).await;
+                            return;
+                        }
                     }
                 }
                 backend.build_root(root.path, generation).await;
@@ -243,8 +246,12 @@ impl Backend {
                     root.pending = false;
                     root.unavailable = false;
                 }
-                _ => {
-                    self.fail_root(&mut state, &path).await;
+                Ok(Err(e)) => {
+                    self.fail_root(&mut state, &path, &e.to_string()).await;
+                    return;
+                }
+                Err(e) => {
+                    self.fail_root(&mut state, &path, &e.to_string()).await;
                     return;
                 }
             }
@@ -256,7 +263,7 @@ impl Backend {
             return;
         }
     }
-    async fn fail_root(&self, state: &mut crate::analysis::State, path: &Path) {
+    async fn fail_root(&self, state: &mut crate::analysis::State, path: &Path, reason: &str) {
         let root = state.roots.get_mut(path).unwrap();
         root.pending = false;
         root.unavailable = true;
@@ -269,7 +276,10 @@ impl Backend {
         }
         self.log_analysis(
             MessageType::ERROR,
-            format!("{}: lint configuration unavailable", path.display()),
+            format!(
+                "{}: lint configuration unavailable: {reason}",
+                path.display()
+            ),
         )
         .await;
     }
