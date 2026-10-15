@@ -151,11 +151,10 @@ impl LanguageServer for Backend {
 
         let uri = params.text_document.uri;
         let version = params.text_document.version;
-        let mut state = self.analysis.lock().await;
+        let state = self.analysis.lock().await;
         if state.stopped {
             return;
         }
-        state.invalidate(&uri);
         for change in params.content_changes {
             if change.range.is_some() {
                 self.apply_change(&uri, change, version);

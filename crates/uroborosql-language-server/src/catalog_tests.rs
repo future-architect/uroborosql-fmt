@@ -132,8 +132,8 @@ async fn close_and_reopen_same_version_never_publish_old_results() {
     b.stop_analysis().await;
 }
 #[tokio::test]
-async fn change_invalidates_without_starting_another_acquisition() {
-    let (_server, b, uri, mut started) = setup().await;
+async fn change_keeps_in_flight_analysis_without_starting_another_acquisition() {
+    let (mut server, b, uri, mut started) = setup().await;
     open(&b, &uri, "SELECT old FROM users").await;
     let first = started.recv().await.unwrap();
     b.did_change(DidChangeTextDocumentParams {
@@ -146,6 +146,18 @@ async fn change_invalidates_without_starting_another_acquisition() {
     })
     .await;
     first.send(()).unwrap();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        server.receive_notification(),
+    )
+    .await
+    .expect("the saved version's analysis was dropped");
+    assert_eq!(result.params().unwrap()["version"], 1);
+    assert!(
+        result.params().unwrap()["diagnostics"]
+            .to_string()
+            .contains("old")
+    );
     b.stop_analysis().await;
     assert!(started.try_recv().is_err());
 }
