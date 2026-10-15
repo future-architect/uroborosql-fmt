@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/future-architect/uroborosql-fmt/compare/uroborosql-lint-cli-v0.1.0...uroborosql-lint-cli-v0.2.0) (2026-10-15)
+
+
+### Features
+
+* **lint:** add SQLite catalog export and offline checks ([#273](https://github.com/future-architect/uroborosql-fmt/issues/273)) ([4605c0e](https://github.com/future-architect/uroborosql-fmt/commit/4605c0e95d294c599fb4a3e029fb51e3bab2b5bb))
+* **lint:** connect PostgreSQL catalog checks to CLI and public async API ([#272](https://github.com/future-architect/uroborosql-fmt/issues/272)) ([2c41778](https://github.com/future-architect/uroborosql-fmt/commit/2c41778db7311b4949643264e780f46cfd39e50d))
+* **lsp:** add catalog-backed diagnostics ([#279](https://github.com/future-architect/uroborosql-fmt/issues/279)) ([594c33b](https://github.com/future-architect/uroborosql-fmt/commit/594c33b521ab23296e471a32bd7779e0cc9321d6))
+
 ## 0.1.0 (2026-06-24)
 
 
