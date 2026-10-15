@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>uroborosql-fmt wasm demo page</title>
+  <link href="style.css" rel="stylesheet" />
+</head>
+
+<body>
+  <table width="100%">
+    <tr>
+      <td>
+        <h1>uroborosql-fmt</h1>
+      </td>
+      <td style="text-align: right;">
+        <a href="./ja.html">
+          <h2>Japanese<h2>
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p>
+    Enter the SQL source you want to format in the left editor and press the 'format' button, the result of the
+    formatting will be displayed in the right box.
+  </p>
+  <p>Supports</p>
+  <ul>
+    <li><a href="https://www.postgresql.org/">PostgreSQL</a></li>
+    <li>
+      2WaySQL(
+      <a href="https://future-architect.github.io/uroborosql-doc/background/">uroboroSQL</a>, <a
+        href="https://doma.readthedocs.io/en/2.54.0/">Doma 2</a>,
+      <a href="https://github.com/future-architect/go-twowaysql">go-twowaysql</a>
+      )
+    </li>
+    <li>
+      compliant with
+      <a
+        href="https://future-architect.github.io/coding-standards/documents/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88PostgreSQL%EF%BC%89.html">SQL
+        coding standards created by Future Corporation</a>
+    </li>
+  </ul>
+  <details>
+    <summary>Option (<a href="https://github.com/future-architect/uroborosql-fmt#configuration-options">detail</a>)
+    </summary>
+    <div class="button_parent">
+      <!-- defaultボタン -->
+      <input type="button" value="default" id="default" class="small_button" />
+      <!-- select allボタン -->
+      <input type="button" value="select all" id="select_all" class="small_button" />
+      <!-- clear allボタン -->
+      <input type="button" value="clear all" id="clear_all" class="small_button" />
+    </div>
+    <!-- complement_alias -->
+    <div class="option">
+      <input type="checkbox" id="complement_alias" name="complement_alias" checked />
+      <label for="complement_alias">Complement aliases for columns</label>
+      <span class="option_balloon">Column names are auto-completed with the same name </br>e.g.
+        <code>COL1</code> → <code>COL1 AS COL1</code></span>
+    </div>
+
+    <!-- trim_bind_param -->
+    <div class="option">
+      <input type="checkbox" id="trim_bind_param" name="trim_bind_param" />
+      <label for="trim_bind_param">Trim the contents of the bind parameters</label>
+      <span class="option_balloon">e.g. <code>/* foo */</code> → <code>/*foo*/</code></span>
+    </div>
+
+    <!-- complement_outer_keyword -->
+    <div class="option">
+      <input type="checkbox" id="complement_outer_keyword" name="complement_outer_keyword" checked />
+      <label for="complement_outer_keyword">Complement the OUTER of RIGHT/LEFT JOIN</label>
+      <span class="option_balloon">e.g. <code>LEFT JOIN</code> → <code>LEFT OUTER JOIN</code></span>
+    </div>
+
+    <!-- complement_column_as_keyword	 -->
+    <div class="option">
+      <input type="checkbox" id="complement_column_as_keyword" name="complement_column_as_keyword" checked />
+      <label for="complement_column_as_keyword">Complement AS in column aliases</label>
+      <span class="option_balloon">e.g. <code>SELECT COLUMN1 COL1</code> → <code>SELECT COLUMN1 AS COL1</code> </span>
+    </div>
+
+    <!-- remove_table_as_keyword -->
+    <div class="option">
+      <input type="checkbox" id="remove_table_as_keyword" name="remove_table_as_keyword" checked />
+      <label for="remove_table_as_keyword">Remove AS in table aliases</label>
+      <span class="option_balloon">e.g. <code>FROM TABLE1 AS TBL1</code> → <code>FROM TABLE1 TBL1</code></span>
+    </div>
+
+    <!-- remove_redundant_nest -->
+    <div class="option">
+      <input type="checkbox" id="remove_redundant_nest" name="remove_redundant_nest" checked />
+      <label for="remove_redundant_nest">Remove redundant parentheses</label>
+      <span class="option_balloon">e.g. <code>(((1 = 1)))</code> → <code>(1 = 1)</code> </span>
+    </div>
+
+    <!-- complement_sql_id -->
+    <div class="option">
+      <input type="checkbox" id="complement_sql_id" name="complement_sql_id" />
+      <label for="complement_sql_id">Complement <a
+          href="https://palette-doc.rtfa.as/coding-standards/forSQL/SQL%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0%E8%A6%8F%E7%B4%84%EF%BC%88uroboroSQL%EF%BC%89.html#sql-%E8%AD%98%E5%88%A5%E5%AD%90">SQL_ID</a></label>
+      <span class="option_balloon">e.g. <code>SELECT COL1</code> → <code>SELECT /* _SQL_ID_ */ COL1</code></span>
+    </div>
+
+    <!-- convert_double_colon_cast -->
+    <div class="option">
+      <input type="checkbox" id="convert_double_colon_cast" name="convert_double_colon_cast" checked />
+      <label for="convert_double_colon_cast">Convert casts by COL1::type to the form CAST(COL1 AS type)</label>
+      <span class="option_balloon">e.g. <code>SELECT ''::JSONB</code> → <code>SELECT CAST('' AS JSONB)</code> </span>
+    </div>
+
+    <!-- unify_not_equal -->
+    <div class="option">
+      <input type="checkbox" id="unify_not_equal" name="unify_not_equal" checked />
+      <label for="unify_not_equal">Convert comparison operator &lt;&gt; to !=</label>
+      <span class="option_balloon">e.g. <code>STUDENT_ID &lt;&gt; 2</code> → <code>STUDENT_ID != 2</code></span>
+    </div>
+
+    <!-- indent_tab -->
+    <div class="option">
+      <input type="checkbox" id="indent_tab" name="indent_tab" checked />
+      <label for="indent_tab">Indent with tab instead of spaces</label>
+      <span class="option_balloon">Use tab characters (\t) for indentation instead of spaces</span>
+    </div>
+
+    <!-- use_parser_error_recovery -->
+    <div class="option">
+      <input type="checkbox" id="use_parser_error_recovery" name="use_parser_error_recovery" checked />
+      <label for="use_parser_error_recovery">Enable parser error recovery</label>
+      <span class="option_balloon">Allow the SQL parser to recover from syntax errors and continue formatting</span>
+    </div>
+
+    <table>
+      <!-- tab_size -->
+      <tr>
+        <td>
+          <div class="option">
+            tab size:
+            <span class="option_balloon">Tab size used for formatting</span>
+          </div>
+        </td>
+        <td>
+          <input type="number" id="tab_size" name="tab_size" value="4" style="width: 60px;" />
+        </td>
+      </tr>
+      <!-- keyword_case -->
+      <tr>
+        <td>
+          <div class="option">
+            case of keyword:
+            <span class="option_balloon">upper: unify upper case<br>lower: unify lower case<br>preserve: preserve
+              original case</span>
+          </div>
+        </td>
+        <td>
+          <select id="keyword_case">
+            <option value="upper">upper</option>
+            <option value="lower" selected>lower</option>
+            <option value="preserve">preserve</option>
+          </select>
+        </td>
+      </tr>
+      <!-- identifier_case -->
+      <tr>
+        <td>
+          <div class="option">
+            case of table name and column name:
+            <span class="option_balloon">upper: unify upper case<br>lower: unify lower case<br>preserve: preserve
+              original case</span>
+          </div>
+        </td>
+        <td>
+          <select id="identifier_case">
+            <option value="upper">upper</option>
+            <option value="lower" selected>lower</option>
+            <option value="preserve">preserve</option>
+          </select>
+        </td>
+      </tr>
+
+      <!-- max_char_per_line -->
+      <tr>
+        <td>
+          <div class="option">
+            max number of characters per line:
+            <span class="option_balloon">If the total number of characters in the function name and arguments exceeds
+              this number, the arguments are formatted with new lines</span>
+          </div>
+        </td>
+        <td>
+          <input type="number" id="max_char_per_line" name="max_char_per_line" value="50" style="width: 60px;" />
+        </td>
+      </tr>
+    </table>
+  </details>
+
+  <!-- エディタ -->
+  <div class="editor_parent">
+    <div class="editor" id="src_editor"></div>
+    <div class="editor" id="dst_editor"></div>
+  </div>
+
+
+  <div class="button_parent_center">
+    <!-- formatボタン -->
+    <div class="format_btn">
+      <input type="button" value="format" id="format" class="button" />
+      <span class="format_balloon">Ctrl+Shift+F</span>
+    </div>
+    <!-- copyボタン -->
+    <div class="copy_btn">
+      <input type="button" value="copy" id="copy" class="button" />
+    </div>
+  </div>
+
+  <pre><code id="error_msg" style="color: red;"></code></pre>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.43.0/min/vs/loader.min.js"></script>
+  <script type="module" src="main.js"></script>
+</body>
+
+</html>
