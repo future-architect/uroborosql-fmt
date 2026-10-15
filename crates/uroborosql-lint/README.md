@@ -4,6 +4,28 @@ Beta lint engine and rule/configuration crate for `uroborosql-lint`.
 
 For CLI usage, see the [`uroborosql-lint-cli` README](../uroborosql-lint-cli/README.md).
 
+## Rules
+
+All rules are enabled by default. Rules that use the database catalog run only when the config
+has a `db` section. Change their severity with `rules` in the config file.
+
+| Rule | What it reports | Catalog | Default |
+| --- | --- | --- | --- |
+| [`no-distinct`](../../docs/rules/no-distinct.md) | `DISTINCT` | | warning |
+| [`no-not-in`](../../docs/rules/no-not-in.md) | `NOT IN` (use `NOT EXISTS`) | | warning |
+| [`no-union-distinct`](../../docs/rules/no-union-distinct.md) | `UNION` / `UNION DISTINCT` (use `UNION ALL`) | | warning |
+| [`no-wildcard-projection`](../../docs/rules/no-wildcard-projection.md) | `SELECT *`, `t.*`, `RETURNING *` | | warning |
+| [`missing-two-way-sample`](../../docs/rules/missing-two-way-sample.md) | 2way-SQL bind parameters without a sample value | | warning |
+| [`too-large-in-list`](../../docs/rules/too-large-in-list.md) | `IN` lists with more than 100 elements | | warning |
+| [`no-function-on-column-in-join-or-where`](../../docs/rules/no-function-on-column-in-join-or-where.md) | Functions applied to columns in `JOIN` / `WHERE` conditions | | warning |
+| [`no-unknown-reference`](../../docs/rules/no-unknown-reference.md) | Tables and columns that do not exist in the database catalog | Required | error |
+
+> [!NOTE]
+> **Beta limitation:** `no-unknown-reference` checks only single-table `SELECT` statements;
+> other statements, including `JOIN`, subqueries, and `INSERT` / `UPDATE` / `DELETE`, are
+> skipped without a diagnostic. See the [rule page](../../docs/rules/no-unknown-reference.md)
+> for details.
+
 ## Configuration
 
 The config file supports rule levels, file ignores, per-file overrides, and PostgreSQL catalog settings.
@@ -106,36 +128,6 @@ they never create a file or fall back to a server. Only PostgreSQL 14–18 snaps
 are supported. See the [CLI export workflow](../uroborosql-lint-cli/README.md#export-and-offline-catalog-checks)
 for creating and refreshing snapshots.
 
-## Library API
-
-`Linter::run` remains synchronous and runs CST rules only. `run_async` also runs
-`no-unknown-reference` using a caller-selected `CatalogProvider` and returns
-`LintResult { diagnostics, catalog }`. The catalog report preserves each
-statement's span, status, exclusion reason, and recovered-source deferral.
-Acquisition failures retain the CST diagnostics; parse failures still return
-`LintError`. A completed traversal does not imply a recovered source was checked.
-
-Typical calling code inside an existing async runtime:
-
-```rust,ignore
-let provider = resolved_config.catalog_provider();
-let result = Linter::new()
-    .run_async(sql, &resolved_config, provider.as_deref())
-    .await?;
-```
-
-The library does not create a runtime. Enable `postgres-catalog` when constructing
-a configured PostgreSQL provider; enable `sqlite-catalog` for file snapshots. The CLI
-enables both by default. The default library build
-still supports in-memory/custom providers without SQLx. Passing a provider
-explicitly selects it regardless of `resolved_config.db`; passing `None` skips
-catalog analysis. Provider construction performs no I/O.
-
-There is no acquisition when the source is unconfigured, the catalog rule is off
-(including file overrides), or syntax preparation produces no table requests.
-SQL disable comments suppress diagnostics, not acquisition. A configured provider
-missing from the build fails only when acquisition is needed.
-
 ## Path Resolution
 
 - `ignore` and `overrides.files` are resolved relative to the current working directory
@@ -172,3 +164,33 @@ Behavior:
 - A block comment ends that file head section, so any later `disable` directive is ignored
 - Unknown rule names in directives produce an `invalid-lint-directive` warning on the comment, while known rules in the same directive still apply
 - Missing rule names, empty comma-separated elements, and trailing commas also produce an `invalid-lint-directive` warning
+
+## Library API
+
+`Linter::run` remains synchronous and runs CST rules only. `run_async` also runs
+`no-unknown-reference` using a caller-selected `CatalogProvider` and returns
+`LintResult { diagnostics, catalog }`. The catalog report preserves each
+statement's span, status, exclusion reason, and recovered-source deferral.
+Acquisition failures retain the CST diagnostics; parse failures still return
+`LintError`. A completed traversal does not imply a recovered source was checked.
+
+Typical calling code inside an existing async runtime:
+
+```rust,ignore
+let provider = resolved_config.catalog_provider();
+let result = Linter::new()
+    .run_async(sql, &resolved_config, provider.as_deref())
+    .await?;
+```
+
+The library does not create a runtime. Enable `postgres-catalog` when constructing
+a configured PostgreSQL provider; enable `sqlite-catalog` for file snapshots. The CLI
+enables both by default. The default library build
+still supports in-memory/custom providers without SQLx. Passing a provider
+explicitly selects it regardless of `resolved_config.db`; passing `None` skips
+catalog analysis. Provider construction performs no I/O.
+
+There is no acquisition when the source is unconfigured, the catalog rule is off
+(including file overrides), or syntax preparation produces no table requests.
+SQL disable comments suppress diagnostics, not acquisition. A configured provider
+missing from the build fails only when acquisition is needed.

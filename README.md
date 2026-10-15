@@ -36,13 +36,51 @@ The main features:
 
 ![wasm_demo](images/wasm_demo.gif)
 
+## Getting Started
+
+Choose the tools for what you want to do:
+
+| I want to | Use | Start here |
+| --- | --- | --- |
+| Format and lint SQL in VS Code | VS Code extension | [Marketplace](https://marketplace.visualstudio.com/items?itemName=Future.uroborosql-fmt) |
+| Format and lint SQL in other editors | `uroborosql-language-server` | [language server README](crates/uroborosql-language-server/README.md) |
+| Format SQL from the command line | `uroborosql-fmt` CLI | [Install](#install) below |
+| Lint SQL | `uroborosql-lint` CLI (Beta) | [lint CLI README](crates/uroborosql-lint-cli/README.md) |
+
+Formatting works without any lint setup. Lint runs only when a lint config file
+(`.uroborosqllintrc.json`) exists, and the catalog checks run only when that file has a
+`db` section. See the [lint rules](crates/uroborosql-lint/README.md#rules).
+
 ## Install
 
-Please install [Rust](https://www.rust-lang.org/tools/install) before installing.
+Install the `uroborosql-fmt` formatter CLI in one of these ways.
+
+### Prebuilt binary
+
+Download the binary for your platform from the latest `uroborosql-fmt-cli-v*` release on the
+[Releases page](https://github.com/future-architect/uroborosql-fmt/releases):
+
+| Platform | File |
+| --- | --- |
+| Windows (x64) | `uroborosql-fmt-x86_64-pc-windows-msvc.exe` |
+| Windows (ARM64) | `uroborosql-fmt-aarch64-pc-windows-msvc.exe` |
+| macOS (Apple silicon) | `uroborosql-fmt-aarch64-apple-darwin` |
+| macOS (Intel) | `uroborosql-fmt-x86_64-apple-darwin` |
+| Linux (x64) | `uroborosql-fmt-x86_64-unknown-linux-gnu` |
+
+Each file is a standalone executable. Rename it to `uroborosql-fmt` (`uroborosql-fmt.exe`
+on Windows) and put it in a directory on your `PATH`. On macOS and Linux, also run
+`chmod +x uroborosql-fmt`.
+
+### Build with cargo
+
+Install [Rust](https://www.rust-lang.org/tools/install), then run:
 
 ```sh
-cargo install --git https://github.com/future-architect/uroborosql-fmt
+cargo install --git https://github.com/future-architect/uroborosql-fmt uroborosql-fmt-cli
 ```
+
+The installed binary name is `uroborosql-fmt`.
 
 ## Usage
 
@@ -57,17 +95,6 @@ uroborosql-fmt -w input.sql
 For detailed CLI usage, options, and examples, see the [CLI documentation](crates/uroborosql-fmt-cli/README.md).
 
 You can try uroborosql-fmt in your browser with our [WebAssembly demo](https://future-architect.github.io/uroborosql-fmt/), which requires no installation.
-
-## Tools
-
-This repository contains several tools around `uroborosql-fmt`:
-
-- [`uroborosql-fmt` CLI](crates/uroborosql-fmt-cli/README.md)
-  - CLI formatter for PostgreSQL and 2way-SQL.
-- [`uroborosql-lint` CLI (Beta)](crates/uroborosql-lint-cli/README.md)
-  - CLI for linting SQL files.
-- [`uroborosql-language-server`](crates/uroborosql-language-server/README.md)
-  - Language server for formatting and lint diagnostics in editors.
 
 ### Configuration options
 

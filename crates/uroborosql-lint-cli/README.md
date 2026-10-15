@@ -4,15 +4,37 @@ Beta CLI for `uroborosql-lint`.
 
 ## Install
 
+### Prebuilt binary
+
+Download the binary for your platform from the latest `uroborosql-lint-cli-v*` release on the
+[Releases page](https://github.com/future-architect/uroborosql-fmt/releases):
+
+| Platform | File |
+| --- | --- |
+| Windows (x64) | `uroborosql-lint-x86_64-pc-windows-msvc.exe` |
+| Windows (ARM64) | `uroborosql-lint-aarch64-pc-windows-msvc.exe` |
+| macOS (Apple silicon) | `uroborosql-lint-aarch64-apple-darwin` |
+| macOS (Intel) | `uroborosql-lint-x86_64-apple-darwin` |
+| Linux (x64) | `uroborosql-lint-x86_64-unknown-linux-gnu` |
+
+Each file is a standalone executable. Rename it to `uroborosql-lint` (`uroborosql-lint.exe`
+on Windows) and put it in a directory on your `PATH`. On macOS and Linux, also run
+`chmod +x uroborosql-lint`.
+
+### Build with cargo
+
 ```sh
 cargo install --git https://github.com/future-architect/uroborosql-fmt uroborosql-lint-cli
 ```
 
-The installed binary name is `uroborosql-lint`.
+The installed binary name is `uroborosql-lint`. Run `uroborosql-lint --help` to check the
+installation.
 
 ## Getting Started
 
-SQL lint requires a lint config file. `export-catalog` uses connection arguments only.
+Linting SQL requires a lint config file (`.uroborosqllintrc.json`). The `export-catalog`
+subcommand exports a catalog snapshot for offline checks and does not use the lint config; see
+[Export and offline catalog checks](#export-and-offline-catalog-checks).
 
 ### 1. Create a starter config file
 
@@ -73,11 +95,20 @@ Use `--fail-level <none|info|warning|error>` to control which diagnostics cause 
 - `warning` is useful for CI when warnings, including lint directive warnings, should fail the run
 - `none` keeps diagnostics visible without diagnostic-threshold failure; execution failures still return 2
 
-## PostgreSQL catalog checks
+## Catalog checks
 
-Configure `db.schemaProvider: server` as described in the lint engine README,
-then run the same lint command. Supported single-table SELECT references are
-checked against PostgreSQL; the SQL being linted is never executed.
+Lint rules are either rules that check the SQL alone or rules that also use the database
+catalog. The [rule list](../uroborosql-lint/README.md#rules) shows which rules use the catalog.
+Rules that use the catalog run only when the lint config has a `db` section; without one, no
+database is read. There are two ways to provide the catalog:
+
+- Export the catalog to a SQLite file and lint without a database connection
+  (`"schemaProvider": "file"`). This is recommended for regular use and CI, because linting
+  needs no database connection or credentials. See
+  [Export and offline catalog checks](#export-and-offline-catalog-checks).
+- Connect to PostgreSQL directly (`"schemaProvider": "server"`). This is useful for trying
+  catalog checks out; every lint run connects to the database. See
+  [PostgreSQL catalog checks](#postgresql-catalog-checks).
 
 SQL diagnostics retain the existing stdout format. A separate stderr summary
 reports completed, excluded, and failed statements, including why statements
@@ -90,7 +121,9 @@ the exit code is 2, even with `--fail-level none`. There is no database access
 when catalog checking is unconfigured, disabled by config, or has no table
 requests. File-backed checks follow the same rules and never connect to PostgreSQL.
 
-## Export and offline catalog checks
+Only single-table `SELECT` statements are checked for now. See [Limitations](#limitations).
+
+### Export and offline catalog checks
 
 On a machine that can reach PostgreSQL 14–18, export the catalog:
 
@@ -99,7 +132,8 @@ uroborosql-lint export-catalog --host db.example.com --user catalog_reader --dbn
 ```
 
 Set `PGPASSWORD` if authentication requires a password. Export does not read or
-require a lint config or SQL input. `--port` defaults to 5432; `--tls-mode` defaults
+require a lint config or SQL input; the PostgreSQL connection settings are passed as
+command-line arguments. `--port` defaults to 5432; `--tls-mode` defaults
 to `verify-full` and also accepts `verify-ca`, `require`, and `disable`.
 Explicit arguments and defaults take precedence over `PGHOST`, `PGUSER`,
 `PGDATABASE`, `PGPORT`, and `PGSSLMODE`. Password, `PGOPTIONS`, and certificate
@@ -147,6 +181,12 @@ deadline. Once atomic replacement starts, its result determines success.
 Export returns 0 on success and 2 on any failure, reports the result and output
 path to stderr, and leaves stdout empty.
 
+### PostgreSQL catalog checks
+
+Configure `db.schemaProvider: server` as described in the lint engine README,
+then run the same lint command. Supported single-table SELECT references are
+checked against PostgreSQL; the SQL being linted is never executed.
+
 ## Limitations
 
 `uroborosql-lint` is in beta and currently has the following limitations:
@@ -154,5 +194,20 @@ path to stderr, and leaves stdout empty.
 - It accepts exactly one SQL file per invocation (`<INPUT>`).
   - Directory, glob, and multiple-file arguments are not supported yet.
   - Standard input is not supported; pass a file path instead.
+  - To lint multiple files, invoke the command once per file (for example, from a shell loop or your build tool).
+- Catalog checks cover only single-table `SELECT` statements:
 
-To lint multiple files, invoke the command once per file (for example, from a shell loop or your build tool).
+  ```
+  SELECT [DISTINCT] <columns> FROM <one table> [alias]
+    [WHERE ...] [LIMIT ...] [OFFSET ...] [FOR UPDATE ...]
+  ```
+
+  Other statements, including `JOIN`, subqueries, `WITH`, `UNION`, `GROUP BY`, `ORDER BY`,
+  and `INSERT` / `UPDATE` / `DELETE`, are skipped without a diagnostic. The stderr summary
+  lists each skipped statement with its position:
+
+  ```
+  query.sql: catalog: 1 checked, 2 not checked, 0 failed
+  query.sql:3:1: not checked against the catalog (unsupported syntax)
+  query.sql:10:1: not checked against the catalog (unsupported syntax)
+  ```
