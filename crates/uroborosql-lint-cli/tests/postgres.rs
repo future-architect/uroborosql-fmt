@@ -46,7 +46,7 @@ async fn cli_and_public_api_use_postgres() {
     assert!(diagnostics.contains("no-distinct"));
     assert!(String::from_utf8(output.stderr)
         .unwrap()
-        .contains("complete=2 excluded=1 failed=0"));
+        .contains("catalog: 2 checked, 1 not checked, 0 failed"));
     assert_eq!(run("none").status.code(), Some(0));
     write_config("wrong-password");
     let output = run("none");

@@ -6,7 +6,7 @@ use std::time::Duration;
 use serde_json::json;
 use tower_lsp_server::UriExt;
 use tower_lsp_server::lsp_types::Uri;
-use tower_lsp_server::lsp_types::notification::{Notification, PublishDiagnostics};
+use tower_lsp_server::lsp_types::notification::{LogMessage, Notification, PublishDiagnostics};
 
 use test_harness::*;
 
@@ -297,5 +297,60 @@ async fn diagnostics_are_empty_when_lint_config_is_missing() {
             .as_array()
             .unwrap()
             .is_empty()
+    );
+}
+
+async fn receive_unavailable_log(server: &mut TestServer) -> String {
+    loop {
+        let notification = server.receive_notification().await;
+        if notification.method() != LogMessage::METHOD {
+            continue;
+        }
+        let message = notification.params().unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        if message.contains("lint configuration unavailable") {
+            return message;
+        }
+    }
+}
+
+#[tokio::test]
+async fn unavailable_log_includes_lint_config_parse_error() {
+    let mut server = new_test_server();
+    server.receive_logs = true;
+    let root_dir = unique_temp_dir("uroborosql-lsp-diag-broken-config");
+    write_file(&root_dir.join(".uroborosqllintrc.json"), "{1: 2}");
+    let root_uri = Uri::from_file_path(&root_dir).unwrap();
+
+    initialize_server_with_root_uri(&mut server, root_uri, None).await;
+
+    let message = receive_unavailable_log(&mut server).await;
+    assert!(
+        message.contains("lint configuration unavailable: "),
+        "{message}"
+    );
+    assert!(message.contains("key must be a string"), "{message}");
+}
+
+#[tokio::test]
+async fn unavailable_log_includes_invalid_client_configuration() {
+    let mut server = new_test_server();
+    server.receive_logs = true;
+    let root_dir = unique_temp_dir("uroborosql-lsp-diag-invalid-client-config");
+    let root_uri = Uri::from_file_path(&root_dir).unwrap();
+
+    initialize_server_with_root_uri(
+        &mut server,
+        root_uri,
+        Some(json!([{ "configurationFilePath": 1 }])),
+    )
+    .await;
+
+    let message = receive_unavailable_log(&mut server).await;
+    assert!(
+        message.contains("lint configuration unavailable: invalid client configuration: "),
+        "{message}"
     );
 }

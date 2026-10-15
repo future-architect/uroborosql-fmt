@@ -1,102 +1,12 @@
+use crate::document::{rope_byte_to_position, rope_char_index_to_position};
 use tower_lsp_server::lsp_types::{
-    Diagnostic, DiagnosticSeverity, MessageType, NumberOrString, Position, Range, Uri,
+    Diagnostic, DiagnosticSeverity, NumberOrString, Position, Range,
 };
 use uroborosql_lint::{
     Diagnostic as SqlDiagnostic, LINT_SOURCE, LintError, Severity as SqlSeverity,
 };
 
-use crate::Backend;
-use crate::document::{rope_byte_to_position, rope_char_index_to_position};
-use crate::paths::{file_uri_to_path, has_parent_dir_component};
-
-impl Backend {
-    pub(crate) async fn lint_and_publish(&self, uri: &Uri, text: &str, version: Option<i32>) {
-        let Some(path) = file_uri_to_path(uri) else {
-            self.client
-                .log_message(
-                    MessageType::INFO,
-                    "file URI is not a file URI; skipping lint",
-                )
-                .await;
-            return;
-        };
-        // A `..` would make containment ambiguous; conformant clients never send
-        // one, so surface it loudly rather than guessing the owning workspace.
-        if has_parent_dir_component(&path) {
-            self.client
-                .log_message(
-                    MessageType::WARNING,
-                    format!(
-                        "document path contains '..'; skipping lint: {}",
-                        path.display()
-                    ),
-                )
-                .await;
-            self.client
-                .publish_diagnostics(uri.clone(), vec![], version)
-                .await;
-            return;
-        }
-
-        // Resolve against the workspace that actually owns this document so a
-        // sibling folder that merely appears first is never used by accident.
-        let Some(workspace) = self.workspace_root_for_uri(uri) else {
-            // The document is outside every workspace root. Publish empty rather
-            // than guessing a config from an unrelated workspace.
-            self.client
-                .publish_diagnostics(uri.clone(), vec![], version)
-                .await;
-            return;
-        };
-
-        let config_store = self
-            .lint_config_stores
-            .read()
-            .unwrap()
-            .get(&workspace.path)
-            .cloned()
-            .flatten();
-        let Some(config_store) = config_store else {
-            self.client
-                .publish_diagnostics(uri.clone(), vec![], version)
-                .await;
-            return;
-        };
-
-        if config_store.is_ignored(&path) {
-            self.client
-                .publish_diagnostics(uri.clone(), vec![], version)
-                .await;
-            return;
-        }
-
-        let resolved_config = config_store.resolve(&path);
-        let rope = self.document_rope(uri);
-        if rope.is_none() {
-            // lint_and_publish is always called with the document already tracked,
-            // so a missing rope means the document store lock is poisoned.
-            self.client
-                .log_message(
-                    MessageType::WARNING,
-                    "document rope is unavailable; diagnostic positions may be imprecise",
-                )
-                .await;
-        }
-        let diagnostics = match self.linter.run(text, &resolved_config) {
-            Ok(diags) => diags
-                .into_iter()
-                .map(|diag| to_lsp_diagnostic(diag, rope.as_ref()))
-                .collect(),
-            Err(err) => vec![to_parse_error(err, rope.as_ref())],
-        };
-
-        self.client
-            .publish_diagnostics(uri.clone(), diagnostics, version)
-            .await;
-    }
-}
-
-fn to_lsp_diagnostic(diag: SqlDiagnostic, rope: Option<&ropey::Rope>) -> Diagnostic {
+pub(crate) fn to_lsp_diagnostic(diag: SqlDiagnostic, rope: Option<&ropey::Rope>) -> Diagnostic {
     let severity = match diag.severity {
         SqlSeverity::Error => Some(DiagnosticSeverity::ERROR),
         SqlSeverity::Warning => Some(DiagnosticSeverity::WARNING),
@@ -125,7 +35,7 @@ fn to_lsp_diagnostic(diag: SqlDiagnostic, rope: Option<&ropey::Rope>) -> Diagnos
     }
 }
 
-fn to_parse_error(err: LintError, rope: Option<&ropey::Rope>) -> Diagnostic {
+pub(crate) fn to_parse_error(err: LintError, rope: Option<&ropey::Rope>) -> Diagnostic {
     let LintError::ParseError { message, span } = err;
 
     let range = match (rope, span) {

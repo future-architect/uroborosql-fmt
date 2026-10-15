@@ -128,7 +128,7 @@ def main():
                                              cwd=temp, env=offline_env, capture_output=True, text=True)
                     assert offline.returncode == 1, offline.stderr
                     assert 'query.sql:1:8: error: no-unknown-reference' in offline.stdout, offline.stdout
-                    assert 'complete=1 excluded=0 failed=0' in offline.stderr, offline.stderr
+                    assert 'catalog: 1 checked, 0 not checked, 0 failed' in offline.stderr, offline.stderr
                     print('offline CLI after PostgreSQL stop: ok', flush=True)
         finally:
             command(compose + ['down', '--volumes'], env=compose_env)

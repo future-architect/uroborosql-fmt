@@ -25,6 +25,9 @@ use uroborosql_language_server::create_service;
 use uroborosql_lint::DEFAULT_CONFIG_FILENAME;
 
 pub(crate) struct TestServer {
+    pub(crate) auto_respond: bool,
+    pub(crate) receive_logs: bool,
+    incoming: Vec<u8>,
     req_stream: DuplexStream,
     res_stream: DuplexStream,
     responses: VecDeque<String>,
@@ -50,6 +53,9 @@ impl TestServer {
         });
 
         Self {
+            auto_respond: true,
+            receive_logs: false,
+            incoming: Vec::new(),
             req_stream: req_client,
             res_stream: res_client,
             responses: VecDeque::new(),
@@ -61,33 +67,6 @@ impl TestServer {
 
     fn encode(payload: &str) -> Vec<u8> {
         format!("Content-Length: {}\r\n\r\n{}", payload.len(), payload).into_bytes()
-    }
-
-    fn decode(buffer: &[u8]) -> Vec<String> {
-        let mut remainder = buffer;
-        let mut frames = Vec::new();
-        while !remainder.is_empty() {
-            let sep = match remainder
-                .windows(4)
-                .position(|window| window == b"\r\n\r\n")
-            {
-                Some(idx) => idx + 4,
-                None => break,
-            };
-            let (header, body) = remainder.split_at(sep);
-            let len = std::str::from_utf8(header)
-                .unwrap()
-                .strip_prefix("Content-Length: ")
-                .unwrap()
-                .strip_suffix("\r\n\r\n")
-                .unwrap()
-                .parse::<usize>()
-                .unwrap();
-            let (payload, rest) = body.split_at(len);
-            frames.push(String::from_utf8(payload.to_vec()).unwrap());
-            remainder = rest;
-        }
-        frames
     }
 
     pub(crate) async fn send_request(&mut self, req: Request) {
@@ -125,7 +104,7 @@ impl TestServer {
         }
     }
 
-    async fn send_response(&mut self, res: Response) {
+    pub(crate) async fn send_response(&mut self, res: Response) {
         let payload = serde_json::to_string(&res).unwrap();
         self.req_stream
             .write_all(&Self::encode(&payload))
@@ -135,11 +114,11 @@ impl TestServer {
 
     async fn handle_server_request(&mut self, frame: String) {
         let req: Request = serde_json::from_str(&frame).unwrap();
-        if let Some(id) = req.id().cloned() {
+        if let Some(id) = req.id().cloned().filter(|_| self.auto_respond) {
             let result = if req.method() == WorkspaceConfiguration::METHOD {
                 self.workspace_configuration_responses
                     .pop_front()
-                    .unwrap_or(LSPAny::Null)
+                    .unwrap_or(serde_json::json!([null]))
             } else {
                 LSPAny::Null
             };
@@ -152,7 +131,21 @@ impl TestServer {
     async fn read_into_queues(&mut self) {
         let mut buf = vec![0u8; 4096];
         let n = self.res_stream.read(&mut buf).await.unwrap();
-        for frame in Self::decode(&buf[..n]) {
+        assert!(n > 0, "server transport closed");
+        self.incoming.extend_from_slice(&buf[..n]);
+        while let Some(header_end) = self.incoming.windows(4).position(|w| w == b"\r\n\r\n") {
+            let length: usize = std::str::from_utf8(&self.incoming[..header_end])
+                .unwrap()
+                .strip_prefix("Content-Length: ")
+                .unwrap()
+                .parse()
+                .unwrap();
+            let end = header_end + 4 + length;
+            if self.incoming.len() < end {
+                break;
+            }
+            let frame = String::from_utf8(self.incoming[header_end + 4..end].to_vec()).unwrap();
+            self.incoming.drain(..end);
             let value: serde_json::Value = serde_json::from_str(&frame).unwrap();
             if value.get("method").is_some() {
                 if value.get("id").is_some() {
@@ -160,6 +153,7 @@ impl TestServer {
                 } else {
                     if value.get("method").and_then(|method| method.as_str())
                         == Some(LogMessage::METHOD)
+                        && !self.receive_logs
                     {
                         continue;
                     }
@@ -199,6 +193,9 @@ pub(crate) fn new_test_server() -> TestServer {
     });
 
     TestServer {
+        auto_respond: true,
+        receive_logs: false,
+        incoming: Vec::new(),
         req_stream: req_client,
         res_stream: res_client,
         responses: VecDeque::new(),

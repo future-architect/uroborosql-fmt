@@ -2232,6 +2232,7 @@ dependencies = [
  "ropey",
  "serde",
  "serde_json",
+ "sqlx",
  "tokio",
  "tower-lsp-server",
  "uroborosql-fmt",
