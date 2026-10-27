@@ -185,7 +185,7 @@ async fn failure_retains_cst_and_exclusions_with_one_suppression_pass() {
         AcquisitionPhase::Connect,
         AcquisitionErrorKind::Connection,
     ));
-    let sql = "-- uroborosql-lint-disable no-distinct, not-a-rule\nSELECT DISTINCT ON (id) id FROM users; SELECT missing FROM users; SELECT x.id FROM /*#table*/ AS x;";
+    let sql = "-- uroborosql-lint-disable no-distinct, not-a-rule\nSELECT DISTINCT ON (id) id FROM users TABLESAMPLE SYSTEM (1); SELECT missing FROM users; SELECT x.id FROM /*#table*/ AS x;";
     let result = Linter::new()
         .run_async(sql, &ResolvedLintConfig::default(), Some(&provider))
         .await

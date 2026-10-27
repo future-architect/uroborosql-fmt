@@ -1,7 +1,6 @@
 use crate::{
     catalog::{CatalogProvider, CatalogSnapshot},
-    resolution::{self, query},
-    RuleEnum,
+    resolution::{self, Catalog},
 };
 use crate::{
     context::LintContext,
@@ -92,7 +91,7 @@ impl Linter {
         let root = tree.root_node();
         Ok(suppress_diagnostics(
             &root,
-            self.run_cst(&root, sql, resolved_config),
+            self.run_rules(&root, sql, resolved_config, None),
         ))
     }
 
@@ -108,19 +107,16 @@ impl Linter {
         config: &ResolvedLintConfig,
         provider: Option<&dyn CatalogProvider>,
     ) -> Result<LintResult, LintError> {
-        // No parser tree or borrowed node crosses the await boundary.
-        let (prepared, mut diagnostics, suppression) = {
+        // No parser tree or borrowed node crosses the await boundary; catalog rules
+        // run on a second parse once the catalog is acquired.
+        let (requests, mut diagnostics, suppression) = {
             let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
             let root = tree.root_node();
-            let diagnostics = self.run_cst(&root, sql, config);
+            let diagnostics = self.run_rules(&root, sql, config, None);
             let suppression = PreparedSuppression::new(&root);
             let skip = if provider.is_none() {
                 Some(CatalogSkipReason::NotConfigured)
-            } else if !config
-                .rules
-                .iter()
-                .any(|(rule, _)| matches!(rule, RuleEnum::NoUnknownReference(_)))
-            {
+            } else if !config.rules.iter().any(|(rule, _)| rule.needs_catalog()) {
                 Some(CatalogSkipReason::RuleDisabled)
             } else {
                 None
@@ -131,40 +127,30 @@ impl Linter {
                     catalog: CatalogReport::Skipped(reason),
                 });
             }
-            (query::extract(&root), diagnostics, suppression)
+            (resolution::requests(&root), diagnostics, suppression)
         };
-        let acquired = if prepared.requests.is_empty() {
-            // Only excluded or recovered-source statements remain; no lookup occurs.
+        let acquired = if requests.is_empty() {
+            // Only file effects, CTEs or recovered sources remain; no lookup occurs.
             CatalogSnapshot::new(Vec::new(), Vec::new())
         } else {
             provider
                 .expect("configured provider checked above")
-                .acquire(&prepared.requests)
+                .acquire(&requests)
                 .await
         };
-        let statements = resolution::resolve(&prepared, acquired.as_ref());
-        Self::diagnose_catalog(config, &statements, &mut diagnostics);
+        let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
+        let root = tree.root_node();
+        let catalog = Catalog::new(&root, acquired.as_ref());
+        diagnostics.extend(self.run_rules(&root, sql, config, Some(catalog)));
         Ok(LintResult {
             diagnostics: suppression.apply(diagnostics),
             catalog: CatalogReport::Statements(
-                statements
+                resolution::statements(&root, acquired.as_ref())
                     .iter()
                     .map(CatalogStatementReport::from)
                     .collect(),
             ),
         })
-    }
-
-    fn diagnose_catalog(
-        config: &ResolvedLintConfig,
-        statements: &[resolution::StatementResult],
-        diagnostics: &mut Vec<Diagnostic>,
-    ) {
-        for (rule, severity) in &config.rules {
-            if let RuleEnum::NoUnknownReference(rule) = rule {
-                diagnostics.extend(rule.diagnose(statements, *severity));
-            }
-        }
     }
 
     #[cfg(test)]
@@ -176,28 +162,36 @@ impl Linter {
     ) -> Result<CatalogLintResult, LintError> {
         let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
         let root = tree.root_node();
-        let prepared = query::extract(&root);
-        let statements = resolution::resolve(&prepared, acquired);
-        let mut diagnostics = self.run_cst(&root, sql, resolved_config);
-        Self::diagnose_catalog(resolved_config, &statements, &mut diagnostics);
+        let mut diagnostics = self.run_rules(&root, sql, resolved_config, None);
+        diagnostics.extend(self.run_rules(
+            &root,
+            sql,
+            resolved_config,
+            Some(Catalog::new(&root, acquired)),
+        ));
         Ok(CatalogLintResult {
             diagnostics: suppress_diagnostics(&root, diagnostics),
-            statements,
+            statements: resolution::statements(&root, acquired),
         })
     }
 
-    fn run_cst(
+    /// Runs the CST rules, or with `catalog` only the rules that need it.
+    fn run_rules(
         &self,
         root: &tree_sitter::Node<'_>,
         sql: &str,
         resolved_config: &ResolvedLintConfig,
+        catalog: Option<Catalog<'_>>,
     ) -> Vec<Diagnostic> {
         let nodes = collect_preorder(root.clone());
-        let mut ctx = LintContext::new(sql);
+        let with_catalog = catalog.is_some();
+        let mut ctx = match catalog {
+            Some(catalog) => LintContext::with_catalog(sql, catalog),
+            None => LintContext::new(sql),
+        };
 
         for (rule, severity) in &resolved_config.rules {
-            // Catalog rules run only after resolution, not once for every CST node.
-            if matches!(rule, RuleEnum::NoUnknownReference(_)) {
+            if rule.needs_catalog() != with_catalog {
                 continue;
             }
             rule.run_once(root, &mut ctx, *severity);

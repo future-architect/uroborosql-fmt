@@ -1,6 +1,6 @@
 use crate::{
-    catalog::{AnalysisStatus, Resolution, ResolutionUnknown, UnknownReason},
-    resolution::{self, query},
+    catalog::{AnalysisStatus, UnknownReason},
+    resolution::{self, Exclusion},
     Diagnostic, OneBasedPosition, SqlSpan,
 };
 
@@ -133,17 +133,12 @@ impl From<&resolution::StatementResult> for CatalogStatementReport {
             span: SqlSpan::from_range(&statement.range),
             status: statement.status.clone(),
             exclusion: statement.exclusion.map(|reason| match reason {
-                query::Exclusion::FileEffect => CatalogExclusion::FileEffect,
-                query::Exclusion::UnsupportedSyntax => CatalogExclusion::UnsupportedSyntax,
-                query::Exclusion::UnsupportedIdentifier => CatalogExclusion::UnsupportedIdentifier,
-                query::Exclusion::TemporarySchema => CatalogExclusion::TemporarySchema,
+                Exclusion::FileEffect => CatalogExclusion::FileEffect,
+                Exclusion::UnsupportedSyntax => CatalogExclusion::UnsupportedSyntax,
+                Exclusion::UnsupportedIdentifier => CatalogExclusion::UnsupportedIdentifier,
+                Exclusion::TemporarySchema => CatalogExclusion::TemporarySchema,
             }),
-            recovered_source: statement.resolved.as_ref().is_some_and(|s| {
-                matches!(
-                    s.source,
-                    Resolution::Unknown(ResolutionUnknown::Reason(UnknownReason::RecoveredSource))
-                )
-            }),
+            recovered_source: statement.recovered_source,
         }
     }
 }

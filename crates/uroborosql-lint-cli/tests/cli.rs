@@ -243,7 +243,11 @@ fn invalid_fail_level_returns_usage_error() {
 #[test]
 fn catalog_skip_and_exclusion_are_visible_without_connecting() {
     let temp = TempDir::new().unwrap();
-    let input = write_sql(&temp, "query.sql", "SELECT DISTINCT ON (id) id FROM users;");
+    let input = write_sql(
+        &temp,
+        "query.sql",
+        "SELECT DISTINCT ON (id) id FROM users TABLESAMPLE SYSTEM (1);",
+    );
     let cfg = temp.child("lint.json");
     for (json, expected) in [
         (r#"{}"#, "skipped (not configured)"),
@@ -303,7 +307,7 @@ fn unavailable_file_catalog_retains_diagnostics_and_overrides_fail_none() {
     let input = write_sql(
         &temp,
         "query.sql",
-        "SELECT DISTINCT ON (id) id FROM users; SELECT missing FROM users;",
+        "SELECT DISTINCT ON (id) id FROM users TABLESAMPLE SYSTEM (1); SELECT missing FROM users;",
     );
     let cfg = temp.child("lint.json");
     cfg.write_str(r#"{"db":{"schemaProvider":"file","path":"absent.sqlite"}}"#)
@@ -360,7 +364,7 @@ fn invalid_connection_keeps_cst_and_reports_safe_classified_failure_once() {
     let input = write_sql(
         &temp,
         "query.sql",
-        "SELECT DISTINCT ON (id) id FROM users; SELECT id FROM users; SELECT id FROM users;",
+        "SELECT DISTINCT ON (id) id FROM users TABLESAMPLE SYSTEM (1); SELECT id FROM users; SELECT id FROM users;",
     );
     let cfg = temp.child("lint.json");
     cfg.write_str(r#"{"db":{"schemaProvider":"server","host":"private-host,other","user":"private-user","password":"private-password","dbname":"app"}}"#).unwrap();

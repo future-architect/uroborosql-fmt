@@ -68,6 +68,10 @@ impl RuleEnum {
         self.as_rule().target_kinds()
     }
 
+    pub fn needs_catalog(&self) -> bool {
+        self.as_rule().needs_catalog()
+    }
+
     pub fn run_once<'tree>(&self, root: &Node<'tree>, ctx: &mut LintContext, severity: Severity) {
         self.as_rule().run_once(root, ctx, severity);
     }
