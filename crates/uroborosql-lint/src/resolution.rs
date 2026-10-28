@@ -41,6 +41,23 @@ impl<T> From<Lookup<T>> for Resolution<T> {
     }
 }
 
+/// What a column reference refers to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Referent {
+    /// `t.c` or `c`: a column of a catalog table.
+    Column {
+        schema: String,
+        table: String,
+        column: String,
+    },
+    /// `t` used as a value: the whole row of a catalog table.
+    WholeRow { schema: String, table: String },
+    /// `t.*`: every column of a catalog table.
+    AllColumns { schema: String, table: String },
+    /// An output name of the SELECT, used by ORDER BY, GROUP BY or DISTINCT ON.
+    Output { name: String },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnalysisStatus {
     Complete,
@@ -75,7 +92,7 @@ pub(crate) enum Finding {
 
 /// Acquired catalog state for one SQL input, consulted node by node.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Catalog<'a> {
+pub struct Catalog<'a> {
     acquired: Result<&'a CatalogSnapshot, &'a AcquisitionError>,
     file_effect: bool,
 }
@@ -92,7 +109,7 @@ impl<'a> Catalog<'a> {
     }
 
     /// Diagnoses a `relation_expr` of a FROM item whose table is certified absent.
-    pub fn relation(&self, relation_expr: &Node<'_>) -> Option<Finding> {
+    pub(crate) fn relation(&self, relation_expr: &Node<'_>) -> Option<Finding> {
         if self.file_effect {
             return None;
         }
@@ -120,37 +137,66 @@ impl<'a> Catalog<'a> {
     }
 
     /// Diagnoses a `columnref` that no visible scope can bind.
-    pub fn reference(&self, columnref: &Node<'_>) -> Option<Finding> {
-        if self.file_effect {
-            return None;
+    pub(crate) fn reference(&self, columnref: &Node<'_>) -> Option<Finding> {
+        match self.resolve(columnref) {
+            Binding::Missing(finding) => Some(finding),
+            _ => None,
         }
-        let reference = column_reference(columnref)?;
+    }
+
+    /// What a `columnref` refers to, as PostgreSQL would resolve it.
+    pub fn binding(&self, columnref: &Node<'_>) -> Resolution<Referent> {
+        match self.resolve(columnref) {
+            Binding::Bound(referent) => Resolution::Resolved(referent),
+            Binding::Ambiguous => Resolution::Ambiguous,
+            Binding::Unknown(reason) => Resolution::Unknown(reason),
+            Binding::Missing(Finding::Qualifier { .. }) => Resolution::Absent(AbsenceKind::Table),
+            Binding::Missing(_) | Binding::NotHere => Resolution::Absent(AbsenceKind::Column),
+        }
+    }
+
+    fn resolve(&self, columnref: &Node<'_>) -> Binding {
+        let unsupported =
+            || Binding::Unknown(ResolutionUnknown::Reason(UnknownReason::UnsupportedSyntax));
+        if self.file_effect {
+            return unsupported();
+        }
+        let Some(reference) = column_reference(columnref) else {
+            return unsupported();
+        };
         let mut inner = columnref.clone();
         let mut innermost = true;
         // Output names are only visible to a name that forms a whole sort or group item.
         let standalone = standalone(columnref);
         // Outside any SELECT (e.g. VALUES) nothing is known about visible names.
-        enclosing_select(&inner)?;
+        if enclosing_select(&inner).is_none() {
+            return unsupported();
+        }
         while let Some((select, clause)) = enclosing_select(&inner) {
             // A derived table, or a parenthesized set-operation arm, sees enclosing
             // queries but not its sibling FROM items. A LATERAL one is not modelled.
             let skipped = match derived_table(&inner) {
-                Some(table_ref) if lateral(&table_ref) => return None,
+                Some(table_ref) if lateral(&table_ref) => {
+                    return Binding::Unknown(ResolutionUnknown::Reason(
+                        UnknownReason::UnsupportedRelation,
+                    ))
+                }
                 Some(_) => true,
                 None => clause.kind() == K::select_with_parens,
             };
             if !skipped {
-                let scope = self.scope(&select, &clause)?;
+                let Some(scope) = self.scope(&select, &clause) else {
+                    return unsupported();
+                };
                 match scope.bind(&reference, innermost && standalone) {
-                    Binding::Found | Binding::Unknown => return None,
-                    Binding::Missing(finding) => return Some(finding),
                     Binding::NotHere => {}
+                    binding => return binding,
                 }
             }
             inner = select;
             innermost = false;
         }
-        Some(match reference {
+        Binding::Missing(match reference {
             ColumnReference {
                 qualifier: Some(qualifier),
                 ..
@@ -165,7 +211,7 @@ impl<'a> Catalog<'a> {
                 spelling: column.spelling,
                 range: column.range,
             },
-            ColumnReference { column: None, .. } => return None,
+            ColumnReference { column: None, .. } => return unsupported(),
         })
     }
 
@@ -203,15 +249,20 @@ impl<'a> Catalog<'a> {
             K::sort_clause | K::group_clause | K::distinct_clause
         )
         .then(|| {
-            arm.iter()
+            let mut outputs = arm
+                .iter()
                 .find(|part| part.kind() == K::target_list)
                 .map_or_else(
                     || Outputs {
                         names: Vec::new(),
                         complete: true,
+                        prefer_output: false,
                     },
                     output_names,
-                )
+                );
+            // GROUP BY prefers an input column; ORDER BY and DISTINCT ON an output name.
+            outputs.prefer_output = clause.kind() != K::group_clause;
+            outputs
         });
         Some(Scope { sources, outputs })
     }
@@ -339,40 +390,60 @@ struct Outputs {
     names: Vec<String>,
     /// False when some output has a name PostgreSQL derives from an expression.
     complete: bool,
+    /// Whether an output name wins over an input column of the same name.
+    prefer_output: bool,
 }
 
 enum Binding {
-    Found,
-    Unknown,
+    Bound(Referent),
+    Ambiguous,
+    Unknown(ResolutionUnknown),
     Missing(Finding),
     NotHere,
 }
 
+impl Source<'_> {
+    /// Why the columns of a source that was not found are unknown.
+    fn unknown(&self) -> ResolutionUnknown {
+        match &self.kind {
+            SourceKind::Table(Lookup::Unknown(reason)) => ResolutionUnknown::Reason(*reason),
+            SourceKind::Table(Lookup::Unavailable(error)) => {
+                ResolutionUnknown::Unavailable(error.clone())
+            }
+            SourceKind::Table(_) => ResolutionUnknown::Reason(UnknownReason::IncompleteCoverage),
+            SourceKind::Opaque(_) => ResolutionUnknown::Reason(UnknownReason::UnsupportedRelation),
+        }
+    }
+}
+
 impl Scope<'_> {
     fn bind(&self, reference: &ColumnReference, output_visible: bool) -> Binding {
-        let complete = self.sources.iter().all(|source| source.found().is_some());
+        let unknown = self.sources.iter().find(|source| source.found().is_none());
         if let Some(qualifier) = &reference.qualifier {
             let Some(source) = self
                 .sources
                 .iter()
                 .find(|source| source.visible.as_deref() == Some(qualifier.name.as_str()))
             else {
-                return if complete {
-                    Binding::NotHere
-                } else {
-                    Binding::Unknown
-                };
+                return unknown.map_or(Binding::NotHere, |source| {
+                    Binding::Unknown(source.unknown())
+                });
             };
-            let (Some(table), Some(column)) = (source.found(), &reference.column) else {
-                // A matched wildcard qualifier, or a source without known columns.
-                return if reference.column.is_none() {
-                    Binding::Found
-                } else {
-                    Binding::Unknown
-                };
+            let Some(table) = source.found() else {
+                return Binding::Unknown(source.unknown());
+            };
+            let Some(column) = &reference.column else {
+                return Binding::Bound(Referent::AllColumns {
+                    schema: table.schema.clone(),
+                    table: table.name.clone(),
+                });
             };
             return match table.column(&column.name) {
-                Lookup::Found(_) => Binding::Found,
+                Lookup::Found(_) => Binding::Bound(Referent::Column {
+                    schema: table.schema.clone(),
+                    table: table.name.clone(),
+                    column: column.name.clone(),
+                }),
                 _ => Binding::Missing(Finding::Column {
                     spelling: column.spelling.clone(),
                     range: column.range.clone(),
@@ -380,35 +451,56 @@ impl Scope<'_> {
             };
         }
         let Some(column) = &reference.column else {
-            return Binding::Found;
+            return Binding::Unknown(ResolutionUnknown::Reason(UnknownReason::UnsupportedSyntax));
         };
-        if self.sources.iter().any(|source| {
-            source
-                .found()
-                .is_some_and(|table| matches!(table.column(&column.name), Lookup::Found(_)))
-        }) {
-            return Binding::Found;
+        let outputs = self.outputs.as_ref().filter(|_| output_visible);
+        let output = outputs
+            .filter(|outputs| outputs.names.contains(&column.name))
+            .map(|_| {
+                Binding::Bound(Referent::Output {
+                    name: column.name.clone(),
+                })
+            });
+        if outputs.is_some_and(|outputs| outputs.prefer_output) {
+            if let Some(output) = output {
+                return output;
+            }
         }
-        if !complete {
-            return Binding::Unknown;
-        }
-        // A real column takes precedence over a whole-row reference to the same name.
-        if self
+        let mut tables = self
             .sources
             .iter()
-            .any(|source| source.visible.as_deref() == Some(column.name.as_str()))
-        {
-            return Binding::Found;
-        }
-        if output_visible {
-            if let Some(outputs) = &self.outputs {
-                if outputs.names.contains(&column.name) {
-                    return Binding::Found;
-                }
-                if !outputs.complete {
-                    return Binding::Unknown;
-                }
+            .filter_map(Source::found)
+            .filter(|table| matches!(table.column(&column.name), Lookup::Found(_)));
+        if let Some(table) = tables.next() {
+            if tables.next().is_some() {
+                return Binding::Ambiguous;
             }
+            return Binding::Bound(Referent::Column {
+                schema: table.schema.clone(),
+                table: table.name.clone(),
+                column: column.name.clone(),
+            });
+        }
+        if let Some(source) = unknown {
+            return Binding::Unknown(source.unknown());
+        }
+        // A real column takes precedence over a whole-row reference to the same name.
+        if let Some(table) = self
+            .sources
+            .iter()
+            .find(|source| source.visible.as_deref() == Some(column.name.as_str()))
+            .and_then(Source::found)
+        {
+            return Binding::Bound(Referent::WholeRow {
+                schema: table.schema.clone(),
+                table: table.name.clone(),
+            });
+        }
+        if let Some(output) = output {
+            return output;
+        }
+        if outputs.is_some_and(|outputs| !outputs.complete) {
+            return Binding::Unknown(ResolutionUnknown::Reason(UnknownReason::IncompleteCoverage));
         }
         Binding::NotHere
     }
@@ -700,7 +792,11 @@ fn output_names(target_list: &Node<'_>) -> Outputs {
             _ => complete = false,
         }
     }
-    Outputs { names, complete }
+    Outputs {
+        names,
+        complete,
+        prefer_output: false,
+    }
 }
 
 /// Whether `columnref` is a whole item of its clause rather than part of an expression.

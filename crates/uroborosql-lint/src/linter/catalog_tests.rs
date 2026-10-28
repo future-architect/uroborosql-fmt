@@ -5,7 +5,9 @@ use crate::{
         ColumnDefinition, InMemoryCatalogProvider, Lookup, TableDefinition, UnknownReason,
     },
     diagnostic::Severity,
-    resolution::{self, AnalysisStatus, Exclusion},
+    resolution::{
+        self, AnalysisStatus, Catalog, Exclusion, Referent, Resolution, ResolutionUnknown,
+    },
     rules::{NoDistinct, NoUnknownReference, RuleEnum},
     ConfigStore,
 };
@@ -438,6 +440,115 @@ fn cte_names_follow_definition_order_and_nesting() {
     ] {
         let result = run(sql);
         assert_eq!(slices(sql, &result.diagnostics), expected, "{sql}");
+    }
+}
+
+fn bindings(sql: &str) -> Vec<(String, Resolution<Referent>)> {
+    let tree = tree_sitter::parse_2way(sql).unwrap();
+    let root = tree.root_node();
+    let snapshot = snapshot();
+    let catalog = Catalog::new(&root, Ok(&snapshot));
+    root.descendants()
+        .filter(|node| node.kind() == postgresql_cst_parser::syntax_kind::SyntaxKind::columnref)
+        .map(|node| {
+            let range = node.range();
+            (
+                sql[range.start_byte..range.end_byte].to_string(),
+                catalog.binding(&node),
+            )
+        })
+        .collect()
+}
+
+fn column(table: &str, column: &str) -> Resolution<Referent> {
+    Resolution::Resolved(Referent::Column {
+        schema: "public".into(),
+        table: table.into(),
+        column: column.into(),
+    })
+}
+
+#[test]
+fn bindings_name_what_each_reference_refers_to() {
+    let row = |table: &str| Referent::WholeRow {
+        schema: "public".into(),
+        table: table.into(),
+    };
+    let all = |table: &str| Referent::AllColumns {
+        schema: "public".into(),
+        table: table.into(),
+    };
+    let output = |name: &str| Resolution::Resolved(Referent::Output { name: name.into() });
+    let unknown = |reason| Resolution::Unknown(ResolutionUnknown::Reason(reason));
+    for (sql, expected) in [
+        (
+            "SELECT u.id, name, u, u.* FROM users u",
+            vec![
+                ("u.id", column("users", "id")),
+                ("name", column("users", "name")),
+                ("u", Resolution::Resolved(row("users"))),
+                ("u.*", Resolution::Resolved(all("users"))),
+            ],
+        ),
+        (
+            "SELECT id, amount FROM users, orders",
+            vec![
+                ("id", Resolution::Ambiguous),
+                ("amount", column("orders", "amount")),
+            ],
+        ),
+        (
+            "SELECT nmae, x.id FROM users u",
+            vec![
+                ("nmae", Resolution::Absent(AbsenceKind::Column)),
+                ("x.id", Resolution::Absent(AbsenceKind::Table)),
+            ],
+        ),
+        // ORDER BY prefers an output name, GROUP BY an input column.
+        (
+            "SELECT name AS id FROM users ORDER BY id",
+            vec![("name", column("users", "name")), ("id", output("id"))],
+        ),
+        (
+            "SELECT name AS id FROM users GROUP BY id",
+            vec![
+                ("name", column("users", "name")),
+                ("id", column("users", "id")),
+            ],
+        ),
+        (
+            "SELECT id AS a FROM users ORDER BY a",
+            vec![("id", column("users", "id")), ("a", output("a"))],
+        ),
+        // Correlation binds to the enclosing FROM item.
+        (
+            "SELECT 1 FROM users u WHERE EXISTS (SELECT 1 FROM orders o WHERE o.user_id = u.id)",
+            vec![
+                ("o.user_id", column("orders", "user_id")),
+                ("u.id", column("users", "id")),
+            ],
+        ),
+        (
+            "WITH c AS (SELECT id FROM users) SELECT x FROM c",
+            vec![
+                ("id", column("users", "id")),
+                ("x", unknown(UnknownReason::UnsupportedRelation)),
+            ],
+        ),
+        (
+            "SELECT COALESCE(1, 2) ORDER BY coalesce",
+            vec![("coalesce", unknown(UnknownReason::IncompleteCoverage))],
+        ),
+        (
+            "SELECT lower(name) FROM users",
+            vec![("name", unknown(UnknownReason::UnsupportedSyntax))],
+        ),
+    ] {
+        let expected = expected
+            .into_iter()
+            .map(|(text, resolution)| (text.to_string(), resolution))
+            .collect::<Vec<_>>();
+        assert_eq!(bindings(sql), expected, "{sql}");
     }
 }
 
