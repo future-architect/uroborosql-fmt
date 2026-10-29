@@ -553,6 +553,62 @@ fn bindings_name_what_each_reference_refers_to() {
 }
 
 #[test]
+#[ignore = "binding() certifies these referents although PostgreSQL resolves them differently"]
+fn bindings_follow_postgresql_where_they_still_differ() {
+    let output = |name: &str| Resolution::Resolved(Referent::Output { name: name.into() });
+    let unknown = |reason| Resolution::Unknown(ResolutionUnknown::Reason(reason));
+    let mut mismatches = Vec::new();
+    for (sql, expected) in [
+        // An opaque derived table may also provide `id`.
+        (
+            "SELECT id FROM users, (SELECT 1 AS id) s",
+            vec![("id", unknown(UnknownReason::IncompleteCoverage))],
+        ),
+        // A whole-row name loses to an output name and to an enclosing column.
+        (
+            "SELECT name AS o FROM users o GROUP BY o",
+            vec![("name", column("users", "name")), ("o", output("o"))],
+        ),
+        (
+            "SELECT (SELECT name FROM orders name) FROM users",
+            vec![("name", column("users", "name"))],
+        ),
+        // Different expressions sharing an output name are ambiguous; identical ones are not.
+        (
+            "SELECT id AS x, name AS x FROM users ORDER BY x",
+            vec![
+                ("id", column("users", "id")),
+                ("name", column("users", "name")),
+                ("x", Resolution::Ambiguous),
+            ],
+        ),
+        (
+            "SELECT id AS x, id AS x FROM users ORDER BY x",
+            vec![
+                ("id", column("users", "id")),
+                ("id", column("users", "id")),
+                ("x", output("x")),
+            ],
+        ),
+        // The cast keeps the output name `id`, which wins over the input column.
+        (
+            "SELECT id::text FROM users ORDER BY id",
+            vec![("id", column("users", "id")), ("id", output("id"))],
+        ),
+    ] {
+        let expected = expected
+            .into_iter()
+            .map(|(text, resolution)| (text.to_string(), resolution))
+            .collect::<Vec<_>>();
+        let actual = bindings(sql);
+        if actual != expected {
+            mismatches.push(format!("{sql}\n  expected {expected:?}\n  actual   {actual:?}"));
+        }
+    }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+#[test]
 fn decision_table_edges_of_reference_binding() {
     for (sql, expected) in [
         // Expression shapes that are not function applications are still checked.
