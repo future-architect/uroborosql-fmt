@@ -602,7 +602,9 @@ fn bindings_follow_postgresql_where_they_still_differ() {
             .collect::<Vec<_>>();
         let actual = bindings(sql);
         if actual != expected {
-            mismatches.push(format!("{sql}\n  expected {expected:?}\n  actual   {actual:?}"));
+            mismatches.push(format!(
+                "{sql}\n  expected {expected:?}\n  actual   {actual:?}"
+            ));
         }
     }
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
