@@ -44,7 +44,7 @@ impl Visitor {
 
         // バインドパラメータの追加
         if let Some(comment_node) = head_comment_node {
-            let comment = Comment::new(comment_node.clone());
+            let comment = Comment::new(comment_node);
             if comment.loc().is_next_to(&expr.loc()) {
                 // 式に隣接していればバインドパラメータ
                 expr.set_head_comment(comment);

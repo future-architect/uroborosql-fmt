@@ -238,11 +238,11 @@ fn create_alias_from_expr(lhs: &Expr) -> Option<Expr> {
 
 macro_rules! create_clause {
     ($cursor:expr, expr: $keyword_expr:expr) => {{
-        ensure_kind!($cursor, expr: $keyword_expr, $cursor.input);
+        ensure_kind!($cursor, expr: $keyword_expr, $cursor.source());
         crate::visitor::Clause::from_node($cursor.node())
     }};
     ($cursor:expr, $keyword_pattern:pat) => {{
-        ensure_kind!($cursor, $keyword_pattern, $cursor.input);
+        ensure_kind!($cursor, $keyword_pattern, $cursor.source());
         crate::visitor::Clause::from_node($cursor.node())
     }};
 }

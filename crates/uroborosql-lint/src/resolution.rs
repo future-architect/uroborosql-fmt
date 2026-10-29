@@ -164,7 +164,7 @@ impl<'a> Catalog<'a> {
         let Some(reference) = column_reference(columnref) else {
             return unsupported();
         };
-        let mut inner = columnref.clone();
+        let mut inner = *columnref;
         let mut innermost = true;
         // Output names are only visible to a name that forms a whole sort or group item.
         let standalone = standalone(columnref);
@@ -644,7 +644,7 @@ fn sets_config(func_application: &Node<'_>) -> bool {
     };
     // The function is the last component: `f`, `s.f` or `db.s.f`.
     let function = match children(&name).as_slice() {
-        [single] if single.kind() == K::type_function_name => Some(single.clone()),
+        [single] if single.kind() == K::type_function_name => Some(*single),
         [first, indirection]
             if first.kind() == K::ColId && indirection.kind() == K::indirection =>
         {
@@ -663,7 +663,7 @@ fn sets_config(func_application: &Node<'_>) -> bool {
 
 /// The nearest SELECT body above `node` and the clause of it that holds `node`.
 fn enclosing_select<'a>(node: &Node<'a>) -> Option<(Node<'a>, Node<'a>)> {
-    let mut child = node.clone();
+    let mut child = *node;
     while let Some(parent) = child.parent() {
         if parent.kind() == K::select_no_parens {
             return Some((parent, child));
@@ -753,7 +753,7 @@ fn joined(table_ref: &Node<'_>) -> bool {
 /// WITH clause and to the query, but not to its own or an earlier body.
 fn cte_names(node: &Node<'_>) -> Vec<String> {
     let mut names = Vec::new();
-    let mut child = node.clone();
+    let mut child = *node;
     while let Some(ancestor) = child.parent() {
         if ancestor.kind() == K::select_no_parens {
             for with_clause in children(&ancestor)
@@ -853,7 +853,7 @@ fn output_names(target_list: &Node<'_>) -> Outputs {
 /// Parentheses are dropped by PostgreSQL, and grouping lists (`ROLLUP (...)`, `CUBE (...)`,
 /// `GROUP BY (a, b)`, nested at any depth) hold whole items too, as does `DISTINCT ON (...)`.
 fn standalone(columnref: &Node<'_>) -> bool {
-    let mut top = columnref.clone();
+    let mut top = *columnref;
     let mut listed = false;
     let mut row = false;
     let mut current = columnref.parent();
@@ -868,7 +868,7 @@ fn standalone(columnref: &Node<'_>) -> bool {
             _ if same_span(&node, &top) || parenthesized(&node, &top) => {}
             _ => return false,
         }
-        top = node.clone();
+        top = node;
         current = node.parent();
     }
     false
@@ -1010,7 +1010,7 @@ fn names(node: &Node<'_>) -> Result<Vec<Identifier>, Exclusion> {
 fn identifier(node: &Node<'_>) -> Result<Identifier, Exclusion> {
     let tokens: Vec<_> = node
         .descendants()
-        .filter(|n| n.node_or_token.as_token().is_some() && !comment(n))
+        .filter(|n| n.is_token() && !comment(n))
         .collect();
     let [token] = tokens.as_slice() else {
         return Err(Exclusion::UnsupportedIdentifier);
@@ -1063,7 +1063,7 @@ fn children<'a>(node: &Node<'a>) -> Vec<Node<'a>> {
 
 fn only<'a>(node: &Node<'a>, expected: K) -> Result<Node<'a>, Exclusion> {
     match children(node).as_slice() {
-        [child] if child.kind() == expected => Ok(child.clone()),
+        [child] if child.kind() == expected => Ok(*child),
         _ => Err(Exclusion::UnsupportedSyntax),
     }
 }

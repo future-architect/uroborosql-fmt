@@ -1253,7 +1253,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 [[package]]
 name = "postgresql-cst-parser"
 version = "0.2.0"
-source = "git+https://github.com/future-architect/postgresql-cst-parser#d68e6bd87ceca0b6bd92dbd9a7a6ebfc3f38fc1f"
+source = "git+https://github.com/future-architect/postgresql-cst-parser#056c1c705557f07c93b1d79885fff8296431f900"
 dependencies = [
  "cstree",
 ]

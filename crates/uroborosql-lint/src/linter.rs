@@ -107,10 +107,9 @@ impl Linter {
         config: &ResolvedLintConfig,
         provider: Option<&dyn CatalogProvider>,
     ) -> Result<LintResult, LintError> {
-        // No parser tree or borrowed node crosses the await boundary; catalog rules
-        // run on a second parse once the catalog is acquired.
+        // The tree crosses the await boundary; borrowed nodes do not.
+        let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
         let (requests, mut diagnostics, suppression) = {
-            let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
             let root = tree.root_node();
             let diagnostics = self.run_rules(&root, sql, config, None);
             let suppression = PreparedSuppression::new(&root);
@@ -138,7 +137,6 @@ impl Linter {
                 .acquire(&requests)
                 .await
         };
-        let tree = tree_sitter::parse_2way(sql).map_err(LintError::from_parser_error)?;
         let root = tree.root_node();
         let catalog = Catalog::new(&root, acquired.as_ref());
         diagnostics.extend(self.run_rules(&root, sql, config, Some(catalog)));
@@ -183,7 +181,7 @@ impl Linter {
         resolved_config: &ResolvedLintConfig,
         catalog: Option<Catalog<'_>>,
     ) -> Vec<Diagnostic> {
-        let nodes = collect_preorder(root.clone());
+        let nodes = collect_preorder(*root);
         let with_catalog = catalog.is_some();
         let mut ctx = match catalog {
             Some(catalog) => LintContext::with_catalog(sql, catalog),
