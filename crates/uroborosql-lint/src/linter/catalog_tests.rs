@@ -541,7 +541,7 @@ fn bindings_name_what_each_reference_refers_to() {
         ),
         (
             "SELECT lower(name) FROM users",
-            vec![("name", unknown(UnknownReason::UnsupportedSyntax))],
+            vec![("name", column("users", "name"))],
         ),
     ] {
         let expected = expected
@@ -649,14 +649,24 @@ fn decision_table_edges_of_statement_coverage() {
     assert!(result.diagnostics.is_empty(), "{result:?}");
     let tree = tree_sitter::parse_2way(sql).unwrap();
     assert!(resolution::requests(&tree.root_node()).is_empty());
-    // Any function application holds the whole input.
-    let sql = "SELECT lower(nmae) FROM users; SELECT agge FROM users";
-    let result = run(sql);
-    assert!(result.diagnostics.is_empty(), "{result:?}");
-    assert!(result
-        .statements
-        .iter()
-        .all(|s| s.exclusion == Some(Exclusion::FileEffect)));
+    // A function call does not hold the input; references inside it are checked.
+    let sql = "SELECT lower(nmae) FROM users; SELECT count(agge) FROM users";
+    assert_eq!(slices(sql, &run(sql).diagnostics), ["nmae", "agge"]);
+    // `set_config` can change the search path, however the name is written.
+    for sql in [
+        "SELECT pg_catalog.set_config('search_path', 'x', false); SELECT nmae FROM users",
+        "SELECT SET_CONFIG('search_path', 'x', false); SELECT nmae FROM users",
+        "SELECT pg_catalog. set_config('search_path', 'x', false); SELECT nmae FROM users",
+        "SELECT postgres.pg_catalog.\"set_config\"('search_path', 'x', false); SELECT nmae FROM users",
+        "SELECT pg_catalog./* c */\"set_config\"('search_path', 'x', false); SELECT nmae FROM users",
+    ] {
+        let result = run(sql);
+        assert!(result.diagnostics.is_empty(), "{sql}: {result:?}");
+        assert!(result
+            .statements
+            .iter()
+            .all(|s| s.exclusion == Some(Exclusion::FileEffect)));
+    }
     // A recovered source does not hide an absent sibling table.
     let sql = "SELECT x.id FROM /*#table*/ AS x, usres";
     let result = run(sql);
@@ -1487,4 +1497,52 @@ async fn inspect_postgres_sql() {
             &sql[diagnostic.span.start.byte..diagnostic.span.end.byte]
         );
     }
+}
+
+#[test]
+fn join_condition_sees_only_the_operands_of_its_join() {
+    // A later FROM item does not shadow an outer alias inside an ON condition.
+    let sql = "SELECT name FROM users u WHERE EXISTS (SELECT 1 FROM orders o JOIN orders p ON u.name = u.name CROSS JOIN orders u)";
+    assert_eq!(slices(sql, &run(sql).diagnostics), Vec::<&str>::new());
+    let found = bindings(sql);
+    assert_eq!(found[1], ("u.name".to_string(), column("users", "name")));
+    assert_eq!(found[2], ("u.name".to_string(), column("users", "name")));
+    // A subquery inside ON sees the same restricted operands.
+    let sql = "SELECT 1 FROM users u WHERE EXISTS (SELECT 1 FROM orders o JOIN orders p ON EXISTS (SELECT 1 WHERE u.name = p.id::text) CROSS JOIN orders u)";
+    assert_eq!(slices(sql, &run(sql).diagnostics), Vec::<&str>::new());
+    // Operands of earlier joins stay visible, including nested joins.
+    for sql in [
+        "SELECT 1 FROM users u JOIN orders o ON o.user_id = u.id JOIN orders p ON p.user_id = u.id",
+        "SELECT 1 FROM users u JOIN (orders o JOIN orders p ON p.id = o.id) ON o.user_id = u.id",
+    ] {
+        assert_eq!(
+            slices(sql, &run(sql).diagnostics),
+            Vec::<&str>::new(),
+            "{sql}"
+        );
+    }
+    // An item after the join is not visible to its condition.
+    let sql = "SELECT 1 FROM users u JOIN orders o ON o.user_id = x.id CROSS JOIN orders x";
+    assert_eq!(slices(sql, &run(sql).diagnostics), ["x"]);
+}
+
+#[test]
+fn set_config_is_matched_by_name_not_by_text() {
+    // A quoted name that merely contains `.set_config` is another function.
+    let sql = "SELECT \"not.set_config\"(); SELECT nmae FROM users";
+    assert_eq!(slices(sql, &run(sql).diagnostics), ["nmae"]);
+}
+
+#[test]
+fn ordering_inside_a_function_does_not_see_output_names() {
+    for sql in [
+        "SELECT 1 AS x FROM users ORDER BY array_agg(id ORDER BY x)",
+        "SELECT 1 AS x FROM users ORDER BY percentile_cont(0.5) WITHIN GROUP (ORDER BY x)",
+        "SELECT id AS x FROM users ORDER BY sum(age) OVER (ORDER BY x)",
+    ] {
+        assert_eq!(slices(sql, &run(sql).diagnostics), ["x"], "{sql}");
+    }
+    // The SELECT's own ORDER BY still sees them.
+    let sql = "SELECT id AS x FROM users ORDER BY x";
+    assert_eq!(slices(sql, &run(sql).diagnostics), Vec::<&str>::new());
 }

@@ -185,7 +185,8 @@ impl<'a> Catalog<'a> {
                 None => clause.kind() == K::select_with_parens,
             };
             if !skipped {
-                let Some(scope) = self.scope(&select, &clause) else {
+                let join = join_condition_of(&inner, &clause);
+                let Some(scope) = self.scope(&select, &clause, join.as_ref()) else {
                     return unsupported();
                 };
                 match scope.bind(&reference, innermost && standalone) {
@@ -216,7 +217,13 @@ impl<'a> Catalog<'a> {
     }
 
     /// Visible FROM items for a clause of `select`, or `None` when its names are not modelled.
-    fn scope(&self, select: &Node<'_>, clause: &Node<'_>) -> Option<Scope<'a>> {
+    /// Inside a join condition only the operands of `join` are visible.
+    fn scope(
+        &self,
+        select: &Node<'_>,
+        clause: &Node<'_>,
+        join: Option<&Node<'_>>,
+    ) -> Option<Scope<'a>> {
         let parts = children(select);
         let set_operation = parts
             .iter()
@@ -239,8 +246,12 @@ impl<'a> Catalog<'a> {
             _ => return None,
         };
         let mut sources = Vec::new();
-        if let Some(from_clause) = arm.iter().find(|part| part.kind() == K::from_clause) {
-            for table_ref in from_items(from_clause) {
+        if let Some(from) = join.cloned().or_else(|| {
+            arm.iter()
+                .find(|part| part.kind() == K::from_clause)
+                .cloned()
+        }) {
+            for table_ref in from_items(&from) {
                 sources.push(self.source(&table_ref));
             }
         }
@@ -609,21 +620,45 @@ fn top_level_statements<'a>(root: &Node<'a>) -> impl Iterator<Item = Node<'a>> {
 }
 
 /// Statements that can change the catalog or the search path hold checks for the whole input.
+/// Function calls are assumed not to, except `set_config`, which can set `search_path`.
 fn has_file_effect(root: &Node<'_>) -> bool {
     top_level_statements(root).any(|statement| {
         statement.kind() != K::SelectStmt
-            || statement.descendants().any(|n| {
-                matches!(
-                    n.kind(),
-                    K::into_clause
-                        | K::func_application
-                        | K::InsertStmt
-                        | K::UpdateStmt
-                        | K::DeleteStmt
-                        | K::MergeStmt
-                )
+            || statement.descendants().any(|n| match n.kind() {
+                K::into_clause | K::InsertStmt | K::UpdateStmt | K::DeleteStmt | K::MergeStmt => {
+                    true
+                }
+                K::func_application => sets_config(&n),
+                _ => false,
             })
     })
+}
+
+/// Whether `func_application` calls a function named `set_config`, in any schema.
+fn sets_config(func_application: &Node<'_>) -> bool {
+    let Some(name) = children(func_application)
+        .into_iter()
+        .find(|part| part.kind() == K::func_name)
+    else {
+        return false;
+    };
+    // The function is the last component: `f`, `s.f` or `db.s.f`.
+    let function = match children(&name).as_slice() {
+        [single] if single.kind() == K::type_function_name => Some(single.clone()),
+        [first, indirection]
+            if first.kind() == K::ColId && indirection.kind() == K::indirection =>
+        {
+            children(indirection).last().and_then(|element| {
+                children(element)
+                    .into_iter()
+                    .find(|part| part.kind() == K::attr_name)
+            })
+        }
+        _ => None,
+    };
+    function
+        .and_then(|function| identifier(&function).ok())
+        .is_some_and(|function| function.name == "set_config")
 }
 
 /// The nearest SELECT body above `node` and the clause of it that holds `node`.
@@ -653,7 +688,22 @@ fn arm_of<'a>(parts: &[Node<'a>], clause: &Node<'_>) -> Option<Vec<Node<'a>>> {
     Some(parts[start..end].to_vec())
 }
 
-/// Table references of a FROM clause, flattening joins but not derived tables.
+/// The `joined_table` whose ON condition holds `node`, looking no higher than `clause`.
+fn join_condition_of<'a>(node: &Node<'a>, clause: &Node<'_>) -> Option<Node<'a>> {
+    let mut current = node.parent();
+    while let Some(parent) = current {
+        if same(&parent, clause) {
+            return None;
+        }
+        if parent.kind() == K::join_qual {
+            return parent.parent();
+        }
+        current = parent.parent();
+    }
+    None
+}
+
+/// Table references of a FROM clause or a join, flattening joins but not derived tables.
 fn from_items<'a>(from_clause: &Node<'a>) -> Vec<Node<'a>> {
     fn walk<'a>(node: &Node<'a>, items: &mut Vec<Node<'a>>) {
         for child in children(node) {
@@ -809,7 +859,8 @@ fn standalone(columnref: &Node<'_>) -> bool {
     let mut current = columnref.parent();
     while let Some(node) = current {
         match node.kind() {
-            K::sortby => return !listed && !row,
+            // Only the SELECT's own ORDER BY, not one inside an aggregate or a window.
+            K::sortby => return !listed && !row && sorts_select(&node),
             K::distinct_clause => return !row,
             K::group_by_item | K::rollup_clause | K::cube_clause => return true,
             K::expr_list => listed = true,
@@ -821,6 +872,17 @@ fn standalone(columnref: &Node<'_>) -> bool {
         current = node.parent();
     }
     false
+}
+
+/// Whether `sortby` is an item of the ORDER BY of a SELECT body.
+fn sorts_select(sortby: &Node<'_>) -> bool {
+    sortby
+        .parent()
+        .filter(|list| list.kind() == K::sortby_list)
+        .and_then(|list| list.parent())
+        .filter(|clause| clause.kind() == K::sort_clause)
+        .and_then(|clause| clause.parent())
+        .is_some_and(|select| select.kind() == K::select_no_parens)
 }
 
 /// `( expr )` wrapping `inner` and nothing else.

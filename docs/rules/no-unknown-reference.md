@@ -47,8 +47,9 @@ SELECT id AS user_id FROM users ORDER BY user_id;
 > fully checked. The other references in the statement are still checked when they can be.
 >
 > If the input contains `INSERT` / `UPDATE` / `DELETE`, DDL, `SET`, `SELECT ... INTO`, or a
-> function call such as `count(*)` or `lower(x)`, the whole file is skipped, because these can
-> change the catalog. Built-in forms such as `COALESCE`, `CASE`, `CAST`, and `EXTRACT` do not.
+> call to `set_config`, the whole file is skipped, because these can change the catalog or the
+> search path. Other function calls such as `count(*)` or `lower(x)` are checked like any other
+> expression; a function that changes tables when called is not detected.
 >
 > No diagnostic does not mean that every reference in the file was checked. The CLI (stderr)
 > and the language server (server log) list each skipped statement with its position.
