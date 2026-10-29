@@ -98,9 +98,9 @@ When many documents are checked at once, a check may be postponed; saving the do
 retries it.
 
 > [!NOTE]
-> **Beta limitation:** Only single-table `SELECT` statements are checked against the catalog.
-> Other statements, including `JOIN`, subqueries, and `INSERT` / `UPDATE` / `DELETE`, are
-> skipped without a diagnostic. The server log lists each skipped statement as
+> **Beta limitation:** Only `SELECT` statements are checked against the catalog, and some
+> FROM items (`LATERAL`, functions, `TABLESAMPLE`, ...) leave a statement partially checked.
+> Other statements, including `INSERT` / `UPDATE` / `DELETE`, are skipped without a diagnostic. The server log lists each skipped statement as
 > `path:line:column: not checked against the catalog (reason)`. See
 > [`no-unknown-reference`](../../docs/rules/no-unknown-reference.md).
 

@@ -608,7 +608,7 @@ async fn acquisition_free_diagnostics_bypass_saturated_slots() {
     for (sql, expected) in [
         ("SELECT ( FROM users", "Failed to parse SQL"),
         (
-            "SELECT DISTINCT id FROM users JOIN others ON TRUE",
+            "SELECT DISTINCT id FROM users TABLESAMPLE SYSTEM (1)",
             "no-distinct",
         ),
     ] {

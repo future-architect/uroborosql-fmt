@@ -121,7 +121,7 @@ the exit code is 2, even with `--fail-level none`. There is no database access
 when catalog checking is unconfigured, disabled by config, or has no table
 requests. File-backed checks follow the same rules and never connect to PostgreSQL.
 
-Only single-table `SELECT` statements are checked for now. See [Limitations](#limitations).
+Only `SELECT` statements are checked for now. See [Limitations](#limitations).
 
 ### Export and offline catalog checks
 
@@ -184,7 +184,7 @@ path to stderr, and leaves stdout empty.
 ### PostgreSQL catalog checks
 
 Configure `db.schemaProvider: server` as described in the lint engine README,
-then run the same lint command. Supported single-table SELECT references are
+then run the same lint command. Supported SELECT references are
 checked against PostgreSQL; the SQL being linted is never executed.
 
 ## Limitations
@@ -195,19 +195,15 @@ checked against PostgreSQL; the SQL being linted is never executed.
   - Directory, glob, and multiple-file arguments are not supported yet.
   - Standard input is not supported; pass a file path instead.
   - To lint multiple files, invoke the command once per file (for example, from a shell loop or your build tool).
-- Catalog checks cover only single-table `SELECT` statements:
-
-  ```
-  SELECT [DISTINCT] <columns> FROM <one table> [alias]
-    [WHERE ...] [LIMIT ...] [OFFSET ...] [FOR UPDATE ...]
-  ```
-
-  Other statements, including `JOIN`, subqueries, `WITH`, `UNION`, `GROUP BY`, `ORDER BY`,
-  and `INSERT` / `UPDATE` / `DELETE`, are skipped without a diagnostic. The stderr summary
-  lists each skipped statement with its position:
+- Catalog checks cover only `SELECT` statements. Columns from CTEs, derived tables, and
+  `UNION` results are not checked, and `LATERAL`, functions, `TABLESAMPLE`, `ONLY`, column
+  aliases, and aliased joins in `FROM` leave a statement partially checked. See
+  [`no-unknown-reference`](../../docs/rules/no-unknown-reference.md#supported-sql) for details.
+  `INSERT` / `UPDATE` / `DELETE` and other statements are skipped without a diagnostic.
+  The stderr summary lists each statement that was skipped or partially checked, with its position:
 
   ```
   query.sql: catalog: 1 checked, 2 not checked, 0 failed
   query.sql:3:1: not checked against the catalog (unsupported syntax)
-  query.sql:10:1: not checked against the catalog (unsupported syntax)
+  query.sql:10:1: not checked against the catalog (file effect in SQL input)
   ```

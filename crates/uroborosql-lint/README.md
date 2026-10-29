@@ -21,10 +21,10 @@ has a `db` section. Change their severity with `rules` in the config file.
 | [`no-unknown-reference`](../../docs/rules/no-unknown-reference.md) | Tables and columns that do not exist in the database catalog | Required | error |
 
 > [!NOTE]
-> **Beta limitation:** `no-unknown-reference` checks only single-table `SELECT` statements;
-> other statements, including `JOIN`, subqueries, and `INSERT` / `UPDATE` / `DELETE`, are
-> skipped without a diagnostic. See the [rule page](../../docs/rules/no-unknown-reference.md)
-> for details.
+> **Beta limitation:** `no-unknown-reference` checks only `SELECT` statements; a file that
+> contains any other statement, including `INSERT` / `UPDATE` / `DELETE`, is skipped as a whole
+> without a diagnostic. See
+> the [rule page](../../docs/rules/no-unknown-reference.md#supported-sql) for details.
 
 ## Configuration
 
