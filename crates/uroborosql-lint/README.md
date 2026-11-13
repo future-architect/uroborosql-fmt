@@ -13,6 +13,7 @@ has a `db` section. Change their severity with `rules` in the config file.
 | --- | --- | --- | --- |
 | [`no-distinct`](../../docs/rules/no-distinct.md) | `DISTINCT` | | warning |
 | [`no-not-in`](../../docs/rules/no-not-in.md) | `NOT IN` (use `NOT EXISTS`) | | warning |
+| [`missing-order-by`](../../docs/rules/missing-order-by.md) | Order-dependent aggregates (`array_agg`, `string_agg`, ...) without `ORDER BY` | | warning |
 | [`no-union-distinct`](../../docs/rules/no-union-distinct.md) | `UNION` / `UNION DISTINCT` (use `UNION ALL`) | | warning |
 | [`no-wildcard-projection`](../../docs/rules/no-wildcard-projection.md) | `SELECT *`, `t.*`, `RETURNING *` | | warning |
 | [`missing-two-way-sample`](../../docs/rules/missing-two-way-sample.md) | 2way-SQL bind parameters without a sample value | | warning |
