@@ -1,3 +1,4 @@
+mod missing_order_by;
 mod missing_two_way_sample;
 mod no_distinct;
 mod no_function_on_column_in_join_or_where;
@@ -11,6 +12,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::Node};
 
 use crate::{context::LintContext, diagnostic::Severity, rule::Rule};
 
+pub use missing_order_by::MissingOrderBy;
 pub use missing_two_way_sample::MissingTwoWaySample;
 pub use no_distinct::NoDistinct;
 pub use no_function_on_column_in_join_or_where::NoFunctionOnColumnInJoinOrWhere;
@@ -25,6 +27,7 @@ pub fn all_rules() -> impl Iterator<Item = RuleEnum> {
         RuleEnum::NoDistinct(NoDistinct),
         RuleEnum::NoUnknownReference(NoUnknownReference),
         RuleEnum::NoNotIn(NoNotIn),
+        RuleEnum::MissingOrderBy(MissingOrderBy),
         RuleEnum::NoUnionDistinct(NoUnionDistinct),
         RuleEnum::NoWildcardProjection(NoWildcardProjection),
         RuleEnum::MissingTwoWaySample(MissingTwoWaySample),
@@ -48,6 +51,7 @@ pub enum RuleEnum {
     NoUnknownReference(NoUnknownReference),
     NoDistinct(NoDistinct),
     NoNotIn(NoNotIn),
+    MissingOrderBy(MissingOrderBy),
     NoUnionDistinct(NoUnionDistinct),
     NoWildcardProjection(NoWildcardProjection),
     MissingTwoWaySample(MissingTwoWaySample),
@@ -94,6 +98,7 @@ impl RuleEnum {
             Self::NoDistinct(rule) => rule,
             Self::NoUnknownReference(rule) => rule,
             Self::NoNotIn(rule) => rule,
+            Self::MissingOrderBy(rule) => rule,
             Self::NoUnionDistinct(rule) => rule,
             Self::NoWildcardProjection(rule) => rule,
             Self::MissingTwoWaySample(rule) => rule,
