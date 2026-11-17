@@ -119,6 +119,9 @@ mod tests {
             sql,
             vec![RuleEnum::MissingAggregateOrderBy(MissingAggregateOrderBy)],
         )
+        .into_iter()
+        .filter(|diag| diag.code == RULE_NAME)
+        .collect()
     }
 
     #[test]
@@ -126,12 +129,9 @@ mod tests {
         let sql = "SELECT json_agg(item_name) FROM items;";
         let diagnostics = run(sql);
 
-        let diagnostic = diagnostics
-            .iter()
-            .find(|diag| diag.code == RULE_NAME)
-            .expect("expected json_agg without ORDER BY to be detected");
+        assert_eq!(diagnostics.len(), 1);
 
-        let SqlSpan { start, end } = diagnostic.span;
+        let SqlSpan { start, end } = diagnostics[0].span;
         assert_eq!(&sql[start.byte..end.byte], "json_agg(item_name)");
     }
 
@@ -140,12 +140,9 @@ mod tests {
         let sql = "SELECT category, array_agg(DISTINCT item_name) FROM items GROUP BY category;";
         let diagnostics = run(sql);
 
-        let diagnostic = diagnostics
-            .iter()
-            .find(|diag| diag.code == RULE_NAME)
-            .expect("expected array_agg(DISTINCT ...) without ORDER BY to be detected");
+        assert_eq!(diagnostics.len(), 1);
 
-        let SqlSpan { start, end } = diagnostic.span;
+        let SqlSpan { start, end } = diagnostics[0].span;
         assert_eq!(&sql[start.byte..end.byte], "array_agg(DISTINCT item_name)");
     }
 
@@ -154,12 +151,9 @@ mod tests {
         let sql = "SELECT xmlagg(xmlelement(name item, item_name)) FROM items WHERE price > 0;";
         let diagnostics = run(sql);
 
-        let diagnostic = diagnostics
-            .iter()
-            .find(|diag| diag.code == RULE_NAME)
-            .expect("expected xmlagg without ORDER BY to be detected");
+        assert_eq!(diagnostics.len(), 1);
 
-        let SqlSpan { start, end } = diagnostic.span;
+        let SqlSpan { start, end } = diagnostics[0].span;
         assert_eq!(
             &sql[start.byte..end.byte],
             "xmlagg(xmlelement(name item, item_name))"
@@ -171,12 +165,9 @@ mod tests {
         let sql = "SELECT string_agg(item_name, ',') FROM items;";
         let diagnostics = run(sql);
 
-        let diagnostic = diagnostics
-            .iter()
-            .find(|diag| diag.code == RULE_NAME)
-            .expect("expected string_agg without ORDER BY to be detected");
+        assert_eq!(diagnostics.len(), 1);
 
-        let SqlSpan { start, end } = diagnostic.span;
+        let SqlSpan { start, end } = diagnostics[0].span;
         assert_eq!(&sql[start.byte..end.byte], "string_agg(item_name, ',')");
     }
 
@@ -185,12 +176,9 @@ mod tests {
         let sql = "SELECT jsonb_agg(item_name) FROM items;";
         let diagnostics = run(sql);
 
-        let diagnostic = diagnostics
-            .iter()
-            .find(|diag| diag.code == RULE_NAME)
-            .expect("expected jsonb_agg without ORDER BY to be detected");
+        assert_eq!(diagnostics.len(), 1);
 
-        let SqlSpan { start, end } = diagnostic.span;
+        let SqlSpan { start, end } = diagnostics[0].span;
         assert_eq!(&sql[start.byte..end.byte], "jsonb_agg(item_name)");
     }
 
@@ -211,12 +199,9 @@ mod tests {
         let sql = r#"SELECT "array_agg"(item_name) FROM items;"#;
         let diagnostics = run(sql);
 
-        let diagnostic = diagnostics
-            .iter()
-            .find(|diag| diag.code == RULE_NAME)
-            .expect("expected quoted array_agg without ORDER BY to be detected");
+        assert_eq!(diagnostics.len(), 1);
 
-        let SqlSpan { start, end } = diagnostic.span;
+        let SqlSpan { start, end } = diagnostics[0].span;
         assert_eq!(&sql[start.byte..end.byte], r#""array_agg"(item_name)"#);
     }
 
