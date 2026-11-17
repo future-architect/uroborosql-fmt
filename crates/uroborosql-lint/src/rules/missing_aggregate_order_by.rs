@@ -8,6 +8,8 @@ use postgresql_cst_parser::{
     tree_sitter::{Node, Range},
 };
 
+const RULE_NAME: &str = "missing-aggregate-order-by";
+
 /// Order-dependent aggregate functions checked by this rule.
 const ORDER_DEPENDENT_AGGREGATES: &[&str] = &[
     "array_agg",
@@ -29,7 +31,7 @@ pub struct MissingAggregateOrderBy;
 
 impl Rule for MissingAggregateOrderBy {
     fn name(&self) -> &'static str {
-        "missing-aggregate-order-by"
+        RULE_NAME
     }
 
     fn default_severity(&self) -> Severity {
@@ -116,7 +118,7 @@ mod tests {
 
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.code == "missing-aggregate-order-by")
+            .find(|diag| diag.code == RULE_NAME)
             .expect("expected json_agg without ORDER BY to be detected");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -130,7 +132,7 @@ mod tests {
 
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.code == "missing-aggregate-order-by")
+            .find(|diag| diag.code == RULE_NAME)
             .expect("expected array_agg(DISTINCT ...) without ORDER BY to be detected");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -144,7 +146,7 @@ mod tests {
 
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.code == "missing-aggregate-order-by")
+            .find(|diag| diag.code == RULE_NAME)
             .expect("expected xmlagg without ORDER BY to be detected");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -152,6 +154,46 @@ mod tests {
             &sql[start.byte..end.byte],
             "xmlagg(xmlelement(name item, item_name))"
         );
+    }
+
+    #[test]
+    fn detects_string_agg_without_order_by() {
+        let sql = "SELECT string_agg(item_name, ',') FROM items;";
+        let diagnostics = run(sql);
+
+        let diagnostic = diagnostics
+            .iter()
+            .find(|diag| diag.code == RULE_NAME)
+            .expect("expected string_agg without ORDER BY to be detected");
+
+        let SqlSpan { start, end } = diagnostic.span;
+        assert_eq!(&sql[start.byte..end.byte], "string_agg(item_name, ',')");
+    }
+
+    #[test]
+    fn detects_jsonb_agg_without_order_by() {
+        let sql = "SELECT jsonb_agg(item_name) FROM items;";
+        let diagnostics = run(sql);
+
+        let diagnostic = diagnostics
+            .iter()
+            .find(|diag| diag.code == RULE_NAME)
+            .expect("expected jsonb_agg without ORDER BY to be detected");
+
+        let SqlSpan { start, end } = diagnostic.span;
+        assert_eq!(&sql[start.byte..end.byte], "jsonb_agg(item_name)");
+    }
+
+    #[test]
+    fn allows_string_agg_with_order_by() {
+        let sql = "SELECT string_agg(item_name, ',' ORDER BY item_name) FROM items;";
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn allows_jsonb_agg_with_order_by() {
+        let sql = "SELECT jsonb_agg(item_name ORDER BY item_name) FROM items;";
+        assert!(run(sql).is_empty());
     }
 
     #[test]
