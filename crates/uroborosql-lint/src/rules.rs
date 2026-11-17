@@ -27,12 +27,12 @@ pub fn all_rules() -> impl Iterator<Item = RuleEnum> {
         RuleEnum::NoDistinct(NoDistinct),
         RuleEnum::NoUnknownReference(NoUnknownReference),
         RuleEnum::NoNotIn(NoNotIn),
-        RuleEnum::MissingAggregateOrderBy(MissingAggregateOrderBy),
         RuleEnum::NoUnionDistinct(NoUnionDistinct),
         RuleEnum::NoWildcardProjection(NoWildcardProjection),
         RuleEnum::MissingTwoWaySample(MissingTwoWaySample),
         RuleEnum::TooLargeInList(TooLargeInList),
         RuleEnum::NoFunctionOnColumnInJoinOrWhere(NoFunctionOnColumnInJoinOrWhere),
+        RuleEnum::MissingAggregateOrderBy(MissingAggregateOrderBy),
     ]
     .into_iter()
 }
@@ -51,12 +51,12 @@ pub enum RuleEnum {
     NoUnknownReference(NoUnknownReference),
     NoDistinct(NoDistinct),
     NoNotIn(NoNotIn),
-    MissingAggregateOrderBy(MissingAggregateOrderBy),
     NoUnionDistinct(NoUnionDistinct),
     NoWildcardProjection(NoWildcardProjection),
     MissingTwoWaySample(MissingTwoWaySample),
     TooLargeInList(TooLargeInList),
     NoFunctionOnColumnInJoinOrWhere(NoFunctionOnColumnInJoinOrWhere),
+    MissingAggregateOrderBy(MissingAggregateOrderBy),
 }
 
 impl RuleEnum {
@@ -98,12 +98,12 @@ impl RuleEnum {
             Self::NoDistinct(rule) => rule,
             Self::NoUnknownReference(rule) => rule,
             Self::NoNotIn(rule) => rule,
-            Self::MissingAggregateOrderBy(rule) => rule,
             Self::NoUnionDistinct(rule) => rule,
             Self::NoWildcardProjection(rule) => rule,
             Self::MissingTwoWaySample(rule) => rule,
             Self::TooLargeInList(rule) => rule,
             Self::NoFunctionOnColumnInJoinOrWhere(rule) => rule,
+            Self::MissingAggregateOrderBy(rule) => rule,
         }
     }
 }
