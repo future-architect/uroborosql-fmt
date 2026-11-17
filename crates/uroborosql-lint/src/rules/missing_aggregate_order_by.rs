@@ -57,6 +57,16 @@ impl Rule for MissingAggregateOrderBy {
     }
 }
 
+/// Normalizes an identifier.
+fn normalize_identifier(text: &str) -> String {
+    match text.strip_prefix('"').and_then(|t| t.strip_suffix('"')) {
+        // "array_agg" => array_agg
+        Some(inner) => inner.replace("\"\"", "\""),
+        // ARRAY_AGG => array_agg
+        None => text.to_ascii_lowercase(),
+    }
+}
+
 /// Returns the range of the aggregate call when it is order-dependent and has no `ORDER BY`.
 fn detect(func_expr: &Node<'_>) -> Option<Range> {
     // func_expr
@@ -83,7 +93,7 @@ fn detect(func_expr: &Node<'_>) -> Option<Range> {
     }
 
     // Use the last identifier so that `pg_catalog.array_agg` is checked as `array_agg`.
-    let name = func_name.last_token()?.text().to_ascii_lowercase();
+    let name = normalize_identifier(func_name.last_token()?.text());
     if !ORDER_DEPENDENT_AGGREGATES.contains(&name.as_str()) {
         return None;
     }
@@ -193,6 +203,39 @@ mod tests {
     #[test]
     fn allows_jsonb_agg_with_order_by() {
         let sql = "SELECT jsonb_agg(item_name ORDER BY item_name) FROM items;";
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn detects_quoted_aggregate_name_without_order_by() {
+        let sql = r#"SELECT "array_agg"(item_name) FROM items;"#;
+        let diagnostics = run(sql);
+
+        let diagnostic = diagnostics
+            .iter()
+            .find(|diag| diag.code == RULE_NAME)
+            .expect("expected quoted array_agg without ORDER BY to be detected");
+
+        let SqlSpan { start, end } = diagnostic.span;
+        assert_eq!(&sql[start.byte..end.byte], r#""array_agg"(item_name)"#);
+    }
+
+    #[test]
+    fn detects_quoted_schema_qualified_aggregate_name() {
+        let sql = r#"SELECT pg_catalog."array_agg"(item_name) FROM items;"#;
+        assert_eq!(run(sql).len(), 1);
+    }
+
+    #[test]
+    fn allows_quoted_aggregate_name_with_order_by() {
+        let sql = r#"SELECT "array_agg"(item_name ORDER BY item_name) FROM items;"#;
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn ignores_quoted_uppercase_name() {
+        // A quoted identifier is case-sensitive, so "ARRAY_AGG" is not the built-in array_agg.
+        let sql = r#"SELECT "ARRAY_AGG"(item_name) FROM items;"#;
         assert!(run(sql).is_empty());
     }
 
