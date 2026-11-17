@@ -17,7 +17,8 @@ const ORDER_DEPENDENT_AGGREGATES: &[&str] = &[
     "json_agg",
     "jsonb_agg",
     "xmlagg",
-    // 生成物は順序依存だが、JSONとしてparseすると、key重複がなければ等価.
+    // `json_object_agg` and `jsonb_object_agg` are not checked: the objects they build are
+    // equal as JSON regardless of the input order, unless keys collide.
     // "json_object_agg",
     // "jsonb_object_agg",
 ];
