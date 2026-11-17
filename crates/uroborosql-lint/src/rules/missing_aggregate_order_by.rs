@@ -22,10 +22,23 @@ const ORDER_DEPENDENT_AGGREGATES: &[&str] = &[
     // "jsonb_object_agg",
 ];
 
+/// Operators whose result does not depend on the element order of an array operand.
+const ORDER_INDEPENDENT_ARRAY_OPERATORS: &[&str] = &["@>", "<@", "&&"];
+
+/// One-argument functions whose result does not depend on the element order of the array.
+const ORDER_INDEPENDENT_UNARY_ARRAY_FUNCTIONS: &[&str] =
+    &["cardinality", "array_ndims", "array_dims"];
+
+/// Two-argument functions (array, dimension) whose result does not depend on the element order
+/// of the array, which is the first argument.
+const ORDER_INDEPENDENT_BINARY_ARRAY_FUNCTIONS: &[&str] =
+    &["array_length", "array_lower", "array_upper"];
+
 /// Detects order-dependent aggregate functions called without `ORDER BY`.
 ///
 /// Aggregates used as window functions (`OVER`) and ordered-set aggregates (`WITHIN GROUP`)
-/// are not checked.
+/// are not checked. The result of `array_agg` is also not checked when it is consumed in a way
+/// that ignores the element order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MissingAggregateOrderBy;
 
@@ -67,6 +80,22 @@ fn normalize_identifier(text: &str) -> String {
     }
 }
 
+/// Returns the parent of `node` if it is of the given kind.
+fn parent_of_kind<'tree>(node: &Node<'tree>, kind: SyntaxKind) -> Option<Node<'tree>> {
+    node.parent().filter(|parent| parent.kind() == kind)
+}
+
+/// `func_application` calls one of `names`.
+///
+/// Uses the last identifier so that `pg_catalog.cardinality` is treated as `cardinality`.
+fn function_name_is(func_application: &Node<'_>, names: &[&str]) -> bool {
+    func_application
+        .first_child()
+        .filter(|func_name| func_name.kind() == SyntaxKind::func_name)
+        .and_then(|func_name| func_name.last_token())
+        .is_some_and(|token| names.contains(&normalize_identifier(token.text()).as_str()))
+}
+
 /// Returns the range of the aggregate call when it is order-dependent and has no `ORDER BY`.
 fn detect(func_expr: &Node<'_>) -> Option<Range> {
     // func_expr
@@ -106,7 +135,86 @@ fn detect(func_expr: &Node<'_>) -> Option<Range> {
         return None;
     }
 
+    if name == "array_agg" && is_consumed_order_independently(func_expr) {
+        return None;
+    }
+
     Some(func_application.range())
+}
+
+/// Returns true when the array produced by `func_expr` is used where its element order
+/// cannot affect the result.
+fn is_consumed_order_independently(func_expr: &Node<'_>) -> bool {
+    // Skip every wrapper that passes the array through, however many there are.
+    let mut operand = *func_expr;
+    while let Some(parent) = transparent_parent(&operand) {
+        operand = parent;
+    }
+
+    operand
+        .parent()
+        .is_some_and(|consumer| is_order_independent_consumer(&consumer, &operand))
+}
+
+/// `consumer` uses `operand` (an array) in a way that ignores its element order.
+fn is_order_independent_consumer(consumer: &Node<'_>, operand: &Node<'_>) -> bool {
+    let children = consumer.children();
+
+    match consumer.kind() {
+        // a_expr subquery_Op sub_type '(' a_expr ')'
+        SyntaxKind::a_expr
+            if children.len() == 6
+                && children[1].kind() == SyntaxKind::subquery_Op
+                && children[2].kind() == SyntaxKind::sub_type =>
+        {
+            children[4] == *operand
+        }
+        // a_expr qual_Op a_expr
+        SyntaxKind::a_expr if children.len() == 3 && children[1].kind() == SyntaxKind::qual_Op => {
+            ORDER_INDEPENDENT_ARRAY_OPERATORS.contains(&children[1].text())
+        }
+        SyntaxKind::func_arg_expr => is_order_independent_function_argument(consumer),
+        _ => false,
+    }
+}
+
+/// Returns the parent of `node` when it passes the value through without depending on the
+/// element order.
+fn transparent_parent<'tree>(node: &Node<'tree>) -> Option<Node<'tree>> {
+    let parent = node.parent()?;
+    let children = parent.children();
+
+    let transparent = match parent.kind() {
+        // Nodes that only wrap their single child.
+        SyntaxKind::a_expr | SyntaxKind::c_expr | SyntaxKind::func_expr if children.len() == 1 => {
+            true
+        }
+        // c_expr: '(' a_expr ')'
+        SyntaxKind::c_expr => children.len() == 3 && children[0].kind() == SyntaxKind::LParen,
+        _ => false,
+    };
+
+    transparent.then_some(parent)
+}
+
+/// `func_arg_expr` is the array argument of an order-independent array function:
+/// the only argument of a unary function, or the first argument of a binary one.
+fn is_order_independent_function_argument(func_arg_expr: &Node<'_>) -> bool {
+    // func_application
+    // - func_name '(' func_arg_list ')'
+    //   - func_arg_list is flat: func_arg_expr (',' func_arg_expr)*
+    parent_of_kind(func_arg_expr, SyntaxKind::func_arg_list).is_some_and(|list| {
+        let args = list.children();
+        let names = match args.len() {
+            1 => ORDER_INDEPENDENT_UNARY_ARRAY_FUNCTIONS,
+            // func_arg_expr ',' func_arg_expr
+            3 if args[0] == *func_arg_expr => ORDER_INDEPENDENT_BINARY_ARRAY_FUNCTIONS,
+            _ => return false,
+        };
+
+        parent_of_kind(&list, SyntaxKind::func_application)
+            .is_some_and(|call| function_name_is(&call, names))
+    })
 }
 
 #[cfg(test)]
@@ -259,5 +367,73 @@ mod tests {
     fn allows_aggregate_with_within_group() {
         let sql = "SELECT array_agg(item_name) WITHIN GROUP (ORDER BY item_name) FROM items;";
         assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn allows_array_agg_in_any() {
+        let sql =
+            "SELECT category FROM items GROUP BY category HAVING 'a' = ANY(array_agg(item_name));";
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn allows_array_agg_in_contains_operator() {
+        let sql =
+            "SELECT category FROM items GROUP BY category HAVING array_agg(item_name) @> ARRAY['a', 'b'];";
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn allows_array_agg_in_overlap_operator_on_right() {
+        let sql = "SELECT category FROM items GROUP BY category HAVING ARRAY['a'] && array_agg(item_name);";
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn allows_array_agg_in_order_independent_function() {
+        let sql = "SELECT cardinality(array_agg(item_name)) FROM items;";
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn allows_array_agg_as_first_argument_of_array_length() {
+        let sql = "SELECT array_length(array_agg(item_name), 1) FROM items;";
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn detects_array_agg_in_equality() {
+        let sql = "SELECT category FROM items GROUP BY category HAVING array_agg(item_name) = ARRAY['a'];";
+        assert_eq!(run(sql).len(), 1);
+    }
+
+    #[test]
+    fn detects_array_agg_in_order_dependent_function() {
+        let sql = "SELECT array_to_string(array_agg(item_name), ',') FROM items;";
+        assert_eq!(run(sql).len(), 1);
+    }
+
+    #[test]
+    fn detects_array_agg_with_subscript() {
+        let sql = "SELECT array_append(ARRAY[1], (array_agg(id))[1]) FROM items;";
+        assert_eq!(run(sql).len(), 1);
+    }
+
+    #[test]
+    fn allows_array_agg_in_parentheses() {
+        let sql = "SELECT category FROM items GROUP BY category HAVING 'a' = ANY((array_agg(item_name)));";
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn detects_array_agg_as_second_argument_of_array_length() {
+        let sql = "SELECT array_length(ARRAY[1], array_agg(id)) FROM items;";
+        assert_eq!(run(sql).len(), 1);
+    }
+
+    #[test]
+    fn detects_array_agg_with_extra_argument_of_unary_function() {
+        let sql = "SELECT cardinality(array_agg(id), 1) FROM items;";
+        assert_eq!(run(sql).len(), 1);
     }
 }
