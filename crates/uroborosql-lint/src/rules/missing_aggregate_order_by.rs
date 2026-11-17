@@ -15,7 +15,7 @@ const ORDER_DEPENDENT_AGGREGATES: &[&str] = &[
     "json_agg",
     "jsonb_agg",
     "xmlagg",
-    // Only the key-collision case depends on the order; enable once we decide to report it.
+    // 生成物は順序依存だが、JSONとしてparseすると、key重複がなければ等価.
     // "json_object_agg",
     // "jsonb_object_agg",
 ];
@@ -25,11 +25,11 @@ const ORDER_DEPENDENT_AGGREGATES: &[&str] = &[
 /// Aggregates used as window functions (`OVER`) and ordered-set aggregates (`WITHIN GROUP`)
 /// are not checked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MissingOrderBy;
+pub struct MissingAggregateOrderBy;
 
-impl Rule for MissingOrderBy {
+impl Rule for MissingAggregateOrderBy {
     fn name(&self) -> &'static str {
-        "missing-order-by"
+        "missing-aggregate-order-by"
     }
 
     fn default_severity(&self) -> Severity {
@@ -103,7 +103,10 @@ mod tests {
     use crate::{linter::tests::run_with_rules, rules::RuleEnum, SqlSpan};
 
     fn run(sql: &str) -> Vec<crate::Diagnostic> {
-        run_with_rules(sql, vec![RuleEnum::MissingOrderBy(MissingOrderBy)])
+        run_with_rules(
+            sql,
+            vec![RuleEnum::MissingAggregateOrderBy(MissingAggregateOrderBy)],
+        )
     }
 
     #[test]
@@ -113,7 +116,7 @@ mod tests {
 
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.code == "missing-order-by")
+            .find(|diag| diag.code == "missing-aggregate-order-by")
             .expect("expected json_agg without ORDER BY to be detected");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -127,7 +130,7 @@ mod tests {
 
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.code == "missing-order-by")
+            .find(|diag| diag.code == "missing-aggregate-order-by")
             .expect("expected array_agg(DISTINCT ...) without ORDER BY to be detected");
 
         let SqlSpan { start, end } = diagnostic.span;
@@ -141,7 +144,7 @@ mod tests {
 
         let diagnostic = diagnostics
             .iter()
-            .find(|diag| diag.code == "missing-order-by")
+            .find(|diag| diag.code == "missing-aggregate-order-by")
             .expect("expected xmlagg without ORDER BY to be detected");
 
         let SqlSpan { start, end } = diagnostic.span;

@@ -1,4 +1,4 @@
-# missing-order-by
+# missing-aggregate-order-by
 
 Reports order-dependent aggregate functions called without `ORDER BY`. The order in which rows
 reach the aggregate is undefined, so the result can change between runs.

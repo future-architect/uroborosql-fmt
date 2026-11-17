@@ -13,12 +13,12 @@ has a `db` section. Change their severity with `rules` in the config file.
 | --- | --- | --- | --- |
 | [`no-distinct`](../../docs/rules/no-distinct.md) | `DISTINCT` | | warning |
 | [`no-not-in`](../../docs/rules/no-not-in.md) | `NOT IN` (use `NOT EXISTS`) | | warning |
-| [`missing-order-by`](../../docs/rules/missing-order-by.md) | Order-dependent aggregates (`array_agg`, `string_agg`, ...) without `ORDER BY` | | warning |
 | [`no-union-distinct`](../../docs/rules/no-union-distinct.md) | `UNION` / `UNION DISTINCT` (use `UNION ALL`) | | warning |
 | [`no-wildcard-projection`](../../docs/rules/no-wildcard-projection.md) | `SELECT *`, `t.*`, `RETURNING *` | | warning |
 | [`missing-two-way-sample`](../../docs/rules/missing-two-way-sample.md) | 2way-SQL bind parameters without a sample value | | warning |
 | [`too-large-in-list`](../../docs/rules/too-large-in-list.md) | `IN` lists with more than 100 elements | | warning |
 | [`no-function-on-column-in-join-or-where`](../../docs/rules/no-function-on-column-in-join-or-where.md) | Functions applied to columns in `JOIN` / `WHERE` conditions | | warning |
+| [`missing-aggregate-order-by`](../../docs/rules/missing-aggregate-order-by.md) | Order-dependent aggregates (`array_agg`, `string_agg`, ...) without `ORDER BY` | | warning |
 | [`no-unknown-reference`](../../docs/rules/no-unknown-reference.md) | Tables and columns that do not exist in the database catalog | Required | error |
 
 > [!NOTE]
