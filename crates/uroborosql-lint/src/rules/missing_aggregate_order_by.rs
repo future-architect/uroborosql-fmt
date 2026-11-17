@@ -19,8 +19,6 @@ const ORDER_DEPENDENT_AGGREGATES: &[&str] = &[
     "xmlagg",
     // `json_object_agg` and `jsonb_object_agg` are not checked: the objects they build are
     // equal as JSON regardless of the input order, unless keys collide.
-    // "json_object_agg",
-    // "jsonb_object_agg",
 ];
 
 /// Operators whose result does not depend on the element order of an array operand.
