@@ -33,6 +33,30 @@ const ORDER_INDEPENDENT_UNARY_ARRAY_FUNCTIONS: &[&str] =
 const ORDER_INDEPENDENT_BINARY_ARRAY_FUNCTIONS: &[&str] =
     &["array_length", "array_lower", "array_upper"];
 
+/// Child access that ignores comments.
+///
+/// The CST keeps comments as sibling nodes, so `children()` and `first_child()` shift their
+/// indices and counts when a comment is present. Use these helpers for structural checks.
+trait NoCommentChildren<'tree> {
+    fn no_comment_children_iter(&self) -> impl Iterator<Item = Node<'tree>>;
+
+    fn no_comment_child(&self, index: usize) -> Option<Node<'tree>> {
+        self.no_comment_children_iter().nth(index)
+    }
+
+    fn no_comment_child_count(&self) -> usize {
+        self.no_comment_children_iter().count()
+    }
+}
+
+impl<'tree> NoCommentChildren<'tree> for Node<'tree> {
+    fn no_comment_children_iter(&self) -> impl Iterator<Item = Node<'tree>> {
+        self.children()
+            .into_iter()
+            .filter(|child| !child.is_comment())
+    }
+}
+
 /// Detects order-dependent aggregate functions called without `ORDER BY`.
 ///
 /// Aggregates used as window functions (`OVER`) and ordered-set aggregates (`WITHIN GROUP`)
@@ -89,7 +113,7 @@ fn parent_of_kind<'tree>(node: &Node<'tree>, kind: SyntaxKind) -> Option<Node<'t
 /// Uses the last identifier so that `pg_catalog.cardinality` is treated as `cardinality`.
 fn function_name_is(func_application: &Node<'_>, names: &[&str]) -> bool {
     func_application
-        .first_child()
+        .no_comment_child(0)
         .filter(|func_name| func_name.kind() == SyntaxKind::func_name)
         .and_then(|func_name| func_name.last_token())
         .is_some_and(|token| names.contains(&normalize_identifier(token.text()).as_str()))
@@ -99,12 +123,12 @@ fn function_name_is(func_application: &Node<'_>, names: &[&str]) -> bool {
 fn detect(func_expr: &Node<'_>) -> Option<Range> {
     // func_expr
     // - func_application within_group_clause? filter_clause? over_clause?
-    let func_application = func_expr.first_child()?;
+    let func_application = func_expr.no_comment_child(0)?;
     if func_application.kind() != SyntaxKind::func_application {
         return None;
     }
 
-    if func_expr.children().iter().any(|child| {
+    if func_expr.no_comment_children_iter().any(|child| {
         matches!(
             child.kind(),
             SyntaxKind::over_clause | SyntaxKind::within_group_clause
@@ -115,7 +139,7 @@ fn detect(func_expr: &Node<'_>) -> Option<Range> {
 
     // func_application
     // - func_name '(' ... sort_clause? ')'
-    let func_name = func_application.first_child()?;
+    let func_name = func_application.no_comment_child(0)?;
     if func_name.kind() != SyntaxKind::func_name {
         return None;
     }
@@ -127,8 +151,7 @@ fn detect(func_expr: &Node<'_>) -> Option<Range> {
     }
 
     if func_application
-        .children()
-        .iter()
+        .no_comment_children_iter()
         .any(|child| child.kind() == SyntaxKind::sort_clause)
     {
         return None;
@@ -157,20 +180,27 @@ fn is_consumed_order_independently(func_expr: &Node<'_>) -> bool {
 
 /// `consumer` uses `operand` (an array) in a way that ignores its element order.
 fn is_order_independent_consumer(consumer: &Node<'_>, operand: &Node<'_>) -> bool {
-    let children = consumer.children();
-
     match consumer.kind() {
         // a_expr subquery_Op sub_type '(' a_expr ')'
         SyntaxKind::a_expr
-            if children.len() == 6
-                && children[1].kind() == SyntaxKind::subquery_Op
-                && children[2].kind() == SyntaxKind::sub_type =>
+            if consumer.no_comment_child_count() == 6
+                && consumer
+                    .no_comment_child(1)
+                    .is_some_and(|child| child.kind() == SyntaxKind::subquery_Op)
+                && consumer
+                    .no_comment_child(2)
+                    .is_some_and(|child| child.kind() == SyntaxKind::sub_type) =>
         {
-            children[4] == *operand
+            consumer
+                .no_comment_child(4)
+                .is_some_and(|child| child == *operand)
         }
         // a_expr qual_Op a_expr
-        SyntaxKind::a_expr if children.len() == 3 && children[1].kind() == SyntaxKind::qual_Op => {
-            ORDER_INDEPENDENT_ARRAY_OPERATORS.contains(&children[1].text())
+        SyntaxKind::a_expr if consumer.no_comment_child_count() == 3 => {
+            consumer.no_comment_child(1).is_some_and(|op| {
+                op.kind() == SyntaxKind::qual_Op
+                    && ORDER_INDEPENDENT_ARRAY_OPERATORS.contains(&op.text())
+            })
         }
         SyntaxKind::func_arg_expr => is_order_independent_function_argument(consumer),
         _ => false,
@@ -181,15 +211,18 @@ fn is_order_independent_consumer(consumer: &Node<'_>, operand: &Node<'_>) -> boo
 /// element order.
 fn transparent_parent<'tree>(node: &Node<'tree>) -> Option<Node<'tree>> {
     let parent = node.parent()?;
-    let children = parent.children();
+    let child_count = parent.no_comment_child_count();
 
     let transparent = match parent.kind() {
         // Nodes that only wrap their single child.
-        SyntaxKind::a_expr | SyntaxKind::c_expr | SyntaxKind::func_expr if children.len() == 1 => {
-            true
-        }
+        SyntaxKind::a_expr | SyntaxKind::c_expr | SyntaxKind::func_expr if child_count == 1 => true,
         // c_expr: '(' a_expr ')'
-        SyntaxKind::c_expr => children.len() == 3 && children[0].kind() == SyntaxKind::LParen,
+        SyntaxKind::c_expr => {
+            child_count == 3
+                && parent
+                    .no_comment_child(0)
+                    .is_some_and(|first| first.kind() == SyntaxKind::LParen)
+        }
         _ => false,
     };
 
@@ -203,11 +236,15 @@ fn is_order_independent_function_argument(func_arg_expr: &Node<'_>) -> bool {
     // - func_name '(' func_arg_list ')'
     //   - func_arg_list is flat: func_arg_expr (',' func_arg_expr)*
     parent_of_kind(func_arg_expr, SyntaxKind::func_arg_list).is_some_and(|list| {
-        let args = list.children();
-        let names = match args.len() {
+        let names = match list.no_comment_child_count() {
             1 => ORDER_INDEPENDENT_UNARY_ARRAY_FUNCTIONS,
             // func_arg_expr ',' func_arg_expr
-            3 if args[0] == *func_arg_expr => ORDER_INDEPENDENT_BINARY_ARRAY_FUNCTIONS,
+            3 if list
+                .no_comment_child(0)
+                .is_some_and(|first| first == *func_arg_expr) =>
+            {
+                ORDER_INDEPENDENT_BINARY_ARRAY_FUNCTIONS
+            }
             _ => return false,
         };
 
@@ -434,5 +471,73 @@ mod tests {
     fn detects_array_agg_with_extra_argument_of_unary_function() {
         let sql = "SELECT cardinality(array_agg(id), 1) FROM items;";
         assert_eq!(run(sql).len(), 1);
+    }
+
+    #[test]
+    fn allows_array_agg_in_any_with_comments() {
+        let sql = "SELECT category FROM items GROUP BY category HAVING 'a' = ANY(/*c*/ array_agg(item_name) /*d*/);";
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn allows_array_agg_in_contains_operator_with_comments() {
+        for sql in [
+            "SELECT category FROM items GROUP BY category HAVING array_agg(item_name) /*c*/ @> ARRAY['a'];",
+            "SELECT category FROM items GROUP BY category HAVING array_agg(item_name) -- c\n @> ARRAY['a'];",
+            "SELECT category FROM items GROUP BY category HAVING array_agg(item_name) @> /*c*/ ARRAY['a'];",
+            "SELECT category FROM items GROUP BY category HAVING ARRAY['a'] /*c*/ && array_agg(item_name);",
+        ] {
+            assert!(run(sql).is_empty(), "{sql}");
+        }
+    }
+
+    #[test]
+    fn allows_array_agg_in_array_length_with_comments() {
+        for sql in [
+            "SELECT array_length(array_agg(id) /*c*/, 1) FROM items;",
+            "SELECT array_length(array_agg(id), /*c*/ 1) FROM items;",
+            "SELECT array_length(/*c*/ array_agg(id), 1) FROM items;",
+        ] {
+            assert!(run(sql).is_empty(), "{sql}");
+        }
+    }
+
+    #[test]
+    fn allows_array_agg_in_unary_function_with_comments() {
+        for sql in [
+            "SELECT cardinality(array_agg(id) /*c*/) FROM items;",
+            "SELECT cardinality(/*c*/ array_agg(id)) FROM items;",
+        ] {
+            assert!(run(sql).is_empty(), "{sql}");
+        }
+    }
+
+    #[test]
+    fn allows_array_agg_in_parentheses_with_comments() {
+        let sql = "SELECT category FROM items GROUP BY category HAVING 'a' = ANY((/*c*/ array_agg(item_name) /*d*/));";
+        assert!(run(sql).is_empty());
+    }
+
+    #[test]
+    fn detects_with_comments() {
+        for sql in [
+            "SELECT cardinality(array_agg(id), /*c*/ 1) FROM items;",
+            "SELECT category FROM items GROUP BY category HAVING array_agg(item_name) /*c*/ = ARRAY['a'];",
+            "SELECT array_length(ARRAY[1], /*c*/ array_agg(id)) FROM items;",
+            "SELECT array_agg /*c*/ (item_name) FROM items;",
+            "SELECT array_agg(/*c*/ item_name) FROM items;",
+        ] {
+            assert_eq!(run(sql).len(), 1, "{sql}");
+        }
+    }
+
+    #[test]
+    fn allows_order_by_with_comments() {
+        for sql in [
+            "SELECT array_agg(item_name /*c*/ ORDER BY item_name) FROM items;",
+            "SELECT array_agg(item_name) /*c*/ OVER () FROM items;",
+        ] {
+            assert!(run(sql).is_empty(), "{sql}");
+        }
     }
 }
