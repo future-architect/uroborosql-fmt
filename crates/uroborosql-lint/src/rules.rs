@@ -1,3 +1,4 @@
+mod missing_aggregate_order_by;
 mod missing_two_way_sample;
 mod no_distinct;
 mod no_function_on_column_in_join_or_where;
@@ -11,6 +12,7 @@ use postgresql_cst_parser::{syntax_kind::SyntaxKind, tree_sitter::Node};
 
 use crate::{context::LintContext, diagnostic::Severity, rule::Rule};
 
+pub use missing_aggregate_order_by::MissingAggregateOrderBy;
 pub use missing_two_way_sample::MissingTwoWaySample;
 pub use no_distinct::NoDistinct;
 pub use no_function_on_column_in_join_or_where::NoFunctionOnColumnInJoinOrWhere;
@@ -30,6 +32,7 @@ pub fn all_rules() -> impl Iterator<Item = RuleEnum> {
         RuleEnum::MissingTwoWaySample(MissingTwoWaySample),
         RuleEnum::TooLargeInList(TooLargeInList),
         RuleEnum::NoFunctionOnColumnInJoinOrWhere(NoFunctionOnColumnInJoinOrWhere),
+        RuleEnum::MissingAggregateOrderBy(MissingAggregateOrderBy),
     ]
     .into_iter()
 }
@@ -53,6 +56,7 @@ pub enum RuleEnum {
     MissingTwoWaySample(MissingTwoWaySample),
     TooLargeInList(TooLargeInList),
     NoFunctionOnColumnInJoinOrWhere(NoFunctionOnColumnInJoinOrWhere),
+    MissingAggregateOrderBy(MissingAggregateOrderBy),
 }
 
 impl RuleEnum {
@@ -99,6 +103,7 @@ impl RuleEnum {
             Self::MissingTwoWaySample(rule) => rule,
             Self::TooLargeInList(rule) => rule,
             Self::NoFunctionOnColumnInJoinOrWhere(rule) => rule,
+            Self::MissingAggregateOrderBy(rule) => rule,
         }
     }
 }

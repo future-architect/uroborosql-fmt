@@ -18,6 +18,7 @@ has a `db` section. Change their severity with `rules` in the config file.
 | [`missing-two-way-sample`](../../docs/rules/missing-two-way-sample.md) | 2way-SQL bind parameters without a sample value | | warning |
 | [`too-large-in-list`](../../docs/rules/too-large-in-list.md) | `IN` lists with more than 100 elements | | warning |
 | [`no-function-on-column-in-join-or-where`](../../docs/rules/no-function-on-column-in-join-or-where.md) | Functions applied to columns in `JOIN` / `WHERE` conditions | | warning |
+| [`missing-aggregate-order-by`](../../docs/rules/missing-aggregate-order-by.md) | Order-dependent aggregates (`array_agg`, `string_agg`, ...) without `ORDER BY` | | warning |
 | [`no-unknown-reference`](../../docs/rules/no-unknown-reference.md) | Tables and columns that do not exist in the database catalog | Required | error |
 
 > [!NOTE]
