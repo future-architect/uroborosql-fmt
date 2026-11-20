@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/future-architect/uroborosql-fmt/compare/uroborosql-lint-v0.2.0...uroborosql-lint-v0.3.0) (2026-11-20)
+
+
+### Features
+
+* **lint:** add missing-order-by rule ([#284](https://github.com/future-architect/uroborosql-fmt/issues/284)) ([7f2cd83](https://github.com/future-architect/uroborosql-fmt/commit/7f2cd833ddec840bca6426d3eca6be9700504142))
+
 ## [0.2.0](https://github.com/future-architect/uroborosql-fmt/compare/uroborosql-lint-v0.1.0...uroborosql-lint-v0.2.0) (2026-10-15)
 
 
